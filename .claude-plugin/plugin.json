@@ -1,0 +1,11 @@
+{
+  "name": "seven-steps-primer",
+  "version": "0.1.0",
+  "description": "Step-gated method for building one medium, structural feature with an agent, without slop — the agent never self-certifies a step.",
+  "author": { "name": "Strandic", "url": "https://strandic.com" },
+  "homepage": "https://github.com/strandic/seven-steps-primer#readme",
+  "repository": "https://github.com/strandic/seven-steps-primer",
+  "license": "MIT",
+  "keywords": ["method", "planning", "agents", "gates", "seven-steps"],
+  "skills": "./skills/"
+}
