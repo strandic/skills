@@ -1,0 +1,22 @@
+{
+  "name": "strandic",
+  "owner": {
+    "name": "Strandic",
+    "url": "https://strandic.com"
+  },
+  "metadata": {
+    "description": "Skills and tools from Strandic.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "seven-steps-primer",
+      "source": "./",
+      "description": "Step-gated method for building one medium, structural feature with an agent, without slop — the agent never self-certifies a step.",
+      "version": "0.1.0",
+      "author": { "name": "Strandic" },
+      "category": "workflow",
+      "keywords": ["method", "planning", "agents", "gates", "seven-steps"]
+    }
+  ]
+}
