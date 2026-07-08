@@ -1,11 +1,13 @@
 {
-  "name": "seven-steps-primer",
+  "name": "strandic",
   "version": "0.1.0",
-  "description": "Step-gated method for building one medium, structural feature with an agent, without slop — the agent never self-certifies a step.",
+  "description": "Skills from Strandic for building software with AI agents, deliberately.",
   "author": { "name": "Strandic", "url": "https://strandic.com" },
-  "homepage": "https://github.com/strandic/seven-steps-primer#readme",
-  "repository": "https://github.com/strandic/seven-steps-primer",
+  "homepage": "https://github.com/strandic/skills#readme",
+  "repository": "https://github.com/strandic/skills",
   "license": "MIT",
-  "keywords": ["method", "planning", "agents", "gates", "seven-steps"],
-  "skills": "./skills/"
+  "keywords": ["skills", "agents", "claude-code", "method", "seven-steps"],
+  "skills": [
+    "./skills/seven-steps-primer"
+  ]
 }
