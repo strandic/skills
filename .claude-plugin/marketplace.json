@@ -5,18 +5,18 @@
     "url": "https://strandic.com"
   },
   "metadata": {
-    "description": "Skills and tools from Strandic.",
+    "description": "Skills from Strandic for building software with AI agents, deliberately.",
     "version": "0.1.0"
   },
   "plugins": [
     {
-      "name": "seven-steps-primer",
+      "name": "strandic",
       "source": "./",
-      "description": "Step-gated method for building one medium, structural feature with an agent, without slop — the agent never self-certifies a step.",
+      "description": "Skills from Strandic for building software with AI agents, deliberately.",
       "version": "0.1.0",
       "author": { "name": "Strandic" },
       "category": "workflow",
-      "keywords": ["method", "planning", "agents", "gates", "seven-steps"]
+      "keywords": ["skills", "agents", "claude-code", "method", "seven-steps"]
     }
   ]
 }
