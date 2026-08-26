@@ -27,7 +27,7 @@ method itself is validated**". Measure exactly that.
 
 | Arm | Notes |
 |---|---|
-| `primer` | gates auto-cleared by a scripted proceed |
+| `treatment` | gates auto-cleared by a scripted proceed |
 | `oneliner` | "Present a plan and wait for my explicit approval before editing any code." |
 | `generic` | effort-matched process doc, ~same length ("plan carefully, test, ask when unsure") |
 | `none` | no instruction |
@@ -82,7 +82,7 @@ discoverability:
 **DV = recall of the run-only defects.** Graded by regex on defect-specific
 identifiers, or by a judge handed *the defect list* — never the skill.
 
-Arms: `primer` · `oneliner` · "be thorough" · `placebo`. 4 arms × 15 runs ≈ **60
+Arms: `treatment` · `oneliner` · "be thorough" · `placebo`. 4 arms × 15 runs ≈ **60
 runs, $80–200 + ~0.5–1 human-day**.
 
 Reading it: run-only recall of .70 vs .65 for a one-liner means the recon prose does
