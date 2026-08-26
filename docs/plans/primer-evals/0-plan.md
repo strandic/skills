@@ -1,7 +1,8 @@
 # Step 0 — research & plan: Tier 1 eval suite for `seven-steps-primer`
 
-Status: **awaiting gate 0**. Artifact home `docs/plans/primer-evals/`. Worktree
-`.worktrees/primer-evals`, branch `feat/primer-evals`, per-gate checkpoints on.
+Artifact home `docs/plans/primer-evals/`. Worktree `.worktrees/primer-evals`,
+branch `feat/primer-evals`, per-gate checkpoints on — so `git log` is the gate
+record and this document does not track its own status.
 
 ## Scope
 
@@ -13,7 +14,7 @@ Four arms, one set of cases:
 
 | Arm | What it is | What it controls for |
 |---|---|---|
-| `primer` | the real SKILL.md, `disable-model-invocation` stripped | the treatment |
+| `treatment` | the real SKILL.md, `disable-model-invocation` stripped | — this *is* the treatment |
 | `oneliner` | "Present a plan and wait for my explicit approval before editing any code." | gating-as-an-idea |
 | `placebo` | same seven gates, same stop-and-wait scaffolding, arbitrary contents | this method vs any method of this shape |
 | `none` | stock Claude Code | comes free as each run's `without` arm |
@@ -44,7 +45,7 @@ evals/
     prompt-fixtures/           known-good / known-bad text for grader self-tests
     fixtures/notesvc/          zero-dep Node service + `node --test` suite
     arms/
-      primer/SKILL.md          GENERATED from skills/seven-steps-primer/SKILL.md
+      treatment/SKILL.md       GENERATED from skills/seven-steps-primer/SKILL.md
       oneliner/SKILL.md        hand-written control
       placebo/SKILL.md         hand-written control
     _arm/                      GENERATED, gitignored — the arm under test this run
@@ -53,7 +54,7 @@ evals/
     <case>/case.yaml           only where context.* is needed
     results/                   gitignored
 scripts/
-  build-arms.mjs               regenerate arms/primer, verify no drift
+  build-arms.mjs               regenerate arms/treatment, verify no drift
   run-evals.mjs                copy arm → _arm, run, save results/<arm>.json
   merge-results.mjs            4-column comparison table
   test/graders.test.mjs        `node --test` over the grader regexes
@@ -78,7 +79,7 @@ is the honest denominator for reading any delta in the suite.
 ### The `disable-model-invocation` mirror
 
 `skills/seven-steps-primer/SKILL.md` keeps its production frontmatter untouched.
-`arms/primer/SKILL.md` is generated from it by stripping that one line, so eval
+`arms/treatment/SKILL.md` is generated from it by stripping that one line, so eval
 prompts stay natural language and remain valid in both arms.
 
 The two alternatives are both worse and should be recorded as rejected. Leaving
@@ -133,7 +134,7 @@ it measures. Four layers, cheapest first:
 1. **Grader self-tests** — `node --test` runs every grader regex against
    `prompt-fixtures/`: text that must match, text that must not. A silently-broken
    regex that passes everything is the most likely way this suite lies to us.
-2. **Drift check** — `arms/primer/SKILL.md` must equal SKILL.md minus the flag.
+2. **Drift check** — `arms/treatment/SKILL.md` must equal SKILL.md minus the flag.
 3. **Fixture health** — `notesvc` builds and its `node --test` suite passes on a
    clean checkout, or case 5's "the spike regressed the suite" signal is noise.
 4. **Smoke run** — `--runs 1 --case gate-stop-step0` before any full pass, to catch
