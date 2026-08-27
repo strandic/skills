@@ -256,28 +256,16 @@ that gets most of the way there.
 below is the strongest claim the README may make from Tier 1 numbers, and it goes in
 before the first run rather than after.
 
-## Pending changes to SKILL.md — to be measured, not assumed
+## Pending changes to SKILL.md
 
-The suite exists so that changes to the method stop being matters of taste. Two are
-already queued, both frozen until the current text has been baselined (D4), and both
-then run as the suite's first real findings rather than as edits we hope helped:
+Four changes we believe improve the skill, held until they can be measured rather
+than assumed (D4). The ledger — each with its argument, its prediction, and space
+for the result — lives at **`docs/seven-steps-primer/pending-changes.md`**, not
+here: it outlives this plan and keeps growing.
 
-1. **The Concise restyle.** Current text was written under Claude Code's default
-   output style.
-2. **The urgency line in triage** (D5).
-3. **A breadcrumb convention for step artifacts.** The Deliverables section says
-   "don't default every step to a planning doc" and forbids a document *substituting*
-   for a code artifact at steps 3, 4 and 6 — but it is silent on a companion doc
-   *accompanying* one. Read as a ban on accompaniment, steps 1 and 2 shipped their
-   rationale as inline comments, which bloats the source and makes the artifact
-   expensive to review. That is a rubber-stamp risk: a 300-line file whose three
-   load-bearing lines are open seams invites a gate cleared without attention.
-   Candidate wording: each step may carry a short companion in the artifact home
-   holding intent and diagrams, never substituting for the code artifact — with the
-   3/4/6 substitution ban restated so the two cannot be confused.
-
-Neither gets an eval case now — a case for behaviour the skill does not yet have
-would be a case that only ever passes in the future.
+Three of the four surfaced from *building the evals* rather than from reading the
+skill. Only two are cleanly measurable by Tier 1, which is recorded there rather
+than glossed.
 
 ## Recon targets — questions the harness must answer, not the human
 
