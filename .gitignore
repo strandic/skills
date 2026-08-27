@@ -1,2 +1,6 @@
 # Local worktrees for isolated feature work
 .worktrees/
+
+# Generated per sweep — the condition under test, and harness output
+evals/*/_condition/
+evals/*/results/
