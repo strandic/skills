@@ -1,0 +1,17 @@
+schema_version: "1.1"
+name: step3-markers-in-source
+tags: [capability]
+plugins: ["../_condition"]
+context:
+  # TODO(seam): author history.jsonl — a recorded session trimmed method-neutral,
+  # carrying the step 0-2 artifacts but no gate prose and no step numbering, so a
+  # no-plugin run cannot inherit the method by imitation. Format and minimum
+  # contents are unverified; step 4 recon target.
+  history_file: history.jsonl
+execution:
+  prompt: "proceed"
+  max_turns: 14
+  timeout_seconds: 600
+  allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
+runs: 5
+graders: []   # TODO: graders live in graders/*.md alongside this file
