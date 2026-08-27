@@ -8,10 +8,8 @@
 // TODO: wire handles at this entry point only — CopyDirectory (fs.cp) and
 // SpawnCapture (child_process.spawn).
 
-// TODO(seam): resolve EvalCommand — which executable, and the env it needs.
-// Unresolved: the binary name varies by install and this account requires
-// CLAUDE_CODE_WALNUT_SPIRE=1. Must be answered in step 4 before any sweep runs.
-// See docs/plans/primer-evals/2-interfaces.md § open seams.
+// TODO: implement EvalCommand — executable from EVAL_CLAUDE_BIN (default `claude`),
+// env always carrying CLAUDE_CODE_WALNUT_SPIRE=1. Verified in recon.
 
 // TODO: implement SelectCondition — copy conditions/<id>/ to _condition/.
 // Must be a real copy: the harness rejects a symlinked plugin path.
@@ -22,13 +20,20 @@
 // TODO: implement RunSweep — never throw on non-zero exit; map 0/1/2/130/143 onto
 // SweepResult.exitCode and let the caller decide what a low score means.
 
-// TODO(seam): resolve ResultsLocator — where the harness wrote
-// aggregate-result.json under this suite's --eval-dir shape. Unverified; --json
-// <file> may make it moot. Step 4 recon target.
+// TODO: implement ResultsLocator — newest <eval-dir>/results/<timestamp>/
+// aggregate-result.json. Verified in recon; --eval-dir accepts a path.
 
 // TODO: implement the sweep loop — for each condition in order, select, run,
 // persist to results/<condition>.json. Sequential: concurrent sweeps would
 // contend on the single _condition/ path.
+
+// TODO: exclude `tags: [control]` by default. Cases run in lexicographic order, so
+// control-all-steps runs FIRST and burns budget before any scored case — observed
+// in recon under a cost ceiling.
+
+// TODO: pass BOTH the case's allowed_tools AND the operator --allow-tools grant.
+// They are intersected: listing Write/Edit/Bash in the case alone leaves the run
+// with none of them, and the absence graders then pass vacuously.
 
 // TODO: argv handling — --condition to run a subset, --runs, --smoke for a
 // single-case pilot at runs=1.

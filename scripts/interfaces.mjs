@@ -77,20 +77,20 @@
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
- * OPEN SEAMS — handles whose real instance is NOT yet determined.
- *
- * Each is an injected dependency that reads as clean precisely because it defers
- * the question of who supplies it. None may reach implementation unanswered.
+ * ENVIRONMENT HANDLES — all three were open seams at step 2 and were resolved by
+ * observation in step 4. Each records the mechanism actually seen, not a plan.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /**
  * @callback EvalCommand
  * @returns {{ command: string, env: Record<string,string> }}
  *
- * OPEN SEAM — undecided. The executable name varies by install, and an account
- * without the early-access flag needs `CLAUDE_CODE_WALNUT_SPIRE=1` or every
- * invocation exits 1. Neither is hardcodable in a committed script.
- * See 2-interfaces.md § open seams.
+ * RESOLVED in recon: read the executable from `EVAL_CLAUDE_BIN` (default `claude`)
+ * and always inject `CLAUDE_CODE_WALNUT_SPIRE=1`. Injecting unconditionally is safe
+ * — on a flag-enabled account it is a no-op — and it keeps the committed script
+ * working on machines that cannot receive the rollout. Never put the variable in the
+ * repo's `.claude/settings.json`: project settings are untrusted before the
+ * workspace trust step.
  */
 
 /**
@@ -98,9 +98,10 @@
  * @param {EvalInvocation} inv
  * @returns {Promise<string>} path to that sweep's `aggregate-result.json`
  *
- * OPEN SEAM — `--eval-dir` and `--output-dir` both move the results path and the
- * documented rule branches on target kind; unobserved for this suite's shape.
- * `--json <file>` may sidestep it. Recon target. See 2-interfaces.md.
+ * RESOLVED in recon: with target `.` and `--eval-dir evals/<skill>`, the harness
+ * writes `<eval-dir>/results/<ISO-timestamp>/aggregate-result.json` alongside
+ * `report.html`. Take the newest timestamped directory. `--eval-dir` accepts a
+ * PATH, not only a bare directory name.
  */
 
 /**
@@ -108,8 +109,10 @@
  * @param {string} path
  * @returns {Promise<string>}
  *
- * OPEN SEAM — committed blob sha or content hash. They disagree when the tree is
- * dirty, and whether that should hard-fail the run is policy. See 2-interfaces.md.
+ * RESOLVED in recon (policy call): content hash of the file as it stands, plus a
+ * hard failure when `git status --porcelain` reports the pre-registration dirty. A
+ * digest a reader cannot check out is worse than no digest, and a pre-registration
+ * edited between sweeps is not a pre-registration.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
