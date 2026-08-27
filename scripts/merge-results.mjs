@@ -29,4 +29,11 @@
 // TODO: implement FormatComparison — delta and capability tables under separate
 // headings, noise floor printed beside them.
 
+// TODO: mark every contrast whose |value| < baselineSpread with belowNoiseFloor,
+// so I1b can pass. Sub-noise contrasts are published, never suppressed.
+
+// TODO: wire the invariant checks from ./invariants.mjs before writing any report —
+// I1, I1b, I2, I4, I8 all take the merged report. Refuse to emit a report that
+// violates one; a violated invariant is not a warning.
+
 // TODO: argv handling — results dir in, report path out.
