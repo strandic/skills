@@ -6,13 +6,9 @@
  * a build step or a package to install.
  *
  * Nothing here names a particular skill. A suite lives at `evals/<skill>/` and
- * supplies its own arms, cases and pre-registration; this file is shared.
+ * supplies its own conditions, cases and pre-registration; this file is shared.
  *
- * Three shapes encode rules from `docs/plans/primer-evals/0-plan.md` in the type
- * system rather than in prose, because prose does not fail:
- *   - delta and capability evidence are separate arrays, so they cannot be averaged
- *   - expected direction is a sign, never a number, so it cannot be typeset as a result
- *   - baseline scores stay a list, so the free noise-floor estimate is not averaged away
+ * Rationale: `docs/plans/primer-evals/1-types.md`.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -79,33 +75,30 @@
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
- * Ours — arms
+ * Ours — conditions
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /**
- * The arms a suite builds and swaps into `_arm/`.
+ * Which instruction text is loaded when a case runs. Prompt, fixture and graders
+ * are identical across all of them; the condition is the only thing that varies.
  *
- * `treatment` is the skill under test. The other two are controls, each stripping
- * a confound the treatment would otherwise be credited with: `oneliner` removes
- * gating-as-an-idea, `placebo` removes same-shape-scaffolding.
+ * `none` is absent by design: it is not a condition we author, it arrives as the
+ * harness's own `without` column inside every sweep — hence
+ * {@link MergedCaseRow.baselineScores} rather than a fourth entry in
+ * `conditionScores`.
  *
- * `none` is deliberately absent from this union. It is not an arm we author: it
- * arrives free as the harness's own `without` column inside every pass, which is
- * why {@link MergedCaseRow.baselineScores} is a list rather than a fourth entry
- * in {@link MergedCaseRow.armScores}.
- *
- * @typedef {'treatment'|'oneliner'|'placebo'} ArmId
+ * @typedef {'treatment'|'oneliner'|'placebo'} ConditionId
  */
 
 /**
- * @typedef {object} Arm
- * @property {ArmId}   id
+ * @typedef {object} Condition
+ * @property {ConditionId} id
  * @property {'treatment'|'control'} role
  * @property {'generated'|'authored'} provenance
- * @property {string}  sourcePath      evals/<skill>/arms/<id>/
- * @property {string|null} generatedFrom  source SKILL.md for a generated arm; null otherwise.
+ * @property {string}  sourcePath      evals/<skill>/conditions/<id>/
+ * @property {string|null} generatedFrom  source SKILL.md for a generated condition; null otherwise.
  *                                        Non-null is what `drift-check` verifies.
- * @property {string}  controlsFor     the confound this arm removes; '' for the treatment
+ * @property {string}  controlsFor     the confound this condition removes; '' for the treatment
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -116,13 +109,9 @@
  * What a case's number is allowed to mean.
  *
  * `delta`      — ran with-without; the number is a contrast against a control.
- * `capability` — ran `--ablation none` because a `history_file` replay carries the
- *                plugin into both arms. The number has no referent outside itself:
- *                0.65 against nothing is not evidence, only description.
+ * `capability` — ran `--ablation none`; the number has no referent outside itself.
  *
- * These are never averaged together, never summed into one headline, and never
- * put in one table without a visible split. {@link MergedReport} keeps them in
- * two arrays so that doing so requires deliberately concatenating them.
+ * Never averaged together. {@link MergedReport} keeps them in two arrays.
  *
  * @typedef {'delta'|'capability'} EvidenceKind
  */
@@ -138,26 +127,21 @@
  */
 
 /**
- * Expected direction of a contrast — a SIGN, never a predicted score.
- *
- * The type is this narrow on purpose. A predicted number rendered beside a
- * measured one gets read as a measurement, screenshotted, and quoted; the fix is
- * that no field exists which could hold one.
+ * Expected direction of a contrast — a sign, never a predicted score.
  *
  *   `+1` the treatment should beat this control
- *   ` 0` no difference expected — an anti-ceremony guardrail case, where a delta
- *        near zero is the pass condition and a positive delta is a failure
+ *   ` 0` no difference expected; a positive delta is then a failure, not a bonus
  *   `-1` the treatment should lose
  *
  * @typedef {-1|0|1} ExpectedDirection
  */
 
 /**
- * Committed before a suite's first full pass and never edited afterwards
+ * Committed before a suite's first full sweep and never edited afterwards
  * (`0-plan.md` D6).
  *
  * @typedef {object} PreRegistration
- * @property {ArmId[]}    arms
+ * @property {ConditionId[]} conditions
  * @property {CaseSpec[]} cases
  * @property {Record<string, ExpectedDirection>} expectedDirection  keyed `<case>/<control>`
  * @property {number}     threshold      set explicitly; the harness default of 1.0 is
@@ -165,9 +149,46 @@
  * @property {string}     subjectModel   pinned so a model rollout never reads as a regression
  * @property {string}     judgeModel     pinned, and not the subject model
  * @property {number}     runsPerCase
- * @property {true}       publishAllArms literal `true`: the undertaking to publish the
- *                                       placebo and one-liner columns whatever they show
- *                                       is not a toggle, so the type admits no other value
+ * @property {true}       publishAllConditions literal `true` — the undertaking to publish
+ *                                       every condition whatever it shows is not a toggle
+ */
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Ours — invocation
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One sweep of `claude plugin eval` — everything that varies between sweeps.
+ * `condition` is not a CLI flag: it selects the directory copied into `_condition/`
+ * before the process starts, since the harness discovers the plugin from the path.
+ *
+ * @typedef {object} EvalInvocation
+ * @property {ConditionId} condition
+ * @property {string}   suiteDir
+ * @property {'none'|'with-without'} ablation
+ * @property {number}   runs
+ * @property {string}   subjectModel
+ * @property {string}   judgeModel
+ * @property {string[]} allowTools    absence graders are vacuous without the mutation
+ *                                    tools granted here — the run must be *able* to edit
+ * @property {number}   threshold     never left to default: 1.0 is unreachable with `llm`
+ *                                    graders, so CI would always exit 1
+ * @property {string[]} caseGlobs
+ * @property {string[]} tagFilters
+ * @property {boolean}  scaffold
+ * @property {string}   outputDir
+ */
+
+/**
+ * What one sweep yields once the process has exited.
+ *
+ * @typedef {object} SweepResult
+ * @property {ConditionId} condition
+ * @property {number} exitCode   0 all cases at/above threshold · 1 below threshold, a case
+ *                               failed to load, or bad options · 2 partial (cost ceiling or
+ *                               auth) · 130 SIGINT · 143 SIGTERM
+ * @property {HarnessDocument|null} document  null when the sweep produced no document at all
+ * @property {string} stderrTail  case-load errors and notices; stdout is the JSON document
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -176,8 +197,8 @@
 
 /**
  * @typedef {object} Contrast
- * @property {ArmId}             treatment
- * @property {ArmId|'none'}      control
+ * @property {ConditionId}       treatment
+ * @property {ConditionId|'none'} control
  * @property {number}            value      treatmentScore - controlScore
  * @property {ExpectedDirection} expected   from the pre-registration, not from the result
  */
@@ -186,14 +207,11 @@
  * @typedef {object} MergedCaseRow
  * @property {string}       case
  * @property {EvidenceKind} evidence
- * @property {Record<ArmId, number|null>} armScores      null where the arm did not run
- * @property {Record<ArmId, number[]>}    armRunScores   every run, so per-case scatter is
- *                                                       reportable and means never travel alone
- * @property {number[]} baselineScores   the `without` column from EACH pass, kept apart on
- *                                       purpose. One stock-Claude column per pass against
- *                                       identical cases: their spread IS the noise floor,
- *                                       measured for free. Averaging them destroys the only
- *                                       variance estimate the design gets without extra runs.
+ * @property {Record<ConditionId, number|null>} conditionScores    null where it did not run
+ * @property {Record<ConditionId, number[]>}    conditionRunScores every run; scatter is
+ *                                                       only if these survive
+ * @property {number[]} baselineScores   the `without` column from EACH sweep, kept apart:
+ *                                       their spread is the suite's noise floor
  * @property {Contrast[]} contrasts      empty when evidence === 'capability'
  * @property {string[]}   advisories
  */
@@ -202,7 +220,7 @@
  * @typedef {object} Provenance
  * @property {string} suiteSha            git sha of the suite at run time
  * @property {string} preRegistrationSha  sha of the suite's PRE-REGISTRATION.md; a mismatch
- *                                        against the committed file makes the numbers unfalsifiable
+ *                                        against the committed file voids the run
  * @property {string} claudeVersion
  * @property {string} subjectModel
  * @property {string} judgeModel
@@ -217,10 +235,9 @@
  * @property {Provenance}      provenance
  * @property {MergedCaseRow[]} deltaRows        evidence === 'delta'
  * @property {MergedCaseRow[]} capabilityRows   evidence === 'capability' — a separate array,
- *                                              not a filter over one list, so the split
- *                                              survives careless reporting
- * @property {number}          baselineSpread   max - min across the per-pass baseline columns
- * @property {boolean}         partial          true if any pass was partial; such a report
+ *                                              not a filter, so the split survives reporting
+ * @property {number}          baselineSpread   max - min across the per-sweep baseline columns
+ * @property {boolean}         partial          true if any sweep was partial; such a report
  *                                              must not be compared against a complete one
  * @property {string[]}        advisories
  */
@@ -231,8 +248,8 @@
 
 /**
  * One authored grader regex plus the text that proves it discriminates.
- * A regex that matches everything passes every case and is the most likely way
- * this suite lies to us, so `mustNotMatch` is not optional.
+ * `mustNotMatch` is not optional: a regex that matches everything passes every
+ * case while measuring nothing.
  *
  * @typedef {object} GraderProbe
  * @property {string}   graderId      `<case>/graders/<file>`
@@ -246,8 +263,8 @@
  * @typedef {object} SuitePaths
  * @property {string} repoRoot
  * @property {string} suiteDir      evals/<skill>
- * @property {string} armsDir       <suiteDir>/arms
- * @property {string} armUnderTest  <suiteDir>/_arm — a COPY of the selected arm, never a
+ * @property {string} conditionsDir <suiteDir>/conditions
+ * @property {string} conditionUnderTest  <suiteDir>/_condition — a COPY, never a
  *                                  symlink: the harness's plugin ownership check rejects a
  *                                  path that "is a symlink (or can be read as a link)"
  * @property {string} resultsDir    <suiteDir>/results

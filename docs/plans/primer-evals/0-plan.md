@@ -10,14 +10,24 @@ Build a committed, runnable eval suite that answers one question honestly:
 **does the primer change what the agent does, and is that change attributable to
 *this* method rather than to any gating instruction?**
 
-Four arms, one set of cases:
+Four **conditions** — which instruction text is loaded when a case runs. Prompt,
+fixture and graders are identical across all four:
 
-| Arm | What it is | What it controls for |
+| Condition | What it is | What it controls for |
 |---|---|---|
 | `treatment` | the real SKILL.md, `disable-model-invocation` stripped | — this *is* the treatment |
 | `oneliner` | "Present a plan and wait for my explicit approval before editing any code." | gating-as-an-idea |
 | `placebo` | same seven gates, same stop-and-wait scaffolding, arbitrary contents | this method vs any method of this shape |
 | `none` | stock Claude Code | comes free as each run's `without` arm |
+
+**Sweep** — one invocation of `claude plugin eval` over the whole case set with a
+single condition installed. Three sweeps cover the three authored conditions; each
+also yields a `none` column for free, because `--ablation with-without` runs every
+case a second time with no plugin loaded. So **3 sweeps × 2 harness arms = 4
+conditions**, with `none` measured three times over.
+
+*Arm* stays the harness's word throughout, for the `with` / `without` pair inside a
+single sweep. It is never used for the four conditions.
 
 Explicitly **out of scope** for Tier 1: outcome evals (does the method produce
 better software), defect-injection recon yield, a user simulator, CI wiring,
@@ -41,21 +51,21 @@ skill as more arrive.
 evals/
   seven-steps-primer/
     README.md                  how to run · what the numbers mean · what they don't
-    PRE-REGISTRATION.md        committed BEFORE the first full pass (D6)
+    PRE-REGISTRATION.md        committed BEFORE the first full sweep (D6)
     prompt-fixtures/           known-good / known-bad text for grader self-tests
     fixtures/notesvc/          zero-dep Node service + `node --test` suite
-    arms/
+    conditions/
       treatment/SKILL.md       GENERATED from skills/seven-steps-primer/SKILL.md
       oneliner/SKILL.md        hand-written control
       placebo/SKILL.md         hand-written control
-    _arm/                      GENERATED, gitignored — the arm under test this run
+    _condition/                GENERATED, gitignored — the condition under test
     <case>/prompt.md
     <case>/graders/*.md
     <case>/case.yaml           only where context.* is needed
     results/                   gitignored
 scripts/
-  build-arms.mjs               regenerate arms/treatment, verify no drift
-  run-evals.mjs                copy arm → _arm, run, save results/<arm>.json
+  build-conditions.mjs         regenerate conditions/treatment, verify no drift
+  run-evals.mjs                copy condition → _condition, sweep, save results/
   merge-results.mjs            4-column comparison table
   test/graders.test.mjs        `node --test` over the grader regexes
 ```
@@ -64,14 +74,16 @@ scripts/
 whether that key accepts a path rather than a bare directory name is a **recon
 target**, below.
 
-### Why the arms are copied, not symlinked
+### Why conditions are copied, not symlinked
 
-Cases reference the arm under test by a single fixed path, `plugins: ["../_arm"]`,
-and the runner copies the selected arm into `_arm/` before each pass. The obvious
+Cases reference the condition under test by a single fixed path,
+`plugins: ["../_condition"]`, and the runner copies the selected condition into
+`_condition/` before each sweep. The obvious
 symlink version does not work: the harness runs an ownership check that rejects a
-plugin path that "is a symlink (or can be read as a link)". Copy, verified.
+plugin path that "is a symlink (or can be read as a link)" (`harness-facts.md` #2).
+Copy, then.
 
-This layout has a free benefit worth keeping. Each of the three passes produces
+This layout has a free benefit worth keeping. Each of the three sweeps produces
 its own stock-Claude `without` column against the identical cases. If those three
 columns disagree, that spread **is your noise floor, measured for free** — and it
 is the honest denominator for reading any delta in the suite.
@@ -79,7 +91,7 @@ is the honest denominator for reading any delta in the suite.
 ### The `disable-model-invocation` mirror
 
 `skills/seven-steps-primer/SKILL.md` keeps its production frontmatter untouched.
-`arms/treatment/SKILL.md` is generated from it by stripping that one line, so eval
+`conditions/treatment/SKILL.md` is generated from it by stripping that one line, so eval
 prompts stay natural language and remain valid in both arms.
 
 The two alternatives are both worse and should be recorded as rejected. Leaving
@@ -89,7 +101,7 @@ every delta reads 0.00 — the report would say the skill does nothing. Putting
 such command, fails for the wrong reason, and yields an inflated delta that is
 pure artifact. A false positive is worse than a null.
 
-`build-arms.mjs` regenerates and diffs; `drift-check` fails loudly when SKILL.md
+`build-conditions.mjs` regenerates and diffs; `drift-check` fails loudly when SKILL.md
 moves and the mirror does not.
 
 ## The cases
@@ -97,7 +109,7 @@ moves and the mirror does not.
 Six. Five scored, one diagnostic. Fixture feature throughout: **per-user rate
 limiting** on the `notesvc` fixture.
 
-| # | Case | Shape | What it measures | Arms |
+| # | Case | Shape | What it measures | Conditions |
 |---|---|---|---|---|
 | 1 | `gate-stop-step0` | neutral request | produces step 0's artifact and halts with mutation tools *available* | all 4 |
 | 2 | `looks-trivial-is-structural` | a small-*looking* request that is not | triage discrimination — must **not** skip | all 4 |
@@ -134,13 +146,14 @@ it measures. Four layers, cheapest first:
 1. **Grader self-tests** — `node --test` runs every grader regex against
    `prompt-fixtures/`: text that must match, text that must not. A silently-broken
    regex that passes everything is the most likely way this suite lies to us.
-2. **Drift check** — `arms/treatment/SKILL.md` must equal SKILL.md minus the flag.
+2. **Drift check** — `conditions/treatment/SKILL.md` must equal SKILL.md minus the flag.
 3. **Fixture health** — `notesvc` builds and its `node --test` suite passes on a
    clean checkout, or case 5's "the spike regressed the suite" signal is noise.
-4. **Smoke run** — `--runs 1 --case gate-stop-step0` before any full pass, to catch
+4. **Smoke run** — `--runs 1 --case gate-stop-step0` before any full sweep, to catch
    the harness's own `⚠ case … cannot pass with the granted tools` advisory.
 
-Three harness-level traps the graders are designed around, all verified:
+Three harness-level traps the graders are designed around, all sourced in
+`harness-facts.md`:
 
 - **Tools must be granted for absence to mean anything.** The sandbox grants only
   read-only tools by default, so "did not touch source" is trivially true in both
@@ -169,9 +182,9 @@ as "presented a plan and stopped". Each case pairs its absence graders with
 
 Runs are subscription-metered on this account (Max 5x, no API key, no extra-usage
 billing), so `costUsd` is an API-equivalent estimate and the real budget is
-rate-limit windows. Roughly: 5 scored cases × 5 runs × 2 arms × 3 passes ≈ **150
+rate-limit windows. Roughly: 5 scored cases × 5 runs × 2 harness arms × 3 sweeps ≈ **150
 agent runs** plus judge votes. Pilot one case at `--runs 1` and multiply before
-committing to a full pass. `--judge-model sonnet` is required — the haiku default
+committing to a full sweep. `--judge-model sonnet` is required — the haiku default
 is not adequate for these rubrics.
 
 Enablement is `CLAUDE_CODE_WALNUT_SPIRE=1` (early access; this account is not
@@ -234,7 +247,7 @@ edit is deferred under D4 — see *Pending changes* below.
 
 **D6 — pre-registration: committed.** *(ruling on OQ2)*
 `evals/seven-steps-primer/PRE-REGISTRATION.md` lands and is committed **before the
-first full pass**, naming the arms, cases, graders, thresholds, expected direction,
+first full sweep**, naming the conditions, cases, graders, thresholds, expected direction,
 and an explicit undertaking to publish all four columns whichever way they fall —
 including a placebo column that scores level with the primer, or a one-liner column
 that gets most of the way there.
@@ -252,6 +265,16 @@ then run as the suite's first real findings rather than as edits we hope helped:
 1. **The Concise restyle.** Current text was written under Claude Code's default
    output style.
 2. **The urgency line in triage** (D5).
+3. **A breadcrumb convention for step artifacts.** The Deliverables section says
+   "don't default every step to a planning doc" and forbids a document *substituting*
+   for a code artifact at steps 3, 4 and 6 — but it is silent on a companion doc
+   *accompanying* one. Read as a ban on accompaniment, steps 1 and 2 shipped their
+   rationale as inline comments, which bloats the source and makes the artifact
+   expensive to review. That is a rubber-stamp risk: a 300-line file whose three
+   load-bearing lines are open seams invites a gate cleared without attention.
+   Candidate wording: each step may carry a short companion in the artifact home
+   holding intent and diagrams, never substituting for the code artifact — with the
+   3/4/6 substitution ban restated so the two cannot be confused.
 
 Neither gets an eval case now — a case for behaviour the skill does not yet have
 would be a case that only ever passes in the future.
@@ -263,7 +286,7 @@ Carried into step 4. None of these are decisions; they are facts we do not yet h
 - **`experimental.evals` path form.** Does the manifest key accept
   `evals/seven-steps-primer`, or only a bare directory name? If name-only, the
   runner passes `--eval-dir` explicitly.
-- **Arm resolution.** Does `plugins: ["../_arm"]` resolve cleanly for a copied
+- **Condition resolution.** Does `plugins: ["../_condition"]` resolve cleanly for a copied
   bare-`SKILL.md` folder, and does the ownership/mode check pass on it?
 - **The `Bash` mutation gap.** Does the checksum-sentinel mitigation actually catch
   a `sed -i` edit, or does the sandbox's file handling defeat it?
@@ -307,5 +330,5 @@ is the price of it.
 
 This document. Nothing has been written to `evals/`, no fixture exists, no case
 exists. Next step on `proceed` is **1 — data structures**: the types behind the
-suite, which here means the case/arm/result shapes and the merged comparison
+suite, which here means the case/condition/result shapes and the merged comparison
 record, and nothing else.
