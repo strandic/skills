@@ -4,3 +4,6 @@
 # Generated per sweep — the condition under test, and harness output
 evals/*/_condition/
 evals/*/results/
+
+# Session transcripts a replay case leaves behind
+evals/*/**/[0-9a-f]*-[0-9a-f]*.jsonl

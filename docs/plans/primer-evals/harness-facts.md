@@ -75,13 +75,31 @@ been replicated across sessions, so treat them as strong leads rather than settl
 | 17 | A **bare `SKILL.md` folder with no manifest** is auto-detected as the plugin under test — contradicting the bundled reference, which says a plain skill never is | Lets each condition be a bare skill directory |
 | 18 | For a `disable-model-invocation` skill, `/plugin:skill` at **position 0** of the prompt is consumed client-side and leaves no `Skill` tool_use; mid-sentence, it unlocks the real tool | Background to the mirror decision; the suite avoids both by stripping the flag instead |
 
-## UNVERIFIED — must be settled before the numbers mean anything
+## Settled in step-4 recon
 
-| Claim | Where it bites |
-|---|---|
-| Where the harness writes `aggregate-result.json` when both `--eval-dir` and a path target are in play | `ResultsLocator`, an open seam in step 2 |
-| Whether `plugin.json`'s `experimental.evals` accepts a **path** or only a bare directory name | Module placement in `0-plan.md` |
-| Whether a checksum sentinel actually catches a `sed -i` mutation the tool-name graders miss | The known gap in the absence graders |
-| What a trimmed, method-neutral `history_file` must contain for a resumed session to behave as though steps 0–2 happened | Case 5 |
+Class **RUN**, observed on this machine against 2.1.245. Commands and observed
+mechanisms are in `4-recon.md`; run artifacts under
+`evals/seven-steps-primer/results/`.
 
-All four are step-4 recon targets. None is a decision anyone can make from a desk.
+| # | Claim | Observed |
+|---|---|---|
+| 19 | `--eval-dir` accepts a **path**, not only a bare directory name | `--eval-dir evals/seven-steps-primer` resolved and ran |
+| 20 | Results land at `<eval-dir>/results/<ISO-timestamp>/` — `aggregate-result.json` beside `report.html` | five timestamped directories, one per probe |
+| 21 | A copied bare-`SKILL.md` directory resolves as the plugin, and the ownership check passes on a `cp -R` copy | `Plugin under test: "_condition" (no version)` |
+| 22 | **The plugin is named after the DIRECTORY, not the SKILL.md `name:` field** | directory `_condition` won over `name: seven-steps-primer` |
+| 23 | With the flag stripped, the model invokes the skill from a natural-language prompt — no slash command needed | `Skill called 1x`, Δ +1.00 against the no-plugin arm |
+| 24 | A **hand-written** two-record transcript resumes correctly; recording and trimming a real session is unnecessary | the resumed turn recalled a token planted only in the transcript |
+| 25 | `tool_used` absence graders are **unsound** when `Bash` is granted | one run scored 1.00 on `Edit called 0x` + `Write called 0x` + a `{source: file}` regex proving the file was rewritten |
+| 26 | `{source: file}` reads the workspace file after the run and sees Bash-made mutations | same run — the mitigation works |
+| 27 | A case's `allowed_tools` is **intersected** with the operator `--allow-tools` grant; both are required | `not granted (missing --allow-tools grant …)`, run proceeded anyway |
+| 28 | Cases run in **lexicographic** order, so a control case sorts ahead of scored ones | `control-all-steps` ran first and consumed the cost ceiling |
+| 29 | `graders: []` in `case.yaml` is valid when `graders/*.md` supply them — the merge precedes the minimum-one check | six cases loaded clean |
+| 30 | Resuming a `history_file` case writes a `<sessionId>.jsonl` **into the case directory** | stray transcript left beside `history.jsonl` |
+
+Claim 22 matters more than it looks: because every condition is copied to the same
+`_condition/` path, all three present to the model as the same plugin name. That is
+useful — no condition can be identified by its plugin name — but any `input_match`
+on a skill identifier has to use the directory-derived name, not the frontmatter one.
+
+Claim 30 is why `evals/*/**/[0-9a-f]*.jsonl` needs ignoring; otherwise every replay
+run leaves junk in the case directory.

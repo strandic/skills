@@ -134,9 +134,11 @@ case was malformed and is dropped; see decision D1.
 
 Case 5 uses `history_file`, and a replayed transcript carries the plugin into both
 arms, so it runs single-arm as capability evidence and must be reported separately
-from the delta-bearing cases. Its transcript is recorded from a real session and
-trimmed **method-neutral**: it carries the step 0–2 artifacts but no gate prose and
-no step numbering, so the baseline does not inherit the method by imitation.
+from the delta-bearing cases. Its transcript is **hand-written**, not recorded — a
+two-record `.jsonl` resumes correctly, confirmed in recon, which removes the
+record-and-trim step this plan originally assumed. It is authored **method-neutral**:
+the step 0–2 artifacts, no gate prose, no step numbering, so the baseline does not
+inherit the method by imitation.
 
 ## Test strategy
 
@@ -149,17 +151,20 @@ it measures. Four layers, cheapest first:
 2. **Drift check** — `conditions/treatment/SKILL.md` must equal SKILL.md minus the flag.
 3. **Fixture health** — `notesvc` builds and its `node --test` suite passes on a
    clean checkout, or case 5's "the spike regressed the suite" signal is noise.
-4. **Smoke run** — `--runs 1 --case gate-stop-step0` before any full sweep, to catch
-   the harness's own `⚠ case … cannot pass with the granted tools` advisory.
+4. **Smoke run** — `--runs 1 --case gate-stop-step0` before any full sweep. The
+   harness's `⚠ case … cannot pass with the granted tools` advisory caught a real
+   grader/tool mismatch during recon before it cost a run; it fires at load time, so
+   a `--max-cost-usd 0.0001` load-only pass is the cheapest way to see it.
 
 Three harness-level traps the graders are designed around, all sourced in
 `harness-facts.md`:
 
-- **Tools must be granted for absence to mean anything.** The sandbox grants only
-  read-only tools by default, so "did not touch source" is trivially true in both
-  arms unless the run is given `--allow-tools Write Edit Bash`. This inverts the
-  harness's own general advice and is correct here specifically because
-  absence-under-temptation *is* the measurement.
+- **Tools must be granted for absence to mean anything, in BOTH places.** The
+  sandbox grants only read-only tools by default, and a case's `allowed_tools` is
+  *intersected* with the operator's `--allow-tools`: listing them in the case alone
+  leaves the run with none of them. Observed in recon — the harness warns
+  (`not granted (missing --allow-tools grant …)`) but still runs, and the absence
+  graders then pass vacuously.
 - **`tool_used: Skill` passes in the no-plugin arm.** It counts attempted tool_use
   blocks with no check that the call resolved. Grade on an output token the skill
   uniquely produces; never on the Skill call.
@@ -167,11 +172,17 @@ Three harness-level traps the graders are designed around, all sourced in
   appear, so "didn't touch `src/`" needs `tool_used` with `min: 0, max: 0,
   arm: both` — all three keys, since `min` defaults to 1.
 
-And one the absence graders cannot fully close: **`Bash` is granted, so `sed -i`,
-`cat >` and heredocs mutate source without touching `Edit` or `Write`.** Blacklisting
-tool inputs is leaky. Mitigation is a checksum sentinel written by the scaffold and
-regex-checked from `{source: file}` afterwards; the residual gap gets stated in the
-README rather than papered over.
+And one the absence graders cannot close — **demonstrated in recon, not
+hypothesised.** A single run scored 1.00 on all three of: `Edit called 0x`,
+`Write called 0x`, and a `{source: file}` regex proving the file had in fact been
+rewritten by a Bash one-liner. Tool-name absence is therefore **not** a sound
+"source untouched" check whenever `Bash` is granted.
+
+The same run confirmed the mitigation: `{source: file}` reads the workspace file
+after the run and sees the mutation. So every absence case carries a content-based
+grader as well as the tool-name ones, and the tool-name graders are demoted to
+corroboration. The residual gap — a mutation that restores the sentinel — is stated
+in the README rather than papered over.
 
 Every case also needs a **liveness guard**. A run that dies at `max_turns` or times
 out passes every absence grader by default, and a half-written plan reads to a judge

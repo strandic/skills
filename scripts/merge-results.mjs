@@ -20,9 +20,8 @@
 // TODO: implement MergeSweeps — split rows into deltaRows and capabilityRows as
 // two arrays; never one list plus a filter.
 
-// TODO(seam): resolve PreRegistrationDigest — committed blob sha or content hash,
-// and whether a dirty pre-registration hard-fails the run. Policy, not
-// implementation; must be decided in step 4.
+// TODO: implement PreRegistrationDigest — content hash, and hard-fail when
+// `git status --porcelain` shows the pre-registration dirty. Ruled in recon.
 
 // TODO: implement BuildProvenance — suite sha, pre-registration digest, CLI
 // version, pinned models, timestamp.

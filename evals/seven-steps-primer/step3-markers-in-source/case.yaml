@@ -3,10 +3,14 @@ name: step3-markers-in-source
 tags: [capability]
 plugins: ["../_condition"]
 context:
-  # TODO(seam): author history.jsonl — a recorded session trimmed method-neutral,
-  # carrying the step 0-2 artifacts but no gate prose and no step numbering, so a
-  # no-plugin run cannot inherit the method by imitation. Format and minimum
-  # contents are unverified; step 4 recon target.
+  # TODO: author history.jsonl. Verified in recon: a HAND-WRITTEN transcript
+  # resumes correctly — no need to record and trim a real session. Two records
+  # suffice, each carrying type (user|assistant), uuid, parentUuid (null first),
+  # message {role, content}, sessionId, cwd, version, userType, isSidechain,
+  # timestamp. Assistant content is a block list, user content a plain string.
+  #
+  # TODO: keep it method-neutral — the step 0-2 artifacts, no gate prose, no step
+  # numbering, so a no-plugin run cannot inherit the method by imitation.
   history_file: history.jsonl
 execution:
   prompt: "proceed"
