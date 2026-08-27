@@ -23,9 +23,9 @@ the artifacts alone". And step 6's cold fork: a fresh context carrying only the 
 artifacts + invariant checks, "so the artifacts alone drive the build and **the
 method itself is validated**". Measure exactly that.
 
-**Stage A — generation (unscored).** Same feature request, same fixture, five arms:
+**Stage A — generation (unscored).** Same feature request, same fixture, five conditions:
 
-| Arm | Notes |
+| Condition | Notes |
 |---|---|
 | `treatment` | gates auto-cleared by a scripted proceed |
 | `oneliner` | "Present a plan and wait for my explicit approval before editing any code." |
@@ -44,7 +44,7 @@ implementer**: *"Implement this feature using only the documents in this directo
 Do not ask questions."* Then grade with instruments that never saw the skill:
 
 - **`O-hidden-acceptance`** — a held-out suite written **before** the eval by a
-  feature specifier, shown to no arm. **Pass rate is the dependent variable.**
+  feature specifier, shown to no condition. **Pass rate is the dependent variable.**
 - `O-build`, `O-suite-still-green` — deterministic.
 - `O-improvised` — count of `TODO`/`FIXME`/"assumed" in the *implementer's* output.
   This measures "was it mechanical?" directly, which is the method's central claim.
@@ -54,7 +54,7 @@ Compliance drops out entirely. A skill producing beautiful gate prose and
 insufficient artifacts loses. A one-liner producing sufficient artifacts wins, and
 deserves to.
 
-**Power.** Continuous DV over ~20 hidden tests, per-run SD ≈ 0.2, n=20/arm →
+**Power.** Continuous DV over ~20 hidden tests, per-run SD ≈ 0.2, n=20/condition →
 **MDE ≈ 0.18** in pass-rate terms. Real, and meaningful at that size. But the true
 n for a generalisation claim is **features, not runs**: 2 features is too few, 5–6
 is defensible.
@@ -82,7 +82,7 @@ discoverability:
 **DV = recall of the run-only defects.** Graded by regex on defect-specific
 identifiers, or by a judge handed *the defect list* — never the skill.
 
-Arms: `treatment` · `oneliner` · "be thorough" · `placebo`. 4 arms × 15 runs ≈ **60
+Conditions: `treatment` · `oneliner` · "be thorough" · `placebo`. 4 × 15 runs ≈ **60
 runs, $80–200 + ~0.5–1 human-day**.
 
 Reading it: run-only recall of .70 vs .65 for a one-liner means the recon prose does
@@ -103,20 +103,20 @@ triage, only the failure-modes section, and re-run.
 
 That is the result you cannot get any other way, and it is the one that would
 actually change what ships. Cheap once O1 or O2 exists — it reuses their harness and
-only varies the arm.
+only varies the condition.
 
 ---
 
 ## Reporting rules — the conditions that make any of it credible
 
-1. **Pre-register** rubrics, thresholds, arms, and expected direction as a committed
+1. **Pre-register** rubrics, thresholds, conditions, and expected direction as a committed
    file with a git hash **before any run**. Tier 1 already commits to this (D6);
    Tier 2 inherits it.
 2. **Report per-case scatter, never means alone.**
 3. **Report judge–human κ** on a labelled subsample. A judge with no agreement
    statistic against ~30 human labels is an unvalidated instrument, and every
    `llm` grader leans on it.
-4. **Publish the placebo arm** alongside the treatment, always.
+4. **Publish the placebo condition** alongside the treatment, always.
 5. **Never typeset predicted numbers like results.** A table of estimates formatted
    identically to measurements will be screenshotted and quoted as measurement.
 6. **Pin and record the model.** Scores are not portable across models or harnesses;
