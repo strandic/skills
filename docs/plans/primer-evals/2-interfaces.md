@@ -86,42 +86,24 @@ deliberate concatenation instead of a forgotten filter.
 infers it from the numbers in front of it. That is the entire value of having
 registered it.
 
-## The three open seams
+## The three open seams — all resolved in step 4
 
-Each is an injected dependency that reads as clean precisely because it defers the
-question of who supplies it. None may reach implementation unanswered.
+Each was an injected dependency that read as clean precisely because it deferred the
+question of who supplies it. All three were answered by running, not by deciding.
+Commands and observed mechanisms: `4-recon.md`.
 
-### `EvalCommand` — what to actually execute
+| Seam | Resolution |
+|---|---|
+| `EvalCommand` | Executable from `EVAL_CLAUDE_BIN` (default `claude`); always inject `CLAUDE_CODE_WALNUT_SPIRE=1`, which is a no-op on a flag-enabled account. Never in the repo's `.claude/settings.json`. |
+| `ResultsLocator` | Newest `<eval-dir>/results/<ISO-timestamp>/aggregate-result.json`. `--eval-dir` accepts a path. |
+| `PreRegistrationDigest` | Content hash, plus a hard failure when `git status --porcelain` reports the file dirty. A digest a reader cannot check out is worse than none. |
 
-Two facts make this unresolvable by hardcoding:
+A fourth seam appeared at step 3 and closed in the same recon: case 5's transcript is
+**hand-written**, not recorded — two records resume correctly.
 
-- The executable is `claude` on a stock install, but a differently-named wrapper
-  wherever `CLAUDE_CONFIG_DIR` is split across profiles — as it is on this machine.
-- `plugin eval` is early access. An account without the server-side flag needs
-  `CLAUDE_CODE_WALNUT_SPIRE=1` in the environment, or every invocation exits 1
-  before running a single case. This account is not flag-enabled.
-
-A committed script can hardcode neither without breaking on the next machine.
-Candidates: an env var the runner reads, a gitignored local config, or required CLI
-flags. **The variable must not go in the repo's `.claude/settings.json`** — project
-settings are untrusted before the workspace trust step and this one is not
-allowlisted.
-
-### `ResultsLocator` — where the document landed
-
-The default is `<plugin>/<eval dir>/results/<timestamp>/`, but `--eval-dir` changes
-it and `--output-dir` overrides it again, and the documented rule branches on
-whether the target is an installed plugin or a path. Which applies to this suite's
-shape is unverified. `--json <file>` probably sidesteps the question by naming the
-destination outright — but that is a guess until a run proves it. Recon target.
-
-### `PreRegistrationDigest` — blob sha or content hash
-
-The two disagree exactly when the working tree is dirty, which is the case that
-matters: a digest of a modified-but-uncommitted pre-registration records a value no
-reader can check out. The real question underneath is whether a dirty
-pre-registration should hard-fail the run, and that is policy rather than
-implementation.
+The diagrams above still show `EvalCommand` and `ResultsLocator` as dashed nodes.
+That is deliberate: they remain the points where this suite touches an environment it
+does not control, and the next CLI release is free to move either.
 
 ## Deliberately absent
 
