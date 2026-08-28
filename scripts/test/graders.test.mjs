@@ -52,7 +52,7 @@ const listDirectory = async (p) => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** Every grader file the suite ships, patterned or not. */
-const EXPECTED_GRADERS = 22;
+const EXPECTED_GRADERS = 26;
 
 /** Of those, the ones carrying an authored pattern — the only ones a probe can test. */
 const EXPECTED_PATTERNED_GRADERS = 10;
@@ -688,9 +688,14 @@ test('BuildEvalArgv — the exact argv the suite will run, target first', () => 
 test('the mutation tools every absence grader names are actually granted on the command line', () => {
   const argv = buildEvalArgv(invocationFor('treatment', paths, specs));
   const granted = argv.slice(argv.indexOf('--allow-tools') + 1, argv.indexOf('--json'));
+  // The harness auto-grants a read-only set; asking for those on the command line is
+  // noise, and a grader naming one is not at risk of the vacuous pass this test exists
+  // to catch. Only gated tools need an explicit grant.
+  const AUTO_GRANTED = new Set(['Read', 'Glob', 'Grep', 'NotebookRead', 'Skill',
+    'AskUserQuestion', 'Agent', 'TodoWrite']);
   const named = new Set(graders.filter((g) => g.meta.type === 'tool_used').map((g) => g.meta.tool));
   for (const tool of named)
-    if (tool !== 'Read')
+    if (!AUTO_GRANTED.has(tool))
       assert.ok(granted.includes(tool),
         `${tool} is counted by an absence grader but never granted — the grader would pass vacuously`);
   assert.ok(granted.includes('Bash'),
