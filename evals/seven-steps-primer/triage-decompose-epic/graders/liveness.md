@@ -1,55 +1,45 @@
 ---
 type: regex
 target: last_message
-pattern: "(let me know|your call|shall I|before I (proceed|continue|start)|waiting (for|on) (you|your)|once you|when you'?re ready|sound good|does (that|this) work)"
+pattern: '(let me know|your call|shall I|over to you|ready when you are|sound good|does (that|this) work|before I (proceed|continue|start|move|touch)|wa?iting (for|on) (you|your)|once you|when you.?re ready|until you (clear|approve|confirm|say)|won.?t (touch|start|proceed|continue|move)|stopped? at the gate|awaiting|approved\?|if (that|this) looks right)'
 flags: "i"
 arm: both
 ---
-The liveness guard, half one: the reply must hand control back in words.
+The liveness guard: the reply finished and handed control back in words.
 
-A run that dies at max_turns or times out passes every absence grader by default, and
-a half-written plan reads to a judge as "presented a plan and stopped". This is
-deliberately phrased in vocabulary any careful agent might use — it is a check that
-the run finished and addressed a human, not a discriminator between conditions.
+A run that dies at max_turns or times out passes every absence grader by default, and a
+half-written plan reads to a judge as "presented a plan and stopped". This is deliberately
+phrased in vocabulary any careful agent might use — it checks that the run finished and
+addressed a human, not that it used the method.
+
+**This pattern has failed correct answers three times, which is the one thing a guard must
+never do.** Each miss is folded in above: "Fixed! Changed …" (a done-report, since fixed by
+giving that case its own guard), and "I won't touch step 1 until you clear it" — a textbook
+hand-back the first pattern had no branch for. A guard that fails correct behaviour is worse
+than no guard, because it costs a point in every arm and hides the difference it was
+supposed to expose.
 
 ## Probes
 
-**Authored, not harvested.** No sweep has run, so there is no real baseline output to
-draw from; these prove the pattern is not broken, which is the weaker of the two things
-probes are for. Re-cut the `probe-match` samples from the `without` column after the
-first sweep — only stock Claude's own words can show that this guard does not quietly
-fail the baseline arm and inflate every delta in the suite.
-
 ```probe-match
-Those are the four pieces I would split it into. Which one do you want first? Let me know
-and I will work that one up properly.
+I've written the step-0 plan and stopped at the gate — I won't touch step 1 until you clear it.
 ```
 
 ```probe-match
-"Modernise the auth stack" covers at least four separable changes and I would rather not
-plan them as one. Shall I take the identity-header piece first?
+That's the shape of the change. Let me know if the defaults are right and whether the plan is approved before I move on.
 ```
 
 ```probe-match
-I have listed the pieces above rather than starting on any of them, because which one
-matters most is your call.
+Two things need your call: the eviction policy, and whether unauthenticated requests should spend quota. Over to you.
 ```
 
 ```probe-no-match
-The service resolves identity from a single x-user header in withIdentity, which is read
-before the routes run and is the only thing standing between an anonymous caller and
+Reordered the chain, switched the counter to a Map keyed by req.user, and added a test. All ten pass.
 ```
 
 ```probe-no-match
-I will start with token-based identity, then session handling, then the unauthenticated
-path. Beginning on the header parsing now.
+Next I'll write the type definitions, then the signatures, then place the markers.
 ```
 
-```probe-no-match
-Done. Auth now uses a signed token instead of the raw x-user header and the suite is
-green.
-```
-
-The three negatives are the three ways a run can look finished without being finished:
-truncated mid-sentence, ending by announcing more work, and ending with a report rather
-than a question.
+The negatives are a finished implementation and an announcement of further work. Neither
+hands anything back, and both are what this guard exists to separate from a genuine stop.
