@@ -164,32 +164,63 @@ items, the revision is wrong.
 
 ---
 
-## 6. Does step 0 have to write a file?
+## 6. Put the setup choices at gate 0, not ahead of it — **MEASURED, SHIPPED**
 
-**Status:** queued
-**Source:** the first smoke pilot — `plan-exists` failed in BOTH arms while every other
-treatment grader passed.
+**Status:** measured · shipped
+**Source:** the first smoke pilot, then a four-sweep experiment at n=5.
 
-**Change.** Say whether step 0's artifact must be written to disk, or whether presenting
-it in the reply satisfies the gate.
+**What shipped.** Two sentences in *Set the artifact home*:
 
-**Why.** The skill tells the agent to set an artifact home before step 0 (default
-`docs/plans/<feature>/`), which reads as "write a file". But that setup is a conversation
-with the human, and a single-turn run has no such exchange — so the treatment presented a
-complete step-0 plan in its reply and wrote nothing. Every other grader passed; the run
-was correct by every other measure.
+> Step artifacts need a home in _this_ repo (default `docs/plans/<feature>/`) — unnamed,
+> they improvise their own location. Name yours **in** the step-0 artifact rather than
+> before it.
 
-Two readings, and the skill does not choose: the file is the deliverable and a reply is
-not one, or the artifact home is a convenience and the plan is the plan wherever it
-lives. The second matters more than it looks — the whole method rests on artifacts being
-inspectable later, and prose in a scrollback is not.
+> **Two setup choices — the human's call, never yours; put them at gate 0, not ahead of
+> it.** Name your defaults, produce step 0, and hand over both questions beside the
+> artifact so one reply settles all three. Blocking before step 0 spends a round-trip and
+> gives the human nothing to review.
 
-**Prediction.** Directly measurable, and cheap: `plan-exists` currently fails for the
-treatment. If the clause lands on the "must write" side, the treatment should clear it
-while the controls still do not — the one-liner says nothing about where a plan goes.
-If it lands the other way, the grader is the thing that is wrong and should be dropped.
+**Why.** The entry began as "does step 0 have to write a file?", which was the wrong
+question. The measurement showed step 0 was not happening *at all*: the committed text
+told the agent to decide the artifact home before step 0 and that the setup choices were
+"the human's call, never yours", and the agent obeyed both — stopping to ask, producing
+nothing. Five of five runs replied with 670–1030 characters of triage and questions. The
+choices are still the human's; they now arrive at the gate where the human answers
+anyway.
 
-**Result.** —
+**Prediction, as registered before the runs.** *"`plan-exists` currently fails for the
+treatment. If the clause lands on the 'must write' side, the treatment should clear it
+while the controls still do not."*
+
+**Result.** Confirmed, at n=5, one case, `--ablation none`, sonnet subject / opus judge.
+
+| | A — committed | B — shipped |
+|---|---|---|
+| `plan-exists` *(grader unchanged between arms)* | **0/5** | **4/5** |
+| mean score, same graders both arms | 0.72 | 0.85 |
+
+**The decomposition, because the headline number is two effects.** A later run reads
+`step0-only` 5/5 and a mean of 0.95 — but the rubric changed between those runs, so that
+figure is not the skill's. The skill's effect measured against a **constant** grader is
+`plan-exists` 0/5 → 4/5 and 0.72 → 0.85. The remainder is the grader fix below.
+
+**The grader defect this exposed, which was mine.** `plan-exists` and `step0-only` were
+mutually exclusive by construction: one demanded the plan in a file, the other judged the
+reply, and five runs split cleanly — four wrote the file and failed the rubric, one kept
+the plan inline and failed the file check. No run could satisfy both, so the pair
+measured itself rather than the work. `step0-only` now accepts a plan "either set out in
+this reply, or written to a file the reply names". Same class as the
+`plan-exists` / `no-source-writes` contradiction the cold fork's auditor found; fixing
+that one is what introduced this one.
+
+**Contamination, stated rather than waved off.** This is a change to the skill made in
+response to eval output — the thing D4 exists to prevent — and the same author wrote the
+skill, the grader, the fixture and the case. Three things bound it: the mechanism was
+visible in the replies rather than inferred from a score, the criterion was the method's
+own claim (does step 0 happen) rather than a grader's invention, and the effect is
+0/5 → 4/5 rather than a marginal shift a fitted instrument could manufacture. None of
+that makes it independent evidence. It is a fix with a measurement attached, and the
+first ledger entry to carry a Result at all.
 
 ---
 
