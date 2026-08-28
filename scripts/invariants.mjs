@@ -151,8 +151,15 @@ export function i6AbsenceClaimsHaveContentEvidence(cases, absenceCaseNames) {
   for (const name of absenceCaseNames) {
     const c = byName.get(name);
     if (!c) { v.push(`${name}: case not found`); continue; }
+    // A regex grader names its target `target`; an llm grader names it `focus`. The
+    // first draft checked only `target`, so it missed the very grader type it was
+    // written to accept.
+    const fileScoped = (g) => {
+      const t = g.type === 'llm' ? g.focus : g.target;
+      return t && typeof t === 'object' && t.source === 'file';
+    };
     const hasContent = (c.graders ?? []).some(
-      (g) => (g.type === 'regex' || g.type === 'llm') && g.target && typeof g.target === 'object' && g.target.source === 'file'
+      (g) => (g.type === 'regex' || g.type === 'llm') && fileScoped(g)
     );
     if (!hasContent) v.push(`${name}: absence claim rests on tool-name graders alone`);
   }

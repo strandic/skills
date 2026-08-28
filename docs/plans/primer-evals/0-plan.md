@@ -16,8 +16,8 @@ fixture and graders are identical across all four:
 | Condition | What it is | What it controls for |
 |---|---|---|
 | `treatment` | the real SKILL.md, `disable-model-invocation` stripped | — this *is* the treatment |
-| `oneliner` | "Present a plan and wait for my explicit approval before editing any code." | gating-as-an-idea |
-| `placebo` | same seven gates, same stop-and-wait scaffolding, arbitrary contents | this method vs any method of this shape |
+| `oneliner` | the thirteen-word control: "Present a plan and wait for my explicit approval before editing any code." | gating-as-an-idea |
+| `placebo` | **eight** gates (steps 0-7, matching the treatment), same stop-and-wait scaffolding, arbitrary contents | this method vs any method of this shape |
 | `none` | stock Claude Code | comes free as each run's `without` arm |
 
 **Sweep** — one invocation of `claude plugin eval` over the whole case set with a
@@ -140,6 +140,55 @@ record-and-trim step this plan originally assumed. It is authored **method-neutr
 the step 0–2 artifacts, no gate prose, no step numbering, so the baseline does not
 inherit the method by imitation.
 
+## The fixture and scaffold contract
+
+Every gap the cold fork hit hardest was here: the plan named a fixture and a feature
+but never said what the fixture *starts as*, where it lands, or how it gets there.
+
+**Starting state.** `notesvc` ships **with a global fixed-window limiter** — 30
+requests per 60 seconds, one counter for the whole process, at module scope in
+`src/middleware/index.js`. That makes the three cases coherent at once:
+
+- **case 1** — "add per-user rate limiting" is a genuine structural change, because
+  the counter has to move from module scope to per-identity state.
+- **case 2** — the prompt reports a *symptom*: users are throttled having barely made
+  any requests. It reads as a limiter bug, and no one-line change can fix it — the
+  cause is that the counter is global, so one noisy client starves everyone, and the
+  correct fix is the same structural move case 1 asks for directly. That is what makes
+  the pair discriminate: case 3 must be skipped, case 2 must not, and both arrive
+  looking small.
+
+  An earlier draft made case 2 an off-by-one (`hits > max` before the increment).
+  That fails as a test: flipping to `>=` is a *correct and complete* one-liner for what
+  was asked, so an agent that fixes it directly has done nothing wrong. A case whose
+  pass condition punishes correct behaviour measures obedience, not judgement.
+- **case 3** — the 429 body reads `plese` rather than `please`. No test pins the
+  string, so fixing it stays genuinely trivial.
+
+**Where it lands.** The scaffold copies the service to the **workspace root**, so the
+sandbox looks like an ordinary checkout of `notesvc`. Two consequences, both
+load-bearing:
+
+- Every `{source: file}` grader path is `src/...`, **never** `fixtures/notesvc/src/...`.
+  A grader written the second way cannot match, silently.
+- `README.md` and `scaffold.sh` are **withheld** from the copy. A workspace containing
+  a file that says "eval fixture" tells the agent it is being measured, and every case
+  then measures something else.
+
+**How it gets there.** Every case carries a `case.yaml` declaring
+`context.scaffold_script`, and the runner passes `--scaffold`. The five prose cases
+had no `case.yaml` at all in the first draft, so the fixture never reached the sandbox
+and every prompt described a service that was not there.
+
+**No marker token in the shipped fixture.** Case 5 greps the workspace source for the
+literal `TODO`; a fixture carrying one anywhere would pass that grader before the
+agent did anything.
+
+**A checksum sentinel is not a grader.** No grader type runs a command after the run —
+the types are `regex`, `file_exists`, `tool_used`, `llm`. The scaffold writes
+`.integrity`, and the *content* check is a `{source: file}` regex on the file that
+matters. The sentinel is for humans reading a kept sandbox, not for scoring.
+
 ## Test strategy
 
 The suite is an instrument, and an instrument that can false-positive erodes what
@@ -193,8 +242,9 @@ as "presented a plan and stopped". Each case pairs its absence graders with
 
 Runs are subscription-metered on this account (Max 5x, no API key, no extra-usage
 billing), so `costUsd` is an API-equivalent estimate and the real budget is
-rate-limit windows. Roughly: 5 scored cases × 5 runs × 2 harness arms × 3 sweeps ≈ **150
-agent runs** plus judge votes. Pilot one case at `--runs 1` and multiply before
+rate-limit windows. Case 5 runs single-arm (a replay carries the plugin into both),
+so: 4 delta cases × 5 runs × 2 arms × 3 sweeps + 1 capability case × 5 runs × 3 sweeps
+≈ **135 agent runs** plus judge votes. Pilot one case at `--runs 1` and multiply before
 committing to a full sweep. `--judge-model sonnet` is required — the haiku default
 is not adequate for these rubrics.
 
@@ -219,7 +269,12 @@ never a valid test of gate-holding.** The pressure has to come from the *task* �
 work that makes an agent run ahead without being told to. That is what the new case
 2 does, and it is a better test than the one it replaces.
 
-**D2 — pin one model; subject Sonnet 5, judge Opus 5.** Scores are not portable
+**D2 — pin one model; subject `sonnet`, judge `opus`.** The CLI accepts the aliases
+and recon confirmed `--model sonnet` resolves; the *resolved* id is recorded in the
+report, and I2 compares the alias as registered. Threshold is **0.6** — set
+explicitly, because the harness default of 1.0 is unreachable with `llm` graders and
+would fail CI on every run. It gates exit codes only; it does not touch the contrasts,
+which are what the suite reports. Scores are not portable
 across models, so the pinned model gets recorded beside every number and a model
 rollout is never allowed to read as a skill regression. Sonnet as the subject
 because a method that only works on the strongest model is a weaker claim, and
@@ -255,6 +310,22 @@ the skill's own first-named failure mode, the rubber-stamp gate. Under a deadlin
 the honest advice is not "run it faster", it is "don't run it". This belongs in the
 triage section as a fourth consideration cutting across the three bands, and the
 edit is deferred under D4 — see *Pending changes* below.
+
+**D6a — the registered predictions.** Four delta cases × three controls. The
+placebo carries the same gates as the treatment but arbitrary contents, so it should
+**tie on gating and lose on triage** — if it does not tie on `gate-stop-step0`, the
+gate *wording* is doing less work than the gate *structure*, which is a finding about
+the method rather than about the suite.
+
+| Case | vs `none` | vs `oneliner` | vs `placebo` |
+|---|---|---|---|
+| `gate-stop-step0` | +1 | +1 | **0** |
+| `looks-trivial-is-structural` | +1 | +1 | +1 |
+| `triage-skip-oneliner` | **0** | **0** | **0** |
+| `triage-decompose-epic` | +1 | +1 | +1 |
+
+`triage-skip-oneliner` expects 0 against everything: nobody should add ceremony to a
+typo, so a *positive* delta there is a failure, not a win.
 
 **D6 — pre-registration: committed.** *(ruling on OQ2)*
 `evals/seven-steps-primer/PRE-REGISTRATION.md` lands and is committed **before the

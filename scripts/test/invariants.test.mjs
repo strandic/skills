@@ -156,6 +156,16 @@ test('I6 accepts an absence case backed by a content grader', () => {
   assert.equal(inv.i6AbsenceClaimsHaveContentEvidence([withContent], ['x']).ok, true);
 });
 
+test('I6 accepts an llm grader scoped to a file — it names its target `focus`, not `target`', () => {
+  const llmScoped = { name: 'x', graders: [...toolOnly.graders, { type: 'llm', focus: { source: 'file', path: 'f' } }] };
+  assert.equal(inv.i6AbsenceClaimsHaveContentEvidence([llmScoped], ['x']).ok, true);
+});
+
+test('I6 still rejects an llm grader that is not file-scoped', () => {
+  const llmLastMessage = { name: 'x', graders: [...toolOnly.graders, { type: 'llm', focus: 'last_message' }] };
+  caught(inv.i6AbsenceClaimsHaveContentEvidence([llmLastMessage], ['x']), 'tool-name graders alone');
+});
+
 test('I6 refuses an empty absence-case list rather than passing vacuously', () => {
   caught(inv.i6AbsenceClaimsHaveContentEvidence([withContent], []), 'vacuous');
 });
