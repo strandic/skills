@@ -9,8 +9,25 @@ behaviour with no citation is a plan whose foundations a reader cannot check —
 recon report. Anything below marked UNVERIFIED must not be relied on until a run
 settles it.
 
-**Version.** All of it is `2.1.245` (git sha `28b7e8c`, built 2026-08-25). Behaviour
-and wording both move between releases: re-verify after a `claude update`.
+**Pinned version:** `2.1.250`. Re-verified against it by execution. Originally established on
+2.1.245; every behavioural claim survived two releases unchanged, and no prose in the
+bundled reference changed at all — it is byte-identical across 2.1.245 → 2.1.250
+(67,496 chars, md5 `d00cd967…`, `diff` exit 0).
+
+**Markers must dodge minified identifiers.** Two CODE markers broke in 2.1.250 for a
+second, unrelated reason: the minifier renamed local variables, so `e.min??1,i=e.max??…`
+and `"without"?{...h,pluginDirs:[]` stopped matching although the code is unchanged.
+They are now anchored on the stable half only — `.max??Number.POSITIVE_INFINITY`,
+`pluginDirs:[]}:`. A CODE marker that includes a single-letter identifier is a marker
+that expires at the next build.
+
+**Read this before trusting a failed marker.** In 2.1.246 the reference stopped being an
+inline ASCII string in the bundle and became a Bun single-file-executable asset stored as
+**UTF-16LE**. `strings` emits only printable ASCII runs, so the entire document went
+invisible to the old recipe — 11 of 15 markers "broke" while nothing about them or the
+harness had changed. A marker that stops resolving is therefore **not** evidence that a
+fact moved; it is first evidence that the *bundling* moved. Check with the decode recipe
+below before concluding anything.
 
 ## Evidence classes
 
@@ -26,20 +43,28 @@ and wording both move between releases: re-verify after a `claude update`.
 Each claim carries a **marker** — a literal substring of its source. To check one:
 
 ```bash
-BIN="$(ls -d ~/.local/share/claude/versions/* | tail -1)"
-strings -n 100 "$BIN" | grep -F '<marker>'          # DOC claims
-strings -n 20  "$BIN" | grep -F '<marker>'          # CODE claims (shorter strings)
+BIN="$(ls -d ~/.local/share/claude/versions/* | sort -V | tail -1)"
+
+# CODE claims — minified JS, still plain ASCII
+strings -n 20 "$BIN" | grep -F '<marker>'
+
+# DOC claims — the reference is UTF-16LE since 2.1.246, so `strings` cannot see it
+python3 -c 'import sys; print("FOUND" if sys.argv[2] in
+  open(sys.argv[1],"rb").read().decode("utf-16-le",errors="ignore") else "MISSING")' \
+  "$BIN" '<marker>'
 ```
 
-Tested on this machine: it returns the surrounding paragraph intact, and every
-marker in the tables below was checked to resolve against the 2.1.245 binary. A
-marker that no longer matches after an upgrade is itself a signal — the wording
-moved, so re-read the claim rather than assuming it still holds.
+Verified on 2.1.250: **11/11 DOC markers recover** under the decode, having returned
+zero hits under `strings`. Pick the newest version by `sort -V`, not `tail -1` on an
+unsorted listing — 2.1.247 sorts after 2.1.250 lexically, and the wrong binary is a
+silently wrong answer.
 
-One caveat found while testing: the reference is stored as **concatenated string
-chunks**, not one literal, so there is no clean way to reassemble the whole document
-from the binary. Per-claim verification works, whole-file reconstruction does not —
-which is fine, because citations are checked one at a time.
+Note also that `claude` may not execute the newest installed version: 2.1.247 was on
+disk while 2.1.250 was what actually ran. Confirm with `--version` rather than `ls`.
+
+Whole-file reconstruction is possible but not worth it: parse the Bun module graph from
+the `\n---- Bun! ----\n` trailer and decode. Per-claim verification is what citations
+need.
 
 ## Claims the design rests on
 
@@ -48,9 +73,9 @@ which is fine, because citations are checked one at a time.
 | 1 | `scaffold_script` runs `bash <script>` in the empty workspace **before credentials exist**, minimal env, **2-minute hard limit**, no ssh keys or credential helpers; **off unless `--scaffold`**; a failure scores the run 0 | DOC | ``scaffold_script` runs as `bash <script>`` |
 | 2 | A plugin path that **is a symlink** is rejected by the ownership check | CODE | `is a symlink (or can be read as a link)` |
 | 3 | `files` / `file_exists` see only files **created during the run** — not contents, not pre-existing (including scaffold-created), not merely modified | DOC | `not their contents, and not files that already existed` |
-| 4 | `tool_used` `min` defaults to **1**, so `max: 0` alone can never pass; "must not call" is `min: 0, max: 0` | CODE | `e.min??1,i=e.max??Number.POSITIVE_INFINITY` |
+| 4 | `tool_used` `min` defaults to **1**, so `max: 0` alone can never pass; "must not call" is `min: 0, max: 0` | CODE | `.max??Number.POSITIVE_INFINITY` |
 | 5 | Only a read-only tool set is granted; `Bash`, `Write`, `Edit`, `WebFetch`, `WebSearch`, `mcp__*` need `--allow-tools` | DOC | `Operator grant for tools beyond the read-only set` |
-| 6 | The baseline arm is the same case with **no plugin at all** | CODE | `"without"?{...h,pluginDirs:[]` |
+| 6 | The baseline arm is the same case with **no plugin at all** | DOC | `each case runs twice: with the plugin and without any plugin` |
 | 7 | Under `with-without`, `tool_used: Skill` is demoted to a with-only indicator and excluded from the score; under `--ablation none` the same grader **is** scored | DOC | `grader **is** scored there` |
 | 8 | `context.history_file` replays a transcript to turn N-1 and evaluates turn N | DOC | `replay a known-good conversation up to turn N-1` |
 | 9 | `error` non-null does **not** imply score 0 — a timed-out or turn-capped run is still graded on what it produced; only *setup* failures yield no graders | DOC | `non-null does not imply score 0` |
@@ -74,6 +99,10 @@ been replicated across sessions, so treat them as strong leads rather than settl
 | 16 | **`tool_used: Skill` passes in the no-plugin baseline arm** — it counts *attempted* tool_use blocks with no check that the call resolved | The reason every case grades an output token the skill uniquely produces, never the Skill call |
 | 17 | A **bare `SKILL.md` folder with no manifest** is auto-detected as the plugin under test — contradicting the bundled reference, which says a plain skill never is | Lets each condition be a bare skill directory |
 | 18 | For a `disable-model-invocation` skill, `/plugin:skill` at **position 0** of the prompt is consumed client-side and leaves no `Skill` tool_use; mid-sentence, it unlocks the real tool | Background to the mirror decision; the suite avoids both by stripping the flag instead |
+| 33 | A **second preflight**, distinct from the tool-grant one, warns when a file-reading grader cannot pass because nothing in the run can produce the file | Free early warning that `--scaffold` was forgotten |
+| 34 | A `{source: file}` grader whose path is absent is a **hard failure**, not a soft "unavailable" | A wrong path fails loudly instead of scoring 0 quietly — which is what the old `fixtures/notesvc/...` paths would have done |
+| 35 | A `scaffold_script` escaping its case dir fails **only when `--scaffold` is passed** — the containment check runs at execution, not at load | A broken scaffold path looks healthy in every run that omits the flag |
+| 36 | `--json` no longer consumes a following target the way `--tag` and `--allow-tools` still do | Target-first remains the rule; only the failure mode differs |
 
 ## Settled in step-4 recon
 
@@ -97,6 +126,12 @@ mechanisms are in `4-recon.md`; run artifacts under
 | 30 | Resuming a `history_file` case writes a `<sessionId>.jsonl` **into the case directory** | stray transcript left beside `history.jsonl` |
 | 31 | `--allow-tools <tools...>` is **variadic** — space-separated values, which is why the target must precede it | `.option("--allow-tools <tools...>", …)` |
 | 32 | **`--tag` is an INCLUDE filter**: "a case is kept if any given tag matches". There is no exclude form | `--tag` filtering (a case is kept if any given tag matches) |
+
+**Correction to #14, paid for in a real run.** A cost ceiling does not prevent the
+*first* agent run — it stops the ones after it. Combined with #28 (lexicographic order),
+a "cheap load-only pass" on this suite runs `control-all-steps` to completion first and
+cost **$0.15**, not the $0.02 recorded earlier. Filter to a cheap case rather than
+relying on the ceiling.
 
 Claim 22 matters more than it looks: because every condition is copied to the same
 `_condition/` path, all three present to the model as the same plugin name. That is

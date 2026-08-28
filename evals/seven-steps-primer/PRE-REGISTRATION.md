@@ -226,7 +226,7 @@ The merger reads this block and nothing else in this file.
   "subjectModel": "sonnet",
   "judgeModel": "opus",
   "runsPerCase": 5,
-  "claudeVersion": "2.1.245",
+  "claudeVersion": "2.1.250",
   "publishAllConditions": true,
   "claimCeiling": "With the primer loaded, the agent produces one step's artifact and stops, holds that under task pressure, and does not add ceremony to work that does not need it — measured against no skill, a one-line equivalent, and a same-shape placebo."
 }
@@ -249,3 +249,29 @@ baseline output to cut them from — and re-cutting the negatives against the fi
 **Tier 2** registers nothing here. Outcome evals, defect-injection recall and component
 ablation need their own pre-registration and their own budget; this file commits only to
 what four conditions over six cases can settle.
+
+---
+
+## Amendment 1 — the pinned CLI version
+
+`claudeVersion` was registered as `2.1.245` and is amended to **`2.1.250`**.
+
+Recorded rather than edited quietly, because a freeze that bends silently is not a
+freeze. Three things make this amendment legitimate, and they are the test any future
+one has to pass:
+
+1. **No numbers exist yet.** Not one scored sweep has run, so nothing is being fitted to
+   a result. This is the only window in which a pin can move at all.
+2. **Nothing else changed.** The conditions, cases, graders, threshold, models, run count
+   and all twelve registered directions are untouched. Only the version moved.
+3. **The change was forced, not chosen.** The CLI upgraded twice under the project
+   (2.1.245 → .247 → .250) and I2 voids a run whose report disagrees with the pin. The
+   alternative was pointing `EVAL_CLAUDE_BIN` at an old binary that will eventually be
+   collected.
+
+Every behavioural fact the suite depends on was re-verified **by execution** against
+2.1.250 before this amendment: 24 confirmed, zero behavioural changes. The bundled
+reference prose is byte-identical to 2.1.245. See `docs/plans/primer-evals/harness-facts.md`.
+
+Once the first scored sweep runs, this file is closed. A version change after that point
+voids the run under I2 and requires a fresh pre-registration, not another amendment.
