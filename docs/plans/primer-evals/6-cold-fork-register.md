@@ -578,3 +578,29 @@ Case 2 was an off-by-one, which fails as a test because a one-line fix is *corre
 for what was asked; it is now a symptom whose only correct fix is structural. And
 `--tag` turns out to be an include filter with no exclude form, so the control case
 cannot be subtracted the way the runner's marker assumed.
+
+
+---
+
+## Round 2 — the count did not converge
+
+Rebuilt from the revised artifacts by ten fresh contexts, all of which completed.
+
+| | agents reporting | insufficiencies | per agent |
+|---|---|---|---|
+| Round 1 | 7 (three died) | 76 | 10.9 |
+| Round 2 | 8 | 92 | 11.5 |
+
+Fixing every blocking entry and about twenty material ones moved the rate not at all.
+Matched modules: `PRE-REGISTRATION` 11 → 11, `fixture` 8 → 8, `build-conditions` 8 → 6,
+`merge-results` 12 → 17, `run-evals` 14 → 16.
+
+What did change is the kind of question. Round 1's blocking entries were gross — the
+fixture did not exist, every grader path was wrong, no case could reach the sandbox —
+and the result could not run. Round 2's are design questions inside a working system,
+and the result runs: 201 script tests, 10 fixture tests, no drift, zero `TODO(seam)`,
+invariants holding.
+
+The finding is recorded as pending change #5 against the skill itself: "buildable from
+the artifacts alone" is asymptotic, and a stopping rule nobody can satisfy is not a
+stopping rule.

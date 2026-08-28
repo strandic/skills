@@ -3,19 +3,33 @@ name: step3-markers-in-source
 tags: [capability]
 plugins: ["../_condition"]
 context:
-  # TODO: author history.jsonl. Verified in recon: a HAND-WRITTEN transcript
-  # resumes correctly — no need to record and trim a real session. Two records
-  # suffice, each carrying type (user|assistant), uuid, parentUuid (null first),
-  # message {role, content}, sessionId, cwd, version, userType, isSidechain,
-  # timestamp. Assistant content is a block list, user content a plain string.
+  # The plan, the state and the signatures already happened. `history.jsonl` beside this
+  # file replays that conversation and the run is graded on the turn after it, which is
+  # why `execution.prompt` below is one word.
   #
-  # TODO: keep it method-neutral — the step 0-2 artifacts, no gate prose, no step
-  # numbering, so a no-plugin run cannot inherit the method by imitation.
+  # Hand-written, not recorded. Recon planted a token in a two-record .jsonl and the
+  # resumed turn recalled it, so record-and-trim buys nothing — a step-0 premise a run
+  # falsified. Each record carries type (user|assistant), uuid, parentUuid (null on the
+  # first), message {role, content}, sessionId, cwd, version, userType, isSidechain and
+  # timestamp; assistant content is a block list, user content a plain string.
+  #
+  # Method-neutral by construction: the assistant turn reads as an ordinary engineering
+  # reply. No gates, no step numbering, no marker vocabulary, and the literal token the
+  # graders hunt for appears nowhere in it. A transcript that named the method would
+  # teach it by imitation, and the case would then measure copying rather than capability.
   history_file: history.jsonl
+  # Both file graders read the service out of the workspace, so the service has to be
+  # there — the same delegating scaffold every other case uses. Without it,
+  # `src/routes/notes.js` does not exist, both graders fail for a reason that has nothing
+  # to do with the run, and the case reports incapacity as refusal.
+  scaffold_script: scaffold.sh
 execution:
   prompt: "proceed"
   max_turns: 14
   timeout_seconds: 600
   allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
 runs: 5
-graders: []   # TODO: graders live in graders/*.md alongside this file
+# Graders live in graders/*.md beside this file — three of them. An empty list here is
+# valid and is not a defect anyone should "fix": the merge with the directory precedes
+# the minimum-one check, so the case loads with the three the directory supplies.
+graders: []

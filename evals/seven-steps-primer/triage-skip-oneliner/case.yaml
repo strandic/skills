@@ -11,6 +11,7 @@ context:
   # also pass --scaffold. Without both, the workspace is empty and the prompt describes
   # a service that is not there.
   scaffold_script: scaffold.sh
-# TODO: everything else — prompt, tools, runs, tags — stays in prompt.md frontmatter,
-# which overrides this file. context.* cannot be set from prompt.md, which is the only
-# reason this file exists.
+# Nothing else belongs here. Prompt, tools, runs and tags live in prompt.md's
+# frontmatter, which overrides this file; `context.*` cannot be set from prompt.md, and
+# that is the only reason this file exists. Checked against prompt.md: no key above is
+# one prompt.md also sets, so nothing here can be silently overridden.

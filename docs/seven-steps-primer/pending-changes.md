@@ -119,9 +119,56 @@ no work.
 
 ---
 
+## 5. Restate the "mechanical" stopping rule so it can be met
+
+**Status:** queued
+**Source:** two cold step-6 forks, ten fresh contexts each, building the eval suite from
+the committed artifacts alone.
+
+**Change.** The skill says planning is finished when implementation has become
+*mechanical* — "the feature buildable from the artifacts alone" — and step 6 adds that
+"a design decision surfacing here is a defect in an earlier artifact: stop and go back."
+Taken literally, you never stop.
+
+**The evidence.** Round 1 surfaced **76** places the artifacts failed to determine an
+answer. All 6 blocking and ~20 material entries were fixed in the artifacts that owned
+them. Round 2 surfaced **92**. Normalised for the three agents round 1 lost, the rate
+was flat: **10.9 → 11.5 insufficiencies per builder**.
+
+It does not converge, and the reason is structural rather than a failure of effort:
+every ruling exposes the next question at a finer grain. Round 1 asked *"does the fixture
+throttle at all?"*. Answering it let round 2 ask *"where does per-request identity come
+from, and why does per-user limiting touch the routes module?"* — questions that could
+not have been posed before the first was settled.
+
+**But the two rounds were not equivalent, and the difference is the whole point.**
+Round 1 produced a suite that **could not run**: no fixture, every grader path wrong, no
+case able to reach the sandbox. Round 2 produced one that **runs and passes** — 201
+script tests, 10 fixture tests, no drift, zero unresolved seams, invariants holding. The
+count stayed flat while the artefact went from broken to working.
+
+So the count is not the signal. What changed was the *kind* of decision left open.
+
+**Candidate wording.** Replace "buildable from the artifacts alone" as the stopping test
+with something a builder can actually satisfy — the remaining decisions no longer change
+whether it works. A cold build will always surface more; the question is whether what it
+surfaces is load-bearing.
+
+**Prediction.** Not measurable by the Tier 1 suite, and unlike #3 that is not a weakness:
+it already has direct empirical support from two rounds. The falsifiable form is a third
+fork — under the revised rule, a builder should be able to state *"nothing still open
+changes whether this works"* and be right. If round-3 builders still surface blocking
+items, the revision is wrong.
+
+**Result.** —
+
+---
+
 ## Note on what this ledger reveals
 
-Three of four entries came from **building the evals**, not from reading the skill.
+Four of five entries came from **building the evals**, not from reading the skill, and
+#5 came from the method being run on itself under conditions designed to make it fail
+visibly.
 That is the exercise paying for itself before a single number exists.
 
 But only two are cleanly measurable by Tier 1 as designed (#1 by re-running the
