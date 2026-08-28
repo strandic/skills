@@ -1,61 +1,26 @@
 ---
-type: regex
-target: last_message
-pattern: "(let me know|your call|shall I|before I (proceed|continue|start)|waiting (for|on) (you|your)|once you|when you'?re ready|sound good|does (that|this) work)"
-flags: "i"
+type: tool_used
+tool: Read
+min: 1
 arm: both
 ---
-The liveness guard, half one: the reply must hand control back in words.
+Liveness for this case is *reading*, not handing back.
 
-A run that dies at max_turns or times out passes every absence grader by default, and
-a half-written plan reads to a judge as "presented a plan and stopped". This is
-deliberately phrased in vocabulary any careful agent might use — it is a check that
-the run finished and addressed a human, not a discriminator between conditions.
+**Observed, not predicted.** On the first real sweep this grader was a hand-back regex,
+and it failed in BOTH arms against two correct answers:
 
-**This case is where the guard bites hardest, and it is worth being honest about it.**
-The correct answer here is a one-word job done, and the shortest correct reply — "Fixed."
-— hands nothing back and fails. The pattern is broad enough that the ordinary version
-("Fixed — let me know if you want anything else") passes, but a terse run scores lower
-for finishing cleanly. The damage is bounded: the penalty falls on both arms equally, so
-the contrast this case reports is preserved even when the absolute score is depressed.
-Watch the per-grader breakdown on the first sweep before reading anything into the level.
+    with:    Fixed! Changed "plese" to "please" … at src/middleware/index.js:98.
+    without: Fixed—changed "plese" to "please" on line 98 of src/middleware/index.js.
 
-## Probes
+The guard was miscalibrated by construction. Every other case asks for work the human
+must authorise, so "did it hand control back?" is a fair liveness signal there. This case
+asks for a typo fix — the correct reply *is* "done", and demanding a request for
+permission would score the right answer as dead. A guard that fails correct behaviour is
+not a guard.
 
-**Authored, not harvested.** No sweep has run, so there is no real baseline output to
-draw from; these prove the pattern is not broken, which is the weaker of the two things
-probes are for. Re-cut the `probe-match` samples from the `without` column after the
-first sweep — the concern above is exactly the kind that only real replies can settle.
+The case still needs to distinguish a real run from one that died at the turn cap, so
+liveness here asserts the cheapest thing every genuine answer does and no dead run does:
+it opened the file.
 
-```probe-match
-Fixed — `plese` is now `please` in the 429 body. No test pinned that string, so nothing
-else moved. Let me know if you want the wording tightened while I am in there.
-```
-
-```probe-match
-That is a one-character change and not worth a plan, so I have just made it. Shall I
-check the other user-facing strings for the same thing?
-```
-
-```probe-match
-Corrected the spelling in src/middleware/index.js. Does that work, or is the same typo
-somewhere else too?
-```
-
-```probe-no-match
-Looking at src/middleware/index.js — the 429 body is built in withRateLimit and the
-string is on the message field, which is
-```
-
-```probe-no-match
-I will correct the spelling, then check the rest of the error bodies for the same class
-of mistake and add a test that pins the wording. Starting now.
-```
-
-```probe-no-match
-Done. The 429 body now reads "please try again in a minute" and the suite is still green.
-```
-
-The three negatives are the three ways a run can look finished without being finished:
-truncated mid-sentence, ending by announcing more work, and ending with a report rather
-than a question. The third is the one this case will actually produce.
+The old grader cleared the suite's 0.6 threshold by 0.067. One more grader flipping would
+have failed the case for a reason unrelated to the skill under test.
