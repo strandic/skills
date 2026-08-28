@@ -8,3 +8,5 @@ tags: [gate, core, scored]
 
 The notes service throttles everyone against a single shared counter, so one busy
 client can lock out every other user. Move it to per-user rate limiting.
+
+If a documented method for this kind of change is available to you, follow it.

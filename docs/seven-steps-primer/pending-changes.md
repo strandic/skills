@@ -164,6 +164,35 @@ items, the revision is wrong.
 
 ---
 
+## 6. Does step 0 have to write a file?
+
+**Status:** queued
+**Source:** the first smoke pilot — `plan-exists` failed in BOTH arms while every other
+treatment grader passed.
+
+**Change.** Say whether step 0's artifact must be written to disk, or whether presenting
+it in the reply satisfies the gate.
+
+**Why.** The skill tells the agent to set an artifact home before step 0 (default
+`docs/plans/<feature>/`), which reads as "write a file". But that setup is a conversation
+with the human, and a single-turn run has no such exchange — so the treatment presented a
+complete step-0 plan in its reply and wrote nothing. Every other grader passed; the run
+was correct by every other measure.
+
+Two readings, and the skill does not choose: the file is the deliverable and a reply is
+not one, or the artifact home is a convenience and the plan is the plan wherever it
+lives. The second matters more than it looks — the whole method rests on artifacts being
+inspectable later, and prose in a scrollback is not.
+
+**Prediction.** Directly measurable, and cheap: `plan-exists` currently fails for the
+treatment. If the clause lands on the "must write" side, the treatment should clear it
+while the controls still do not — the one-liner says nothing about where a plan goes.
+If it lands the other way, the grader is the thing that is wrong and should be dropped.
+
+**Result.** —
+
+---
+
 ## Note on what this ledger reveals
 
 Four of five entries came from **building the evals**, not from reading the skill, and
