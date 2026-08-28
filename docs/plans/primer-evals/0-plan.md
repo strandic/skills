@@ -136,9 +136,19 @@ Case 5 uses `history_file`, and a replayed transcript carries the plugin into bo
 arms, so it runs single-arm as capability evidence and must be reported separately
 from the delta-bearing cases. Its transcript is **hand-written**, not recorded — a
 two-record `.jsonl` resumes correctly, confirmed in recon, which removes the
-record-and-trim step this plan originally assumed. It is authored **method-neutral**:
-the step 0–2 artifacts, no gate prose, no step numbering, so the baseline does not
-inherit the method by imitation.
+record-and-trim step this plan originally assumed.
+
+**It names the method, and this plan was wrong to say otherwise.** An earlier version
+required the transcript to be *method-neutral* — the artifacts but no gate prose, no step
+numbering — so a baseline could not inherit the method by imitation. There is no baseline:
+this case runs single-arm, for the reason stated in the sentence above it. The constraint
+was inherited from a concern that does not apply here, and it made the case unwinnable.
+A resumed agent given artifacts but no mention of the method has no idea it is mid-method
+and no skill in context — in a real run the skill loads at turn 1 and stays there, and a
+replay that reconstructs only the artifacts reconstructs the wrong half. Measured: with a
+neutral transcript, `Skill called 0x` and the run implemented the whole feature; with the
+skill named in turn 1 and the gates named between turns, 5/5 runs invoked it and placed
+markers in both source files.
 
 ## The fixture and scaffold contract
 
