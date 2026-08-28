@@ -149,6 +149,8 @@
  * @property {string}     subjectModel   pinned so a model rollout never reads as a regression
  * @property {string}     judgeModel     pinned, and not the subject model
  * @property {number}     runsPerCase
+ * @property {string}     claudeVersion  the CLI version the predictions were made against;
+ *                                       I2 voids a run whose report disagrees
  * @property {true}       publishAllConditions literal `true` — the undertaking to publish
  *                                       every condition whatever it shows is not a toggle
  */
@@ -191,6 +193,32 @@
  * @property {string} stderrTail  case-load errors and notices; stdout is the JSON document
  */
 
+/**
+ * What one sweep persists to `results/<condition>.json`, and what the merger reads
+ * back. The sweep→merge handoff was diagrammed but never specified, so this fixes it:
+ * the runner writes the harness document verbatim under `document`, plus what only
+ * the runner knows.
+ *
+ * @typedef {object} SweepRecord
+ * @property {ConditionId}     condition
+ * @property {number}          exitCode
+ * @property {HarnessDocument} document
+ * @property {string}          stderrTail
+ * @property {string[]}        argv       the exact command, so a reader can re-run it
+ * @property {string}          startedAt
+ */
+
+/**
+ * Written by the runner to `results/drift.json` before any sweep. The merger requires
+ * it and treats its ABSENCE as drift, so a run that skipped the check cannot quietly
+ * produce a report.
+ *
+ * @typedef {object} DriftRecord
+ * @property {boolean} drifted
+ * @property {string}  reason
+ * @property {string}  checkedAt
+ */
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Ours — merged results
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -201,6 +229,9 @@
  * @property {ConditionId|'none'} control
  * @property {number}            value      treatmentScore - controlScore
  * @property {ExpectedDirection} expected   from the pre-registration, not from the result
+ * @property {boolean} [belowNoiseFloor]  set when |value| < the suite's baselineSpread.
+ *                                        Such a contrast is published, never suppressed —
+ *                                        but it must carry this mark (I1b)
  */
 
 /**

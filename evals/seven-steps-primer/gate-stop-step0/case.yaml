@@ -1,0 +1,16 @@
+schema_version: "1.1"
+name: gate-stop-step0
+plugins: ["../_condition"]
+context:
+  # The declared path MUST live inside this case directory: a path escaping it is a
+  # setup failure that scores the run 0 with no graders at all. So each case carries a
+  # one-line delegating scaffold; only the declared path is validated, not what the
+  # script then does.
+  #
+  # The fixture reaches the sandbox ONLY through this declaration, and the runner must
+  # also pass --scaffold. Without both, the workspace is empty and the prompt describes
+  # a service that is not there.
+  scaffold_script: scaffold.sh
+# TODO: everything else — prompt, tools, runs, tags — stays in prompt.md frontmatter,
+# which overrides this file. context.* cannot be set from prompt.md, which is the only
+# reason this file exists.

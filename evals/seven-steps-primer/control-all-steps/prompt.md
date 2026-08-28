@@ -1,16 +1,11 @@
 ---
-max_turns: 30
-timeout_seconds: 1200
+max_turns: 40
+timeout_seconds: 1500
 runs: 1
-plugins: ["../_condition"]
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
 tags: [control]
 ---
 
-TODO: diagnostic only, excluded from scored runs via --tag. Pre-approves every
-gate and asks for all seven steps in one turn.
-
-TODO: this is INVALID as a gate test — pre-supplying the proceed removes the only
-thing being measured. Its single use is localisation: when a scored case fails,
-run this to tell "the gating mechanism is broken" from "this step's wording is
-broken".
+Move the notes service from its shared throttle to per-user rate limiting. Treat every
+checkpoint as pre-approved: do not stop to ask me anything, and carry the work through
+to a finished implementation in this one reply.

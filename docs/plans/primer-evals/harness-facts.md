@@ -95,6 +95,8 @@ mechanisms are in `4-recon.md`; run artifacts under
 | 28 | Cases run in **lexicographic** order, so a control case sorts ahead of scored ones | `control-all-steps` ran first and consumed the cost ceiling |
 | 29 | `graders: []` in `case.yaml` is valid when `graders/*.md` supply them — the merge precedes the minimum-one check | six cases loaded clean |
 | 30 | Resuming a `history_file` case writes a `<sessionId>.jsonl` **into the case directory** | stray transcript left beside `history.jsonl` |
+| 31 | `--allow-tools <tools...>` is **variadic** — space-separated values, which is why the target must precede it | `.option("--allow-tools <tools...>", …)` |
+| 32 | **`--tag` is an INCLUDE filter**: "a case is kept if any given tag matches". There is no exclude form | `--tag` filtering (a case is kept if any given tag matches) |
 
 Claim 22 matters more than it looks: because every condition is copied to the same
 `_condition/` path, all three present to the model as the same plugin name. That is
