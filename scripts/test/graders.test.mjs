@@ -55,7 +55,7 @@ const listDirectory = async (p) => {
 const EXPECTED_GRADERS = 22;
 
 /** Of those, the ones carrying an authored pattern — the only ones a probe can test. */
-const EXPECTED_PATTERNED_GRADERS = 11;
+const EXPECTED_PATTERNED_GRADERS = 10;
 
 /**
  * Test files that declare no tests report `pass 1`; this is the floor that catches it.
@@ -841,12 +841,20 @@ test('every harness fact carries a checkable marker, and none is UNVERIFIED', as
     assert.equal(m.cls.includes('UNVERIFIED'), false,
       `claim ${m.claim} is UNVERIFIED and must not be relied on until a run settles it`);
   }
-  assert.match(md, /All of it is `\d+\.\d+\.\d+`/, 'harness-facts.md must pin the version it was read from');
+  assert.match(md, /\*\*Pinned version:\*\* `\d+\.\d+\.\d+`/, 'harness-facts.md must pin the version it was read from');
 });
 
 const CLI_VERSIONS = join(homedir(), '.local', 'share', 'claude', 'versions');
 
-/** Stream `strings` and return the markers that did NOT appear. Kills the child early. */
+/**
+ * Return the markers that did NOT appear in the binary.
+ *
+ * Two passes, because the binary holds two kinds of text. Minified JS is plain ASCII and
+ * `strings` streams it cheaply. The bundled reference has been a Bun asset stored as
+ * **UTF-16LE since 2.1.246** — every other byte is 0x00, so `strings` emits nothing for
+ * it and eleven citations silently "broke" while neither they nor the harness had moved.
+ * A failing marker is first evidence that the bundling changed, not that a fact did.
+ */
 function unresolvedMarkers(bin, markers) {
   return new Promise((resolve, reject) => {
     const remaining = new Set(markers);
@@ -861,13 +869,23 @@ function unresolvedMarkers(bin, markers) {
       if (remaining.size === 0) child.kill('SIGKILL');
       carry = hay.slice(-4096);
     });
-    child.on('close', () => resolve(remaining));
+    child.on('close', () => {
+      if (remaining.size === 0) return resolve(remaining);
+      // Second pass: decode the whole binary as UTF-16LE and look again.
+      readFile(bin)
+        .then((buf) => {
+          const wide = buf.toString('utf16le');
+          for (const m of remaining) if (wide.includes(m)) remaining.delete(m);
+          resolve(remaining);
+        })
+        .catch(() => resolve(remaining));
+    });
   });
 }
 
 test('every harness-fact marker still resolves against the pinned CLI binary', async (t) => {
   const md = await readTextFile('docs/plans/primer-evals/harness-facts.md');
-  const pinned = /All of it is `(\d+\.\d+\.\d+)`/.exec(md)[1];
+  const pinned = /\*\*Pinned version:\*\* `(\d+\.\d+\.\d+)`/.exec(md)[1];
   const bin = join(CLI_VERSIONS, pinned);
   if (!(await stat(bin).then((s) => s.isFile()).catch(() => false)))
     return t.skip(`no ${bin} on this machine — the citations cannot be checked from here`);
