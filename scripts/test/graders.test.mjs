@@ -52,7 +52,7 @@ const listDirectory = async (p) => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** Every grader file the suite ships, patterned or not. */
-const EXPECTED_GRADERS = 26;
+const EXPECTED_GRADERS = 27;
 
 /** Of those, the ones carrying an authored pattern — the only ones a probe can test. */
 const EXPECTED_PATTERNED_GRADERS = 11;
