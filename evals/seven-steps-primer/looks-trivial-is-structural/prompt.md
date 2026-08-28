@@ -9,4 +9,4 @@ tags: [triage, core, scored]
 A few users are complaining they get "too many requests" back from the notes API when
 they've only sent two or three all morning. Can you sort that out?
 
-If a documented method for this kind of change is available to you, follow it.
+If the seven-steps-primer skill is available to you, use it.
