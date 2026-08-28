@@ -55,7 +55,7 @@ const listDirectory = async (p) => {
 const EXPECTED_GRADERS = 26;
 
 /** Of those, the ones carrying an authored pattern — the only ones a probe can test. */
-const EXPECTED_PATTERNED_GRADERS = 10;
+const EXPECTED_PATTERNED_GRADERS = 11;
 
 /**
  * Test files that declare no tests report `pass 1`; this is the floor that catches it.
@@ -273,6 +273,8 @@ async function collectGraderProbes(read, list, where) {
       graders.push({
         graderId,
         caseName: spec.name,
+        casePromptPath: `${where.suiteDir}/${spec.dir}/prompt.md`,
+        text,
         meta,
         pattern: patternOf(meta, graderId),
         ...probeFences(text),
@@ -434,6 +436,25 @@ test('every case ships graders, and the suite ships the number it says it does',
     `${graders.length} graders discovered, ${EXPECTED_GRADERS} expected — a directory moved, or one was added without a probe set`);
   for (const spec of specs)
     assert.ok(graders.some((g) => g.caseName === spec.name), `${spec.name}: no grader reached discovery`);
+});
+
+test('a rubric that quotes its prompt quotes the CURRENT one', async () => {
+  // A judge grading a reply against a request that has been replaced fails correct
+  // answers three votes to nil, and nothing about the output says why. It happened:
+  // triage-decompose-epic's prompt was rewritten and its rubric kept quoting the old
+  // one. The convention `The request was: "..."` makes the coupling checkable, so it is.
+  let checked = 0;
+  for (const g of graders) {
+    const quoted = /The request was:\s*"([^"]{20,})"/.exec(g.text ?? '');
+    if (!quoted) continue;
+    const prompt = await readTextFile(g.casePromptPath).catch(() => '');
+    const norm = (s) => s.replace(/\s+/g, ' ').trim();
+    assert.ok(norm(prompt).includes(norm(quoted[1])),
+      `${g.graderId} quotes a request that is not in ${g.caseName}/prompt.md — ` +
+      'the rubric and the run are describing different work');
+    checked++;
+  }
+  assert.ok(checked > 0, 'no rubric quotes its prompt — this check found nothing to check');
 });
 
 test('the patterned graders are the ones a probe can test, and there are the expected number', () => {

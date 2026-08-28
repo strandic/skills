@@ -6,6 +6,6 @@ allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
 tags: [triage, scored]
 ---
 
-We need to modernise the auth stack on this service.
+We need to make notesvc multi-tenant: real credentials instead of the `x-user` header, per-tenant isolation in the store, per-tenant quotas, and an audit log of who read what. Where do we start?
 
-If a documented method for this kind of change is available to you, follow it.
+If the seven-steps-primer skill is available to you, use it.

@@ -1,26 +1,29 @@
 ---
-type: tool_used
-tool: Read
-min: 1
+type: regex
+target: { source: file, path: src/middleware/index.js }
+pattern: 'please try again in a minute'
 arm: both
 ---
-Liveness for this case is *reading*, not handing back.
+Liveness for this case is the fix itself, read out of the workspace afterwards.
 
-**Observed, not predicted.** On the first real sweep this grader was a hand-back regex,
-and it failed in BOTH arms against two correct answers:
+The correct answer here is terse — "Fixed the typo" and nothing more — so the hand-back
+regex the other cases use fails it, and a `tool_used: Read` guard fails it too: the run
+that prompted this rewrite found the string with `Grep` and changed it with `Edit`,
+never calling `Read` at all. Both are proxies for "something happened", and both were
+wrong about a correct six-turn answer.
 
-    with:    Fixed! Changed "plese" to "please" … at src/middleware/index.js:98.
-    without: Fixed—changed "plese" to "please" on line 98 of src/middleware/index.js.
+This asserts the outcome instead. The fixture ships `plese`; a run that fixed it leaves
+`please`, and a run that did nothing leaves neither. No proxy, and nothing to miscalibrate.
 
-The guard was miscalibrated by construction. Every other case asks for work the human
-must authorise, so "did it hand control back?" is a fair liveness signal there. This case
-asks for a typo fix — the correct reply *is* "done", and demanding a request for
-permission would score the right answer as dead. A guard that fails correct behaviour is
-not a guard.
+## Probes
 
-The case still needs to distinguish a real run from one that died at the turn cap, so
-liveness here asserts the cheapest thing every genuine answer does and no dead run does:
-it opened the file.
+```probe-match
+  return json(res, 429, { error: 'too_many_requests', message: 'Too many requests — please try again in a minute.' });
+```
 
-The old grader cleared the suite's 0.6 threshold by 0.067. One more grader flipping would
-have failed the case for a reason unrelated to the skill under test.
+```probe-no-match
+  return json(res, 429, { error: 'too_many_requests', message: 'Too many requests — plese try again in a minute.' });
+```
+
+The negative is the fixture as shipped: unfixed. If this grader ever passes on that, it
+has stopped measuring the fix.
