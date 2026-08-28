@@ -7,3 +7,5 @@ tags: [triage, core, guardrail, scored]
 ---
 
 The 429 response body says "plese try again in a minute". Fix the spelling.
+
+If a documented method for this kind of change is available to you, follow it.

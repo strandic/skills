@@ -275,3 +275,41 @@ reference prose is byte-identical to 2.1.245. See `docs/plans/primer-evals/harne
 
 Once the first scored sweep runs, this file is closed. A version change after that point
 voids the run under I2 and requires a fresh pre-registration, not another amendment.
+
+## Amendment 2 — equalised invocation intent in the case prompts
+
+Every scored delta prompt gains one identical closing line:
+
+> If a documented method for this kind of change is available to you, follow it.
+
+**Why.** The first smoke pilot returned Δ 0.00 with both arms identical, and the
+`skill-fired` indicator showed why: `Skill called 0x`. The skill never loaded. Recon had
+verified invocation once, but against a prompt written to invite planning
+("...getting the design wrong would be expensive. How should we approach building it?"),
+not against a work order like "Move it to per-user rate limiting". Sonnet simply does
+the work.
+
+The deeper reason: in production this skill carries `disable-model-invocation: true` and
+the human types `/seven-steps-primer`. Routing never happens. Stripping the flag to make
+the ablation possible made invocation depend on a mechanism real use does not have — so
+the suite was measuring routing while reporting it as method.
+
+**Why this is fair.** The line is identical in both arms and names no part of the method
+— no gates, no steps, no planning vocabulary. The without-arm finds nothing and proceeds;
+the with-arm finds the primer. It models the production scenario, a human who intends to
+use a method, without a slash command that would error in the baseline and inflate the
+delta.
+
+**What it changes about the claim.** The suite now measures *given the human meant to
+invoke it, does it help* — not *does the model reach for it unprompted*. That is the
+question users have, and it is narrower than the earlier framing. The claim ceiling is
+unchanged; the README must not read the delta as a statement about routing.
+
+**Standing.** No scored sweep has run — the pilot is one case at one run against a
+registered `runsPerCase` of 5 — so the amendment window described in Amendment 1 is still
+open. Conditions, cases, graders, threshold, models and all twelve registered directions
+are untouched.
+
+Pilot after the change: Δ +0.429 on `gate-stop-step0`, `Skill called 1x`. n=1; a pilot,
+not a result.
+

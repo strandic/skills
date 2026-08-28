@@ -7,3 +7,5 @@ tags: [triage, scored]
 ---
 
 We need to modernise the auth stack on this service.
+
+If a documented method for this kind of change is available to you, follow it.
