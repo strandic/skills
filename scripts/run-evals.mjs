@@ -23,13 +23,22 @@
 // TODO: implement ResultsLocator — newest <eval-dir>/results/<timestamp>/
 // aggregate-result.json. Verified in recon; --eval-dir accepts a path.
 
+// TODO: implement WriteDriftRecord — run the drift check and write
+// results/drift.json BEFORE the first sweep. The merger requires it and reads its
+// absence as drift, so a run that skips this cannot quietly produce a report.
+
+// TODO: pass --scaffold. Every case declares context.scaffold_script, and the
+// harness ignores it without the operator flag.
+
 // TODO: implement the sweep loop — for each condition in order, select, run,
 // persist to results/<condition>.json. Sequential: concurrent sweeps would
 // contend on the single _condition/ path.
 
-// TODO: exclude `tags: [control]` by default. Cases run in lexicographic order, so
-// control-all-steps runs FIRST and burns budget before any scored case — observed
-// in recon under a cost ceiling.
+// TODO: keep the control case out of a scored run. NOTE `--tag` is an INCLUDE filter
+// ("a case is kept if any given tag matches") — there is no exclude form, so the
+// runner must pass the scored tags explicitly rather than subtracting `control`.
+// This matters: cases run lexicographically, so control-all-steps sorts FIRST and
+// burned an entire cost ceiling before any scored case ran during recon.
 
 // TODO: pass BOTH the case's allowed_tools AND the operator --allow-tools grant.
 // They are intersected: listing Write/Edit/Bash in the case alone leaves the run

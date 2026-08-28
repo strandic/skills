@@ -107,7 +107,8 @@
 /**
  * @callback PreRegistrationDigest
  * @param {string} path
- * @returns {Promise<string>}
+ * @returns {Promise<{ digest: string, dirty: boolean }>}   dirty travels WITH the
+ *   digest: a caller that has to ask separately will eventually forget to
  *
  * RESOLVED in recon (policy call): content hash of the file as it stands, plus a
  * hard failure when `git status --porcelain` reports the pre-registration dirty. A
@@ -168,11 +169,35 @@
  * @callback RunSweep
  * @param {SpawnCapture} spawnCapture
  * @param {EvalCommand} evalCommand
+ * @param {ResultsLocator} resultsLocator
  * @param {EvalInvocation} inv
  * @returns {Promise<SweepResult>}
  *
  * Does not throw on non-zero exit: 1 means "scored below threshold", a result
  * rather than a failure. Exit 2 is partial and must not be compared to a complete run.
+ */
+
+/**
+ * @callback DiscoverCases
+ * @param {ReadTextFile} readTextFile
+ * @param {SuitePaths} paths
+ * @returns {Promise<CaseSpec[]>}
+ *
+ * Reads each case directory's frontmatter for name and tags. The runner needs this
+ * before it can exclude the control case or pick the smoke case, and no other
+ * signature supplied it.
+ */
+
+/**
+ * @callback WriteDriftRecord
+ * @param {WriteTextFile} writeTextFile
+ * @param {SuitePaths} paths
+ * @param {DriftRecord} record
+ * @returns {Promise<void>}
+ *
+ * Writes `results/drift.json` before the first sweep. `DetectDrift` had no sink, so
+ * the merger required a record nothing produced — and, treating absence as drift,
+ * refused to emit any report at all.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -233,7 +258,8 @@
  * @param {RevParse} revParse
  * @param {PreRegistrationDigest} digest
  * @param {Clock} clock
- * @param {EvalInvocation} inv
+ * @param {SweepRecord[]} sweeps   the merger runs after the sweeps have exited, so the
+ *                                 invocation is recovered from what they recorded
  * @returns {Promise<Provenance>}
  */
 

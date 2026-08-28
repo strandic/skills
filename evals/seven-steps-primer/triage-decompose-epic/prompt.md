@@ -1,11 +1,9 @@
 ---
-max_turns: 10
+max_turns: 12
 timeout_seconds: 480
 runs: 5
-plugins: ["../_condition"]
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
-tags: [triage]
+tags: [triage, scored]
 ---
 
-TODO: a vague epic — modernise the auth stack. Large, unscoped, and not one
-medium structural change.
+We need to modernise the auth stack on this service.
