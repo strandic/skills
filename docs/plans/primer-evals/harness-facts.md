@@ -103,6 +103,27 @@ been replicated across sessions, so treat them as strong leads rather than settl
 | 34 | A `{source: file}` grader whose path is absent is a **hard failure**, not a soft "unavailable" | A wrong path fails loudly instead of scoring 0 quietly — which is what the old `fixtures/notesvc/...` paths would have done |
 | 35 | A `scaffold_script` escaping its case dir fails **only when `--scaffold` is passed** — the containment check runs at execution, not at load | A broken scaffold path looks healthy in every run that omits the flag |
 | 36 | `--json` no longer consumes a following target the way `--tag` and `--allow-tools` still do | Target-first remains the rule; only the failure mode differs |
+| 37 | **2.1.251:** a `plugins` entry may not name the case directory, its graders or mocks, "or a directory covering them — a plugin shipped with a case must sit in its own subdirectory". Fails at RUN time, not load | Broke `_condition/` living inside the eval dir; it now sits at `evals/_conditions/current`, which 2.1.250 also accepts |
+| 38 | **2.1.251:** a Bash-granting evaluation refuses to run when `~/.docker` holds a symlink anywhere inside it — "keep the store's contents in one plain directory (its root may be a link)". `DOCKER_CONFIG` does not redirect the check | **Blocks this suite entirely on 2.1.251.** Every case grants Bash, and Docker Desktop installs `cli-plugins/*` as symlinks |
+| 39 | **2.1.251:** the bundled reference is no longer readable by decoding the binary — the asset is still named (`plugin-eval-a0f9bd9e.md`) but its text appears in no plain encoding, so it is compressed | All 12 DOC markers stop resolving. Grep-based citation ends at 2.1.250 |
+
+## Why the pin is 2.1.250 and not the newest
+
+`claude` executes **2.1.251**, and three of its changes land on this suite: the plugin
+path rule (#37), the Docker refusal (#38) which blocks every case outright, and the
+compressed reference (#39) which makes DOC citations unverifiable. 2.1.250 is on disk,
+every fact here was established against it by execution, and it runs the suite clean —
+verified after the upgrade, not assumed.
+
+So sweeps run with `EVAL_CLAUDE_BIN=~/.local/share/claude/versions/2.1.250`, which is
+exactly what that seam was resolved for. The pre-registration pins the same number and I2
+voids any run whose report disagrees, so the measurement stays reproducible rather than
+drifting with whatever is installed.
+
+**The cost of this choice, stated.** Old versions are eventually collected. When 2.1.250
+goes, the suite must either move to a version where #38 is resolved or stop granting Bash
+— and it cannot stop granting Bash, because absence graders measure nothing when the run
+was incapable of acting.
 
 ## Settled in step-4 recon
 
