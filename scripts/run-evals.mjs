@@ -105,7 +105,11 @@ export const suitePathsFor = (suiteDir) => ({
   repoRoot,
   suiteDir,
   conditionsDir: `${suiteDir}/conditions`,
-  conditionUnderTest: `${suiteDir}/_condition`,
+  // OUTSIDE the eval dir: 2.1.251 refuses a `plugins` entry that names the case
+  // directory, its graders, or a directory covering them — "a plugin shipped with a
+  // case must sit in its own subdirectory". `<suiteDir>/_condition` was inside the
+  // eval directory and every case began failing at run time with that message.
+  conditionUnderTest: `${suiteDir}/../_conditions/current`,
   resultsDir: `${suiteDir}/results`,
 });
 

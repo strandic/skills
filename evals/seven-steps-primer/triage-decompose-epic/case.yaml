@@ -1,6 +1,6 @@
 schema_version: "1.1"
 name: triage-decompose-epic
-plugins: ["../_condition"]
+plugins: ["../../_conditions/current"]
 context:
   # The declared path MUST live inside this case directory: a path escaping it is a
   # setup failure that scores the run 0 with no graders at all. So each case carries a

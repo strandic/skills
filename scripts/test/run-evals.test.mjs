@@ -435,7 +435,7 @@ test('the condition is copied to the one fixed path every case names', async () 
   await selectCondition(async (from, to) => (copied = { from, to }), paths, 'placebo');
   assert.deepEqual(copied, {
     from: 'evals/seven-steps-primer/conditions/placebo',
-    to: 'evals/seven-steps-primer/_condition',
+    to: 'evals/seven-steps-primer/../_conditions/current',
   });
 });
 
