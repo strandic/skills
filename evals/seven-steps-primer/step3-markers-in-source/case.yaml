@@ -1,7 +1,7 @@
 schema_version: "1.1"
 name: step3-markers-in-source
 tags: [capability]
-plugins: ["../_condition"]
+plugins: ["../../_conditions/current"]
 context:
   # The plan, the state and the signatures already happened. `history.jsonl` beside this
   # file replays that conversation and the run is graded on the turn after it, which is
