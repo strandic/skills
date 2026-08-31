@@ -30,6 +30,7 @@
  *            EvalCommand, ResultsLocator } from './interfaces.mjs' */
 
 import { readFile, writeFile, mkdir, readdir, cp, rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -646,6 +647,70 @@ const clock = () => new Date().toISOString();
  * @param {string[]} argv
  * @returns {Promise<number>} process exit code
  */
+/**
+ * The pinned CLI series, and the reason the pin is not merely a preference.
+ *
+ * 2.1.251 refuses any Bash-granting evaluation when `~/.docker` holds a symlink
+ * anywhere inside it — it seals credential stores by path, a symlink defeats that, and
+ * it fails closed rather than risk leaking one. Docker Desktop installs
+ * `~/.docker/cli-plugins/*` as symlinks into its app bundle, so an ordinary Docker
+ * install blocks this suite outright. Every case here grants Bash and must: the primary
+ * measurement is an absence, and "it did not touch the source" is only evidence of
+ * restraint when the run could have.
+ *
+ * The machine-side fixes all involve rearranging someone's Docker installation, which
+ * is not something a public repo can ask of a contributor. So the suite pins instead,
+ * and waits for a fix on either side.
+ */
+const PINNED_SERIES = '2.1';
+const LAST_KNOWN_GOOD = '2.1.250';
+
+/** Symlinks anywhere under ~/.docker are what 2.1.251+ refuses to run beside. */
+async function dockerStoreHasSymlink(home) {
+  const root = `${home}/.docker`;
+  const walk = async (dir, depth) => {
+    if (depth > 3) return false;
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      if (e.isSymbolicLink()) return true;
+      if (e.isDirectory() && (await walk(`${dir}/${e.name}`, depth + 1))) return true;
+    }
+    return false;
+  };
+  return walk(root, 0);
+}
+
+/**
+ * Refuse before spending rather than after. A sweep that trips the Docker refusal
+ * costs a rate-limit window and reports score 0.00 with an error buried per run, which
+ * reads like the skill failing rather than the environment refusing.
+ */
+async function preflightCli(spawnCapture, evalCommand, home) {
+  const { command, env } = evalCommand();
+  const probe = await spawnCapture(command, ['--version'], env).catch(() => null);
+  const version = (probe?.stdout || '').trim().split(/\s+/)[0];
+  if (!/^\d+\.\d+\.\d+$/.test(version))
+    return { ok: false, why: `could not read a version from \`${command} --version\`` };
+
+  const [maj, min, patch] = version.split('.').map(Number);
+  const [pMaj, pMin] = PINNED_SERIES.split('.').map(Number);
+  if (maj !== pMaj || min !== pMin)
+    return { ok: false, why:
+      `CLI ${version} is outside the pinned ${PINNED_SERIES} series — re-verify ` +
+      `docs/plans/primer-evals/harness-facts.md before running, then move the pin` };
+
+  const newerThanKnownGood = patch > Number(LAST_KNOWN_GOOD.split('.')[2]);
+  if (newerThanKnownGood && (await dockerStoreHasSymlink(home)))
+    return { ok: false, why:
+      `CLI ${version} refuses Bash-granting evaluations while ~/.docker holds a ` +
+      `symlink, and every case here grants Bash. Point EVAL_CLAUDE_BIN at ` +
+      `${LAST_KNOWN_GOOD} (see harness-facts.md #38), or run where Docker Desktop ` +
+      `is not installed. Rearranging ~/.docker is deliberately NOT recommended: this ` +
+      `suite should not require a contributor to modify their Docker install` };
+
+  return { ok: true, version };
+}
+
 export async function main(argv) {
   const args = parseArgv(argv);
   if (args.help) {
@@ -656,6 +721,12 @@ export async function main(argv) {
   // Relative suite paths and the harness's own `./<eval dir>/results/<timestamp>/`
   // both mean "from the repo root", so make that true rather than hope it is.
   process.chdir(paths.repoRoot);
+
+  const pre = await preflightCli(spawnCapture, () => evalCommandFrom(process.env), homedir());
+  if (!pre.ok) {
+    console.error(`refusing to sweep: ${pre.why}`);
+    return 1;
+  }
 
   const cases = await discoverCases(readTextFile, listDirectory, paths);
   const scored = cases.filter((c) => c.scored);

@@ -1,5 +1,36 @@
 # seven-steps-primer — Tier 1 eval suite
 
+## Before you run it: the CLI version is pinned
+
+Sweeps need `EVAL_CLAUDE_BIN` pointed at **2.1.250**:
+
+```bash
+EVAL_CLAUDE_BIN=~/.local/share/claude/versions/2.1.250 node scripts/run-evals.mjs --smoke
+```
+
+**Why.** From 2.1.251 the harness refuses any Bash-granting evaluation while `~/.docker`
+holds a symlink anywhere inside it. It seals credential stores by path, a symlink defeats
+that seal, and it fails closed rather than risk leaking one — correct in general, and
+unlucky here: Docker Desktop installs `~/.docker/cli-plugins/*` as symlinks into its app
+bundle, so an ordinary Docker install blocks this suite outright.
+
+Every case grants `Bash`, and that is not negotiable. The primary measurement is an
+absence — *did the run produce a plan and leave the source alone?* — and that is only
+evidence of restraint if the run **could** have edited. Recon proved the sharp end: a run
+once scored clean on `Edit called 0x` and `Write called 0x` over a file a Bash one-liner
+had rewritten. Drop `Bash` and every absence grader passes in every arm, measuring nothing.
+
+**Why we pin rather than fix the machine.** The workarounds all rearrange somebody's
+Docker installation — consolidating `cli-plugins` into the app bundle, or moving the
+directory aside for the duration of a run. Those are fine as personal choices and wrong as
+a contribution requirement: nobody should have to modify their Docker install to run a
+test suite. So the suite pins, and waits for a fix on either side.
+
+`scripts/run-evals.mjs` refuses before spending rather than after — a sweep that trips the
+refusal costs a rate-limit window and reports `0.00` with the reason buried per run, which
+reads like the skill failing rather than the environment declining.
+
+
 One question, asked honestly: **does the primer change what the agent does, and is that
 change attributable to *this* method rather than to any gating instruction?**
 
