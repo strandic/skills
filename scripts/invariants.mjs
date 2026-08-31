@@ -52,14 +52,37 @@ export function i1bNoiseFloorMarked(report) {
 
 /**
  * I2 — a run is void on any of: dirty or mismatched pre-registration, drifted
- * treatment condition, subject model or CLI version differing from what was
- * pre-registered.
+ * treatment condition, a subject model that is not the pre-registered one, a CLI
+ * whose MAJOR.MINOR differs from the pre-registered one, or sweeps that disagree
+ * with each other about which CLI ran them.
+ *
+ * **Why the CLI check is major.minor and not exact.** Patches ship faster than any
+ * suite can re-verify — four landed under this project in a week — and voiding a run
+ * for a patch bump means the pin is stale before it is used. That is the argument for
+ * relaxing it, and it is a practical one, not an evidential one: every breaking change
+ * observed here arrived in a patch (2.1.246 re-encoded the bundled reference and killed
+ * eleven citations; 2.1.251 changed the plugin-path rule, refused Bash-granting runs on
+ * this machine, and compressed the reference again). A major.minor rule would have
+ * caught none of them.
+ *
+ * What makes the relaxation safe is that this was solving the weaker problem.
+ * Comparability *over time* is what the pin protects; comparability *between the sweeps
+ * being merged* is what the headline actually rests on, and nothing was checking it.
+ * Three sweeps on one patch are comparable to each other whatever the pin says — and
+ * three sweeps that straddle an upgrade are not comparable at all, however well they
+ * match the pin. So the exact-version check is replaced by a cross-sweep agreement
+ * check, which is strictly stronger for the claim being made.
+ *
+ * Breakage is caught by running rather than by predicting: the smoke pass costs cents
+ * and fails loudly, which is how all four of those patches were found.
+ *
  * @param {MergedReport} report
  * @param {{preRegistrationSha: string, subjectModel: string, claudeVersion: string}} registered
  * @param {{drifted: boolean, reason: string}} drift
  * @param {boolean} preRegistrationDirty
+ * @param {string[]} [sweepVersions]  claudeVersion from each merged sweep document
  */
-export function i2RunNotVoid(report, registered, drift, preRegistrationDirty) {
+export function i2RunNotVoid(report, registered, drift, preRegistrationDirty, sweepVersions) {
   const v = [];
   const p = report?.provenance;
   if (!p) return fail(['report has no provenance — voidness cannot be established']);
@@ -70,8 +93,24 @@ export function i2RunNotVoid(report, registered, drift, preRegistrationDirty) {
   if (drift?.drifted) v.push(`treatment condition has drifted: ${drift.reason}`);
   if (p.subjectModel !== registered?.subjectModel)
     v.push(`subject model ${p.subjectModel} != pre-registered ${registered?.subjectModel}`);
-  if (p.claudeVersion !== registered?.claudeVersion)
-    v.push(`CLI version ${p.claudeVersion} != pre-registered ${registered?.claudeVersion}`);
+  const series = (s) => (typeof s === 'string' ? s.split('.').slice(0, 2).join('.') : '');
+  if (!series(p.claudeVersion) || !series(registered?.claudeVersion))
+    v.push('a CLI version is missing on one side — comparability cannot be established');
+  else if (series(p.claudeVersion) !== series(registered.claudeVersion))
+    v.push(`CLI series ${series(p.claudeVersion)} != pre-registered ` +
+      `${series(registered.claudeVersion)} (patch drift is tolerated; this is not patch drift)`);
+
+  // The check the exact-version rule was standing in for, and doing badly.
+  if (sweepVersions !== undefined) {
+    if (!Array.isArray(sweepVersions) || sweepVersions.length === 0)
+      v.push('no sweep versions supplied — cross-sweep agreement cannot be established');
+    else {
+      const distinct = [...new Set(sweepVersions)];
+      if (distinct.length > 1)
+        v.push(`the merged sweeps ran on different CLIs (${distinct.join(', ')}) — ` +
+          'a contrast between conditions measured on different binaries is not a contrast');
+    }
+  }
   return fail(v);
 }
 

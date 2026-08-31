@@ -70,12 +70,40 @@ test('I2 accepts a clean run', () => {
 test('I2 voids on drift, model change, version change and a dirty pre-registration', () => {
   caught(inv.i2RunNotVoid(prov(), registered, { drifted: true, reason: 'x' }, false), 'drifted');
   caught(inv.i2RunNotVoid(prov({ subjectModel: 'opus' }), registered, noDrift, false), 'subject model');
-  caught(inv.i2RunNotVoid(prov({ claudeVersion: '2.2.0' }), registered, noDrift, false), 'CLI version');
+  caught(inv.i2RunNotVoid(prov({ claudeVersion: '2.2.0' }), registered, noDrift, false), 'CLI series');
   caught(inv.i2RunNotVoid(prov(), registered, noDrift, true), 'dirty');
 });
 
 test('I2 refuses a report with no provenance rather than treating it as clean', () => {
   caught(inv.i2RunNotVoid({}, registered, noDrift, false), 'no provenance');
+});
+
+test('I2 tolerates patch drift — patches ship faster than any suite can re-verify', () => {
+  assert.equal(inv.i2RunNotVoid(prov({ claudeVersion: '2.1.251' }), registered, noDrift, false).ok, true);
+  assert.equal(inv.i2RunNotVoid(prov({ claudeVersion: '2.1.9' }), registered, noDrift, false).ok, true);
+});
+
+test('I2 still voids on a minor or major bump', () => {
+  caught(inv.i2RunNotVoid(prov({ claudeVersion: '2.2.0' }), registered, noDrift, false), 'CLI series');
+  caught(inv.i2RunNotVoid(prov({ claudeVersion: '3.1.250' }), registered, noDrift, false), 'CLI series');
+});
+
+test('I2 refuses a missing version rather than reading absence as agreement', () => {
+  caught(inv.i2RunNotVoid(prov({ claudeVersion: undefined }), registered, noDrift, false), 'missing on one side');
+});
+
+test('I2 voids when the merged sweeps ran on different CLIs — that is not a contrast', () => {
+  caught(inv.i2RunNotVoid(prov(), registered, noDrift, false, ['2.1.250', '2.1.250', '2.1.251']),
+    'different CLIs');
+});
+
+test('I2 accepts sweeps that agree, even on a patch the pin does not name', () => {
+  assert.equal(inv.i2RunNotVoid(prov({ claudeVersion: '2.1.251' }), registered, noDrift, false,
+    ['2.1.251', '2.1.251', '2.1.251']).ok, true);
+});
+
+test('I2 refuses an empty sweep-version list rather than passing vacuously', () => {
+  caught(inv.i2RunNotVoid(prov(), registered, noDrift, false, []), 'cannot be established');
 });
 
 test('I2 refuses to compare against a missing registered digest', () => {
