@@ -63,6 +63,27 @@ export function i1bNoiseFloorMarked(report) {
  * A failed run is not a low score. It is the absence of a measurement wearing one, and
  * that is the shape this whole suite exists to refuse.
  *
+ * **But `error` alone is the wrong test, and the first version of this got it wrong.**
+ * `harness-facts.md` #9 already recorded the distinction: a run that started and ended
+ * badly — timed out, hit the turn cap, overflowed its output — is STILL GRADED on what
+ * it produced, and that is a real measurement of an agent running out of room. Only a
+ * SETUP failure (auth rejected, scaffold failed, a bad env key) yields no graders at
+ * all. The first draft refused any non-null `error` and so refused four turn-capped
+ * runs that had graded cleanly, including one that placed its markers correctly in both
+ * files and scored 0.67.
+ *
+ * Two things are refused, and neither is "the run errored":
+ *
+ * - **A run that produced no graders.** A setup failure yields none, so there is
+ *   nothing to score and the 0 is empty.
+ * - **A grader that THREW rather than judged.** `grader threw: judge call failed: …`
+ *   is an instrument that broke, not a verdict — the auth expiry showed up exactly
+ *   this way, with the run graded and one grader's explanation carrying the failure.
+ *   A thrown grader counts as failed in the harness's arithmetic, so it silently
+ *   depresses a score with something that never measured anything.
+ *
+ * A turn-capped run passes both tests: it has graders, and every one of them judged.
+ *
  * @param {MergedReport|{cases: {arms: Record<string, {error: string|null, score: number}[]>}[]}} doc
  * @param {number} expectedRunsPerArm  from the pre-registration — a document that is
  *   simply SHORT is caught here too, since a truncated sweep has no `error` to show
@@ -78,11 +99,20 @@ export function i1cNoFailedRuns(doc, expectedRunsPerArm) {
   for (const c of cases) {
     for (const [arm, runs] of Object.entries(c.arms ?? {})) {
       if (!Array.isArray(runs)) { v.push(`${c.name}/${arm}: no runs array`); continue; }
-      const failed = runs.filter((r) => r?.error != null);
-      if (failed.length)
-        v.push(`${c.name}/${arm}: ${failed.length}/${runs.length} runs errored ` +
-          `(first: ${String(failed[0].error).slice(0, 80)}) — a failed run scores 0 and ` +
-          'is not a measurement');
+      // Ungraded, not merely errored: a setup failure produces no graders, while a
+      // turn-capped or timed-out run is graded on what it managed and counts.
+      const ungraded = runs.filter((r) => !Array.isArray(r?.graders) || r.graders.length === 0);
+      if (ungraded.length)
+        v.push(`${c.name}/${arm}: ${ungraded.length}/${runs.length} runs produced no graders ` +
+          `(first: ${String(ungraded[0]?.error ?? 'no error recorded').slice(0, 80)}) — ` +
+          'a setup failure scores 0 without measuring anything');
+
+      const threw = runs.flatMap((r, i) => (r?.graders ?? [])
+        .filter((g) => /grader threw|judge call failed/i.test(String(g?.explanation ?? '')))
+        .map((g) => `run ${i + 1} grader ${g.name}`));
+      if (threw.length)
+        v.push(`${c.name}/${arm}: ${threw.length} grader(s) threw instead of judging ` +
+          `(${threw[0]}) — a broken instrument counts as a failure and depresses the score`);
       if (runs.length < expectedRunsPerArm)
         v.push(`${c.name}/${arm}: ${runs.length} runs, ${expectedRunsPerArm} registered — ` +
           'the sweep was truncated');
