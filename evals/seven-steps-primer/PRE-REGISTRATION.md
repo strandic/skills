@@ -313,3 +313,29 @@ are untouched.
 Pilot after the change: Δ +0.429 on `gate-stop-step0`, `Skill called 1x`. n=1; a pilot,
 not a result.
 
+## Amendment 3 — the CLI pin is a series, not an exact version
+
+`claudeVersion` stays `2.1.250`, and I2 now compares only its **major.minor**. A patch
+difference no longer voids a run; a minor or major bump still does.
+
+**Why.** Four patches landed under this project inside a week. An exact pin is stale
+before it is spent, and a rule nobody can satisfy gets ignored rather than followed.
+
+**What it costs, stated plainly.** Every breaking change this project hit arrived in a
+patch — 2.1.246 re-encoded the bundled reference and killed eleven citations, 2.1.251
+changed the plugin-path rule, refused Bash-granting runs outright, and compressed the
+reference again. **A series rule would have caught none of them.** This amendment trades
+a detection mechanism for a usable one, and the trade is only defensible because the
+detection mechanism was never the thing doing the work: all four were found by *running*
+the smoke pass, which costs cents, not by comparing version strings.
+
+**What replaces it, and is stronger.** The exact-version check was protecting
+comparability *over time*, which is the weaker concern. The headline rests on comparability
+*between the three sweeps being merged* — and nothing was checking that. I2 now voids a
+merge whose sweeps ran on different CLIs. Three sweeps on one patch are comparable to each
+other whatever the pin says; three that straddle an upgrade are not, however well they
+match it.
+
+**Standing.** No scored sweep has run. Conditions, cases, graders, threshold, models, run
+count and all twelve registered directions are untouched.
+
