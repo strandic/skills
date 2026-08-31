@@ -57,8 +57,11 @@ test('I1b refuses a report whose noise floor was never measured', () => {
 
 /* ── I1c — failed runs are not low scores ──────────────────────────────────── */
 
-const runOk = (score) => ({ score, error: null });
-const runErr = (why) => ({ score: 0, error: why });
+const runOk = (score) => ({ score, error: null, graders: [{ name: 'g', passed: score > 0 }] });
+/** A SETUP failure: no graders at all. */
+const runErr = (why) => ({ score: 0, error: why, graders: [] });
+/** Ran out of turns, but was graded on what it produced — a real measurement. */
+const runCapped = (score) => ({ score, error: 'exit 1: (no stderr)', graders: [{ name: 'g', passed: false }] });
 const caseWith = (name, withRuns, withoutRuns) => ({ name, arms: { with: withRuns, without: withoutRuns } });
 
 test('I1c accepts a document whose runs all completed', () => {
@@ -70,7 +73,29 @@ test('I1c catches the auth expiry that `partial: false` hid', () => {
   // The real shape: a sweep lost its OAuth session partway and 28 of 43 runs failed,
   // every one scoring 0, in a document the harness marked complete.
   const doc = { cases: [caseWith('a', [runOk(1), runErr('Failed to authenticate: OAuth session expired')], [runOk(0.4), runOk(0.4)])] };
-  caught(inv.i1cNoFailedRuns(doc, 2), 'runs errored');
+  caught(inv.i1cNoFailedRuns(doc, 2), 'produced no graders');
+});
+
+test('I1c catches a grader that threw — a broken instrument is not a verdict', () => {
+  // How the auth expiry actually presented: the run WAS graded, but one grader carried
+  // `grader threw: judge call failed: Failed to authenticate`. It counts as a failure
+  // in the harness's arithmetic, so it depresses the score having measured nothing.
+  const doc = { cases: [{ name: 'a', arms: { with: [
+    { score: 0, error: null, graders: [
+      { name: 'ok', passed: true, explanation: 'matched TODO' },
+      { name: 'rubric', passed: false, explanation: 'grader threw: judge call failed: Failed to authenticate' },
+    ] },
+    runOk(1),
+  ], without: [runOk(0.4), runOk(0.4)] } }] };
+  caught(inv.i1cNoFailedRuns(doc, 2), 'threw instead of judging');
+});
+
+test('I1c accepts a turn-capped run — it was graded, so it measured something', () => {
+  // harness-facts #9: a run that started and ended badly is still graded on what it
+  // produced. Refusing those threw away four legitimate runs, one of which had placed
+  // its markers correctly in both files.
+  const doc = { cases: [caseWith('a', [runOk(1), runCapped(0.67)], [runOk(0.4), runCapped(0)])] };
+  assert.equal(inv.i1cNoFailedRuns(doc, 2).ok, true);
 });
 
 test('I1c catches a truncated sweep, which has no error to show at all', () => {
