@@ -702,13 +702,12 @@ test('BuildEvalArgv — the exact argv the suite will run, target first', () => 
     '--no-publish',
     '--tag', 'capability', 'core', 'gate', 'guardrail', 'scored', 'triage',
     '--allow-tools', 'Bash', 'Edit', 'Write',
-    '--json',
   ]);
 });
 
 test('the mutation tools every absence grader names are actually granted on the command line', () => {
   const argv = buildEvalArgv(invocationFor('treatment', paths, specs));
-  const granted = argv.slice(argv.indexOf('--allow-tools') + 1, argv.indexOf('--json'));
+  const granted = argv.slice(argv.indexOf('--allow-tools') + 1);
   // The harness auto-grants a read-only set; asking for those on the command line is
   // noise, and a grader naming one is not at risk of the vacuous pass this test exists
   // to catch. Only gated tools need an explicit grant.

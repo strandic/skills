@@ -183,8 +183,14 @@ export function buildEvalArgv(inv) {
     // explicitly and the control case is kept out by not being named.
     ...variadic('--tag', inv.tagFilters ?? []),
     ...variadic('--allow-tools', inv.allowTools ?? []),
-    // Last: `--json [path]` takes an optional argument and would eat whatever followed.
-    '--json',
+    // NO `--json`. It suppresses every progress line, so the child emits nothing for
+    // the length of a sweep — 34 and 41 minutes of total silence in two runs, both of
+    // which were then killed. A long-running task that produces no output is
+    // indistinguishable from a hung one, to a supervisor and to a human watching.
+    //
+    // Nothing is lost by dropping it: the harness writes aggregate-result.json into
+    // `<eval-dir>/results/<timestamp>/` either way, which is the path ResultsLocator
+    // reads. `--json` was only ever the fallback, and it cost all visibility to be one.
   ];
 }
 
@@ -514,7 +520,7 @@ export async function runSweep(spawnCapture, evalCommand, resultsLocator, inv, r
       : `runner: no NEW results directory — ${located} predates this sweep and is not its output`);
     try {
       document = JSON.parse(stdout);
-      notes.push('runner: recovered the document from --json on stdout');
+      notes.push('runner: recovered the document from stdout (unexpected — --json is not passed)');
     } catch {
       notes.push('runner: stdout carried no JSON document either');
     }
