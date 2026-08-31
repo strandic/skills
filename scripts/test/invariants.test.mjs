@@ -55,6 +55,40 @@ test('I1b refuses a report whose noise floor was never measured', () => {
   caught(inv.i1bNoiseFloorMarked({ deltaRows: [rowWith(0.04, false)] }), 'never measured');
 });
 
+/* ── I1c — failed runs are not low scores ──────────────────────────────────── */
+
+const runOk = (score) => ({ score, error: null });
+const runErr = (why) => ({ score: 0, error: why });
+const caseWith = (name, withRuns, withoutRuns) => ({ name, arms: { with: withRuns, without: withoutRuns } });
+
+test('I1c accepts a document whose runs all completed', () => {
+  const doc = { cases: [caseWith('a', [runOk(1), runOk(0.8)], [runOk(0.4), runOk(0.4)])] };
+  assert.equal(inv.i1cNoFailedRuns(doc, 2).ok, true);
+});
+
+test('I1c catches the auth expiry that `partial: false` hid', () => {
+  // The real shape: a sweep lost its OAuth session partway and 28 of 43 runs failed,
+  // every one scoring 0, in a document the harness marked complete.
+  const doc = { cases: [caseWith('a', [runOk(1), runErr('Failed to authenticate: OAuth session expired')], [runOk(0.4), runOk(0.4)])] };
+  caught(inv.i1cNoFailedRuns(doc, 2), 'runs errored');
+});
+
+test('I1c catches a truncated sweep, which has no error to show at all', () => {
+  const doc = { cases: [caseWith('a', [runOk(1)], [])] };
+  const r = inv.i1cNoFailedRuns(doc, 5);
+  caught(r, 'truncated');
+  assert.equal(r.violations.length, 2, 'both arms are short, and both are named');
+});
+
+test('I1c refuses an empty document rather than passing vacuously', () => {
+  caught(inv.i1cNoFailedRuns({ cases: [] }, 5), 'measured nothing');
+});
+
+test('I1c refuses to judge completeness with no registered run count', () => {
+  const doc = { cases: [caseWith('a', [runOk(1)], [runOk(1)])] };
+  caught(inv.i1cNoFailedRuns(doc, undefined), 'cannot be established');
+});
+
 /* ── I2 — voiding ──────────────────────────────────────────────────────────── */
 
 const prov = (o = {}) => ({

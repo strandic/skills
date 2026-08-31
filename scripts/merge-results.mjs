@@ -489,6 +489,11 @@ export function checkReport(report, preRegistration, ctx) {
 
   const checks = [
     ['I1', inv.i1PublishableOnlyWhenComplete(report)],
+    // Per SWEEP, not on the merged report: the harness documents carry the per-run
+    // errors, and the merge has already reduced them to scores by this point. A run
+    // that failed scores 0 and is indistinguishable from a run that did badly.
+    ...(ctx.sweeps ?? []).map((s, i) => [`I1c/${s.condition ?? i}`,
+      inv.i1cNoFailedRuns(s.document, preRegistration.runsPerCase)]),
     ['I1b', inv.i1bNoiseFloorMarked(report)],
     ['I2', inv.i2RunNotVoid(report, registered, ctx.drift, ctx.preRegistrationDirty)],
     ['I4', inv.i4EvidenceKindsNeverMixed(report, expectedDelta, expectedCapability)],
@@ -752,6 +757,7 @@ async function main(argv) {
   const report = mergeSweeps(sweeps, preRegistration, provenance);
 
   const check = checkReport(report, preRegistration, {
+    sweeps,
     drift,
     committedPreRegistrationSha: await committedDigest(git, preRegPath),
     preRegistrationDirty: dirty,
