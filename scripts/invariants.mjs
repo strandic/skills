@@ -51,6 +51,47 @@ export function i1bNoiseFloorMarked(report) {
 }
 
 /**
+ * I1c — a document carrying failed runs is not publishable, whatever `partial` says.
+ *
+ * **Why this is separate from I1.** The harness sets `partial` for a cost ceiling, an
+ * interrupt, or an auth rejection at the *first* run — not for runs that fail partway
+ * through. A treatment sweep here lost its OAuth session mid-run: 28 of 43 runs failed
+ * to authenticate, every one of them scoring 0, and the document came back
+ * `partial: false`. I1 passed it. Those zeros would have dragged the treatment down and
+ * manufactured a delta out of an expired token.
+ *
+ * A failed run is not a low score. It is the absence of a measurement wearing one, and
+ * that is the shape this whole suite exists to refuse.
+ *
+ * @param {MergedReport|{cases: {arms: Record<string, {error: string|null, score: number}[]>}[]}} doc
+ * @param {number} expectedRunsPerArm  from the pre-registration — a document that is
+ *   simply SHORT is caught here too, since a truncated sweep has no `error` to show
+ */
+export function i1cNoFailedRuns(doc, expectedRunsPerArm) {
+  const v = [];
+  const cases = doc?.cases;
+  if (!Array.isArray(cases) || cases.length === 0)
+    return fail(['no cases in the document — a sweep that measured nothing is not a result']);
+  if (!Number.isInteger(expectedRunsPerArm) || expectedRunsPerArm < 1)
+    return fail(['no expected run count supplied — completeness cannot be established']);
+
+  for (const c of cases) {
+    for (const [arm, runs] of Object.entries(c.arms ?? {})) {
+      if (!Array.isArray(runs)) { v.push(`${c.name}/${arm}: no runs array`); continue; }
+      const failed = runs.filter((r) => r?.error != null);
+      if (failed.length)
+        v.push(`${c.name}/${arm}: ${failed.length}/${runs.length} runs errored ` +
+          `(first: ${String(failed[0].error).slice(0, 80)}) — a failed run scores 0 and ` +
+          'is not a measurement');
+      if (runs.length < expectedRunsPerArm)
+        v.push(`${c.name}/${arm}: ${runs.length} runs, ${expectedRunsPerArm} registered — ` +
+          'the sweep was truncated');
+    }
+  }
+  return fail(v);
+}
+
+/**
  * I2 — a run is void on any of: dirty or mismatched pre-registration, drifted
  * treatment condition, a subject model that is not the pre-registered one, a CLI
  * whose MAJOR.MINOR differs from the pre-registered one, or sweeps that disagree

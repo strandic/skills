@@ -346,6 +346,18 @@ const refuses = (report, p, c, needle) => {
     `violations ${JSON.stringify(check.violations)} do not mention ${needle}`);
 };
 
+test('I1c — a sweep whose runs errored is refused, whatever `partial` says', () => {
+  // The harness sets `partial` for a cost ceiling or an interrupt, not for runs that
+  // lose their auth session partway. A real sweep came back `partial: false` with 28 of
+  // 43 runs failed; every one scored 0 and would have dragged the treatment down.
+  const broken = { condition: 'treatment', document: { cases: [
+    { name: 'a', arms: { with: [{ score: 0, error: 'Failed to authenticate' }], without: [{ score: 0.4, error: null }] } },
+  ] } };
+  const check = m.checkReport(merged(), pre(), { ...ctx(), sweeps: [broken] });
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.includes('I1c')), JSON.stringify(check.violations));
+});
+
 test('I1 — a partial sweep is refused, not footnoted', () => {
   const s = sweeps();
   s[2].document.partial = true;
