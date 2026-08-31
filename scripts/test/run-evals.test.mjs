@@ -61,7 +61,6 @@ test('the argv is exactly this, in exactly this order', () => {
     '--no-publish',
     '--tag', 'capability', 'core', 'gate', 'guardrail', 'scored', 'triage',
     '--allow-tools', 'Bash', 'Edit', 'Write',
-    '--json',
   ]);
 });
 
@@ -79,7 +78,6 @@ test('the smoke pilot is one case at one run, and nothing else moves', () => {
     '--case', 'gate-stop-step0',
     '--tag', 'capability', 'core', 'gate', 'guardrail', 'scored', 'triage',
     '--allow-tools', 'Bash', 'Edit', 'Write',
-    '--json',
   ]);
 });
 
@@ -97,7 +95,6 @@ test('the suite\'s real cases build the command that will actually run', async (
     '--no-publish',
     '--tag', 'capability', 'core', 'gate', 'guardrail', 'scored', 'triage',
     '--allow-tools', 'Bash', 'Edit', 'Write',
-    '--json',
   ]);
 });
 
@@ -107,13 +104,16 @@ test('the target precedes every option that would consume it', () => {
   const argv = buildEvalArgv(invocation({ caseGlobs: ['x'] }));
   const target = argv.indexOf('.');
   assert.equal(target, 2, 'the target is the argument right after `plugin eval`');
-  for (const flag of ['--tag', '--allow-tools', '--json'])
+  for (const flag of ['--tag', '--allow-tools'])
     assert.ok(target < argv.indexOf(flag), `${flag} would consume a target that came after it`);
 });
 
-test('--json is last, because it takes an optional argument', () => {
-  const argv = buildEvalArgv(invocation({ caseGlobs: ['x'] }));
-  assert.equal(argv.at(-1), '--json');
+test('--json is never passed — it silences the run, and silence gets a sweep killed', () => {
+  // Two 90-minute sweeps were killed after 41 and 34 minutes of producing no output at
+  // all, which is what --json does: it suppresses every progress line. The document
+  // still lands in <eval-dir>/results/<timestamp>/, which is what ResultsLocator reads.
+  assert.ok(!buildEvalArgv(invocation({ caseGlobs: ['x'] })).includes('--json'));
+  assert.ok(!buildEvalArgv(invocation()).includes('--json'));
 });
 
 test('a variadic list never ends adjacent to another variadic list\'s values', () => {
@@ -128,7 +128,8 @@ test('a variadic list never ends adjacent to another variadic list\'s values', (
 test('an empty tool grant omits the flag — an empty --allow-tools would eat the next one', () => {
   const argv = buildEvalArgv(invocation({ allowTools: [] }));
   assert.ok(!argv.includes('--allow-tools'));
-  assert.equal(argv.at(-1), '--json');
+  assert.ok(!argv.at(-1).startsWith('-') || argv.at(-1) === '--no-scaffold' || argv.at(-1) === '--no-publish',
+    'the argv must not end on a flag that would swallow a following value');
 });
 
 test('an empty tag filter omits the flag rather than selecting nothing', () => {
@@ -378,7 +379,7 @@ test('a results directory that was already there is NOT this sweep\'s output', a
   assert.match(result.stderrTail, /predates this sweep/);
 });
 
-test('a sweep that wrote no directory falls back to the --json document on stdout', async () => {
+test('a sweep that wrote no directory still recovers a document from stdout if one is there', async () => {
   const result = await runSweep(
     async () => ({ code: 0, stdout: JSON.stringify(doc), stderr: '' }),
     evalCommand,
@@ -387,7 +388,7 @@ test('a sweep that wrote no directory falls back to the --json document on stdou
     async () => assert.fail('there is no file to read')
   );
   assert.deepEqual(result.document, doc);
-  assert.match(result.stderrTail, /recovered the document from --json/);
+  assert.match(result.stderrTail, /recovered the document from stdout/);
 });
 
 test('exit 1 is a result — below threshold — and is passed through, not thrown', async () => {
