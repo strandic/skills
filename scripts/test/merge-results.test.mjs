@@ -359,10 +359,10 @@ test('I1b — an unmarked sub-noise contrast is refused', () => {
   refuses(report, pre(), ctx(), 'not marked belowNoiseFloor');
 });
 
-test('I2 — drift, a changed subject model, a changed CLI version, and a dirty pre-registration each void the run', () => {
+test('I2 — drift, a changed subject model, a changed CLI series, and a dirty pre-registration each void the run', () => {
   refuses(merged(), pre(), ctx({ drift: { drifted: true, reason: 'SKILL.md moved' } }), 'drifted');
   refuses(merged(sweeps(), pre(), { ...PROV, subjectModel: 'haiku' }), pre(), ctx(), 'subject model');
-  refuses(merged(sweeps(), pre(), { ...PROV, claudeVersion: '2.2.0' }), pre(), ctx(), 'CLI version');
+  refuses(merged(sweeps(), pre(), { ...PROV, claudeVersion: '2.2.0' }), pre(), ctx(), 'CLI series');
   refuses(merged(), pre(), ctx({ preRegistrationDirty: true }), 'dirty');
 });
 

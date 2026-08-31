@@ -931,9 +931,11 @@ test('every harness-fact marker still resolves against the pinned CLI binary', a
   // It IS the prompt to re-verify, so it is named loudly and with the drift attached.
   const installed = await readdir(CLI_VERSIONS).catch(() => []);
   const newest = installed.filter((v) => /^\d+\.\d+\.\d+$/.test(v)).sort(compareVersions).pop();
-  if (newest && newest !== pinned) {
+  const series = (s) => s.split('.').slice(0, 2).join('.');
+  if (newest && series(newest) !== series(pinned)) {
     const moved = await unresolvedMarkers(join(CLI_VERSIONS, newest), markers).catch(() => new Set());
-    t.diagnostic(`harness-facts.md pins ${pinned}; ${newest} is installed. ` +
+    t.diagnostic(`harness-facts.md pins ${pinned}; ${newest} is installed — a MINOR or MAJOR ` +
+      'bump, which voids a run under I2 and is the point at which this file must be re-verified. ' +
       (moved.size === 0
         ? 'Every marker still resolves there.'
         : `${moved.size}/${markers.length} markers do NOT resolve in ${newest}: ` +
