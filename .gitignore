@@ -1,8 +1,10 @@
 # Local worktrees for isolated feature work
 .worktrees/
 
-# Generated per sweep — the condition under test, and harness output
-evals/*/_condition/
+# Generated per sweep — the condition under test, and harness output.
+# `_conditions/` sits BESIDE the suites, not inside one: since 2.1.251 a plugins entry
+# may not name a directory covering the cases, so the copy has to live one level up.
+evals/_conditions/
 evals/*/results/
 
 # Session transcripts a replay case leaves behind
