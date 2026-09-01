@@ -183,14 +183,18 @@ export function buildEvalArgv(inv) {
     // explicitly and the control case is kept out by not being named.
     ...variadic('--tag', inv.tagFilters ?? []),
     ...variadic('--allow-tools', inv.allowTools ?? []),
-    // NO `--json`. It suppresses every progress line, so the child emits nothing for
-    // the length of a sweep — 34 and 41 minutes of total silence in two runs, both of
-    // which were then killed. A long-running task that produces no output is
-    // indistinguishable from a hung one, to a supervisor and to a human watching.
+    // NO `--json`. It suppresses every progress line, and a sweep you cannot watch is
+    // one you cannot diagnose — worth dropping on its own, since the harness writes
+    // aggregate-result.json into `<eval-dir>/results/<timestamp>/` regardless and that
+    // is the path ResultsLocator reads. `--json` was only ever the fallback.
     //
-    // Nothing is lost by dropping it: the harness writes aggregate-result.json into
-    // `<eval-dir>/results/<timestamp>/` either way, which is the path ResultsLocator
-    // reads. `--json` was only ever the fallback, and it cost all visibility to be one.
+    // It was NOT, however, the cause of the killed sweeps, and an earlier version of
+    // this comment said it was. Four attempts: 41m killed, 34m killed, ~34m completed,
+    // 33m killed — and the last was emitting output continuously right up to the kill.
+    // The pattern is a wall-clock ceiling near 35 minutes on backgrounded tasks, not
+    // silence. A per-condition sweep sits right on that boundary; per-case runs (5-8
+    // minutes) sit comfortably under it, and chunking this loop that way is the real
+    // fix. Until then, run sweeps from a terminal rather than in the background.
   ];
 }
 
