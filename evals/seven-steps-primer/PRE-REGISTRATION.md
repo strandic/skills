@@ -339,3 +339,101 @@ match it.
 **Standing.** No scored sweep has run. Conditions, cases, graders, threshold, models, run
 count and all twelve registered directions are untouched.
 
+---
+
+# Results — first full sweep, 2026-09-01
+
+Three sweeps, five cases, five runs per arm, 150 runs, **$28.49** API-equivalent
+(subscription-metered; no money moved). Subject `sonnet`, judge `opus`, CLI `2.1.250`.
+Suite `a8a952f`. Full report: `docs/plans/primer-evals/RESULTS-2026-09-01.md`.
+
+Every sweep passed I1c (no ungraded runs, no grader that threw), all three ran on the
+same CLI, and the merge emitted no combined score.
+
+**Noise floor: 0.13** — the worst per-case spread between the three stock-Claude columns
+measured against identical cases. Contrasts below it are marked and are not findings.
+
+## The registered predictions against what happened
+
+D6a registered a sign per case/control pair before any run. Here is each one with its
+outcome. Contrasts below the noise floor are shown as **~0** because that is what they
+mean.
+
+| Case | vs `none` | vs `oneliner` | vs `placebo` |
+|---|---|---|---|
+| `gate-stop-step0` | +1 → **+0.49 ✓** | +1 → **+0.29 ✓** | 0 → **+0.20 ✗** |
+| `looks-trivial-is-structural` | +1 → **+0.31 ✓** | +1 → **~0 ✗** | +1 → **~0 ✗** |
+| `triage-skip-oneliner` | 0 → **~0 ✓** | 0 → **+0.67 ✗** | 0 → **~0 ✓** |
+| `triage-decompose-epic` | +1 → **+0.42 ✓** | +1 → **~0 ✗** | +1 → **+0.13 ✓** |
+
+**Seven of twelve predictions held. Five did not**, and the misses are the informative
+part.
+
+### The placebo prediction was backwards
+
+Registered: *ties on gating, loses on triage.* Measured: it **lost on gating** (+0.20 to
+the treatment on `gate-stop-step0`) and **tied on triage** (~0 on `looks-trivial`).
+
+The reasoning behind the prediction was that a same-shape scaffold would reproduce
+gate-stopping while lacking triage content. The opposite happened: the placebo's arbitrary
+step contents were enough to trigger correct triage behaviour, and not enough to produce
+a proper step-0 artifact. Whatever makes an agent stop and plan at gate 0 is in the
+primer's *content*, not in the presence of eight numbered gates.
+
+### The one-liner reproduces the triage results and nothing else
+
+The sharpest finding, and it is not a flattering one. On both structural-triage cases the
+primer beats stock Claude Code substantially and beats thirteen words by nothing:
+
+```
+looks-trivial-is-structural   vs none  +0.31    vs oneliner  +0.04  (below floor)
+triage-decompose-epic         vs none  +0.42    vs oneliner  -0.00  (below floor)
+```
+
+An eval that ran only the built-in ablation — treatment vs no plugin, which
+`--ablation with-without` gives for free — would have reported +0.31 and +0.42 and called
+the method validated. The one-liner column is what turns that into *"+0.04 and −0.00 over
+a single sentence."* That is what the control conditions were built for.
+
+### The one-liner's failure is the guardrail's success
+
+`triage-skip-oneliner` was registered at 0 against every control, and the treatment,
+placebo and stock Claude all score **1.00**. The one-liner scores **0.33 in all five
+runs**: told to present a plan and wait for approval, it does exactly that — for a typo
+fix. That is ceremony where the gates are unearned, which is the harm the primer's triage
+section exists to prevent, demonstrated by the control that lacks it.
+
+The registered 0 counts as missed against the one-liner. It is the one miss that supports
+the method rather than undercutting it, and it is recorded as a miss regardless.
+
+### The one case the method has to itself
+
+`step3-markers-in-source` (capability evidence, single-arm — the number has no referent
+outside itself and is never averaged with the table above):
+
+```
+treatment 0.47   ·   oneliner 0.00   ·   placebo 0.00
+```
+
+All ten control runs scored zero. Neither control ever places a marker in source, because
+neither asks for one. But the treatment's own scatter is `0.67 · 0.00 · 1.00 · 0.67 ·
+0.00` — it works about half the time, and reporting 0.47 without that spread would be the
+mean hiding the instrument.
+
+## What this supports, at the claim ceiling
+
+> With the primer loaded, the agent produces one step's artifact and stops, holds that
+> under task pressure, and does not add ceremony to work that does not need it — measured
+> against no skill, a one-line equivalent, and a same-shape placebo.
+
+That sentence survives, with two qualifications the numbers require:
+
+1. **Against a one-line gating instruction, the advantage is narrow.** It is real on
+   gate-stopping (+0.29) and on not over-ceremonialising a typo (+0.67), and it is
+   indistinguishable from noise on both structural-triage cases.
+2. **The unique capability is step 3.** Markers in source is the one behaviour no control
+   produced at all — and the treatment produces it inconsistently.
+
+And what these numbers still cannot say, unchanged: nothing about whether the software
+comes out better. That is Tier 2, and it is not purchasable at this budget.
+

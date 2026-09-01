@@ -36,7 +36,15 @@ regress, because the current text's density may be doing work. Measurable by
 re-running the full suite with the restyled text as the treatment and comparing
 against the baseline.
 
-**Result.** —
+**Result.** Not yet measured, but the baseline now exists: the 2026-09-01 sweep is the
+number a restyle has to beat. Per case, treatment scored `gate-stop-step0` 0.91,
+`looks-trivial` 0.88, `triage-skip-oneliner` 1.00, `triage-decompose-epic` 0.80,
+`step3-markers` 0.47. A restyle costs one sweep (~$10, ~35 minutes) to evaluate.
+
+One number sharpens the stake. The placebo — same eight gates, arbitrary contents —
+scored 0.71 on `gate-stop-step0` against the treatment's 0.91, so roughly a fifth of
+that case's score is carried by the primer's actual prose rather than its structure.
+That is the part a restyle could destroy without anyone noticing by reading.
 
 ---
 
@@ -115,7 +123,16 @@ the two is the measurement. The one-liner control says nothing about decompositi
 so the clause should separate treatment from one-liner. If it does not, it is doing
 no work.
 
-**Result.** —
+**Result.** Not yet measured, and the 2026-09-01 sweep makes it more interesting than
+when it was written. `triage-decompose-epic` is one of the two cases where the primer
+ties the one-liner exactly (−0.00, below the noise floor) while beating stock Claude
+Code by +0.42. So on today's grader, the primer's entire decomposition section buys
+nothing over *"present a plan and wait for my explicit approval"*.
+
+The prediction stands as registered: if the "human picks the child" clause is doing
+work, a second grader for it should separate treatment from one-liner where the current
+one cannot. If it does not separate them either, that is evidence the decomposition
+guidance is not earning its length — which is a finding worth having.
 
 ---
 
