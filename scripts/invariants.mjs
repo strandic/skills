@@ -22,6 +22,19 @@
 const fail = (violations) => ({ ok: violations.length === 0, violations });
 
 /**
+ * The tolerance on every noise-floor comparison, defined once and used by both sides of
+ * it — {@link i1bNoiseFloorMarked} here and `markNoiseFloor` in `merge-results.mjs`.
+ *
+ * Why it has to exist: a contrast and the floor it is measured against are two means of
+ * the same fifteenths, summed in different orders, so a mathematical tie lands one unit
+ * in the last place either side of the other. `triage-decompose-epic`/placebo came out
+ * 2/15 against a floor of 2/15 and a strict `<` published it as a held prediction. A
+ * contrast that TIES the floor is inside it, not above it: the floor is the smallest
+ * difference this instrument can resolve, and a difference equal to it resolves nothing.
+ */
+export const NOISE_EPSILON = 1e-9;
+
+/**
  * I1 — a partial run is not publishable.
  * @param {MergedReport} report
  */
@@ -33,8 +46,10 @@ export function i1PublishableOnlyWhenComplete(report) {
 }
 
 /**
- * I1b — a contrast below the noise floor is published, but must be marked.
+ * I1b — a contrast at or below the noise floor is published, but must be marked.
  * Suppressing it would be publication bias; publishing it unmarked would be worse.
+ *
+ * The comparison is `<= spread + NOISE_EPSILON`, not `<`: see {@link NOISE_EPSILON}.
  * @param {MergedReport} report
  */
 export function i1bNoiseFloorMarked(report) {
@@ -45,8 +60,8 @@ export function i1bNoiseFloorMarked(report) {
   if (rows.length === 0) v.push('no delta rows to check — vacuous pass refused');
   for (const row of rows)
     for (const c of row.contrasts ?? [])
-      if (Math.abs(c.value) < spread && c.belowNoiseFloor !== true)
-        v.push(`${row.case}/${c.control}: |${c.value}| < spread ${spread} but not marked belowNoiseFloor`);
+      if (Math.abs(c.value) <= spread + NOISE_EPSILON && c.belowNoiseFloor !== true)
+        v.push(`${row.case}/${c.control}: |${c.value}| <= spread ${spread} but not marked belowNoiseFloor`);
   return fail(v);
 }
 
@@ -147,6 +162,15 @@ export function i1cNoFailedRuns(doc, expectedRunsPerArm) {
  * Breakage is caught by running rather than by predicting: the smoke pass costs cents
  * and fails loudly, which is how all four of those patches were found.
  *
+ * **What the drift argument here does NOT establish.** `drift` says the generated
+ * treatment mirror matched its source SKILL.md at the moment the check ran. It says
+ * nothing about the graders, the fixture, the replayed transcripts or the other two
+ * conditions, and nothing at all about WHEN the sweeps being merged were taken — the
+ * record is rewritten by every invocation. A treatment measured weeks ago against
+ * different graders passes this check. {@link i2bInstrumentAgreement} catches the
+ * different graders — it compares instrument digests — but not the weeks: nothing here
+ * compares timestamps. Do not read a clean `drift` as a claim of comparability.
+ *
  * @param {MergedReport} report
  * @param {{preRegistrationSha: string, subjectModel: string, claudeVersion: string}} registered
  * @param {{drifted: boolean, reason: string}} drift
@@ -181,6 +205,85 @@ export function i2RunNotVoid(report, registered, drift, preRegistrationDirty, sw
         v.push(`the merged sweeps ran on different CLIs (${distinct.join(', ')}) — ` +
           'a contrast between conditions measured on different binaries is not a contrast');
     }
+  }
+  return fail(v);
+}
+
+/**
+ * I2b — every merged sweep, the drift record and the suite on disk must name the SAME
+ * instrument.
+ *
+ * The instrument is everything a score depends on that is not the condition text: the
+ * cases, their graders, the transcripts they replay, the fixture they scaffold, and the
+ * conditions themselves. `instrumentDigest(suiteDir)` hashes all of it.
+ *
+ * **What this check compares, exactly: instruments, not times.** It compares digests.
+ * Three sweeps taken weeks apart merge cleanly here as long as the cases, graders,
+ * fixture, transcripts and conditions did not change in between — and that is the whole
+ * of what it certifies. `startedAt` is not read by this check or by any other, so an
+ * elapsed-time rule is not enforced anywhere in this suite.
+ *
+ * Nothing else here can see the instrument. I2 compares the pre-registration digest, the
+ * models and the CLI. `drift` compares one generated mirror against one source file, at
+ * the moment the check ran, and is rewritten by every invocation — so re-running a single
+ * condition resets `drifted:false` for two conditions measured on an older instrument.
+ * The worktree held exactly that mixed set and every invariant passed it.
+ *
+ * An ABSENT digest is refused rather than skipped. Sweeps written before the digest
+ * existed cannot be shown to be comparable, and "we never looked" must not read as "they
+ * agree" — the same rule as the missing pre-registration digest in I8.
+ *
+ * Each violation names WHICH SIDE differs, because the remedy is different for each: a
+ * disagreement between sweeps means re-run the odd one out, a disagreement with the tree
+ * means re-run everything or check out the instrument the numbers were taken on.
+ *
+ * @param {{condition?: string, instrumentSha?: string}[]} sweeps  the merged SweepRecords
+ * @param {{instrumentSha?: string}} drift  results/drift.json as parsed
+ * @param {string} currentSha  instrumentDigest(suiteDir), taken at merge time
+ * @param {string} [currentShaError]  why it could not be taken, when it could not.
+ *   Carried into the message rather than swallowed: a missing suite directory, an
+ *   unreadable file and a bug in the digest are three different operator actions, and
+ *   "no digest was computed" alone tells an operator which of them to take.
+ */
+export function i2bInstrumentAgreement(sweeps, drift, currentSha, currentShaError) {
+  const v = [];
+  if (!Array.isArray(sweeps) || sweeps.length === 0)
+    return fail(['no sweeps supplied — instrument agreement cannot be established']);
+  const short = (s) => String(s).slice(0, 12);
+  const has = (s) => typeof s?.instrumentSha === 'string' && s.instrumentSha !== '';
+
+  const missing = sweeps.filter((s) => !has(s));
+  if (missing.length > 0)
+    v.push(`${missing.map((s) => s?.condition ?? '?').join(', ')}: sweep record carries no instrumentSha ` +
+      '— these sweeps predate the instrument digest and must be re-run before they can be merged');
+
+  const present = sweeps.filter(has);
+  const distinct = [...new Set(present.map((s) => s.instrumentSha))];
+  if (distinct.length > 1)
+    v.push('the merged sweeps were measured on different instruments (' +
+      present.map((s) => `${s.condition ?? '?'}=${short(s.instrumentSha)}`).join(', ') +
+      ') — a contrast between conditions measured on different graders is not a contrast');
+
+  const haveCurrent = typeof currentSha === 'string' && currentSha !== '';
+  if (!haveCurrent)
+    v.push('no instrument digest was computed at merge time — the suite on disk cannot be compared ' +
+      'against the instrument the sweeps measured' +
+      (currentShaError ? ` (${currentShaError})` : ''));
+
+  // Only once the sweeps agree is there a single "the sweeps' instrument" to name.
+  if (distinct.length === 1) {
+    const swept = distinct[0];
+    const driftSha = drift?.instrumentSha;
+    if (typeof driftSha !== 'string' || driftSha === '')
+      v.push("results/drift.json carries no instrumentSha — the drift check predates the instrument " +
+        'digest, so it cannot vouch for the instrument these sweeps ran on');
+    else if (driftSha !== swept)
+      v.push(`drift.json names instrument ${short(driftSha)}, the sweeps name ${short(swept)} — ` +
+        'the drift check ran against a different instrument than the sweeps did');
+    if (haveCurrent && currentSha !== swept)
+      v.push(`the suite on disk is instrument ${short(currentSha)}, the sweeps measured ` +
+        `${short(swept)} — the cases, graders, fixture or conditions changed after these results ` +
+        'were taken');
   }
   return fail(v);
 }
@@ -222,6 +325,70 @@ export function i4EvidenceKindsNeverMixed(report, expectedDeltaRows, expectedCap
   for (const r of c) if (r.evidence !== 'capability') v.push(`${r.case}: evidence '${r.evidence}' in capabilityRows`);
   for (const r of c) if ((r.contrasts ?? []).length > 0) v.push(`${r.case}: capability row carries contrasts`);
   if (report.overallScore !== undefined) v.push('report emits a combined mean across both evidence kinds');
+  return fail(v);
+}
+
+/**
+ * I4b — every registered scored case was MEASURED, in every merged condition, at the
+ * ablation it was registered at.
+ *
+ * Three ways a comparison can be a hole rather than a smaller comparison, and all three
+ * used to be silent or fatal:
+ *
+ * - **The case is absent from one sweep.** The merged table then came back one row short
+ *   of the pre-registration with every invariant passing (B4).
+ * - **The case is present with an empty run list.** An arm with no runs is the absence of
+ *   a measurement, not a score of zero.
+ * - **The case ran at an ablation nobody registered.** `step3-markers-in-source` is
+ *   registered `ablation: none` — single-arm, because a replayed transcript carries the
+ *   plugin into both arms — and the sweep ran it with-without anyway, printing a
+ *   `none (per sweep)` row beside a table whose heading says its numbers have no
+ *   referent (A6). `SweepRecord.ablations` is the only place the per-case truth survives:
+ *   `document.suite.ablation` can name just one for the whole invocation.
+ *
+ * **Why an invariant and not a throw.** The first two were `MergeError`s inside
+ * `mergeSweeps`, which aborts before any check runs — so an operator merging a
+ * cost-ceiling-truncated sweep got one message instead of the full list, and lost I1's
+ * "run is partial" alongside it. Nothing is published either way; this only decides how
+ * much the operator learns per attempt.
+ *
+ * A sweep that carries no `ablations` map at all is NOT a violation here: a bare
+ * `SweepResult` legitimately has none, and a record written by this runner always does.
+ * `mergeSweeps` records that absence as an advisory instead, and I2b already refuses any
+ * record old enough to predate the field.
+ *
+ * @param {{condition?: string, document?: {cases?: {name: string, arms?: object}[]},
+ *          ablations?: Record<string, string>}[]} sweeps  the merged SweepRecords
+ * @param {CaseSpec[]} specs  the pre-registration's cases — the expectation comes from
+ *   the registration, never from the documents being judged
+ */
+export function i4bEveryScoredCaseMeasured(sweeps, specs) {
+  const v = [];
+  if (!Array.isArray(sweeps) || sweeps.length === 0)
+    return fail(['no sweeps supplied — that every registered case was measured cannot be established']);
+  if (!Array.isArray(specs) || specs.length === 0)
+    return fail(['no case specs — vacuous pass refused']);
+  const scored = specs.filter((s) => !(s.tags ?? []).includes('control') && s.scored !== false);
+  if (scored.length === 0) return fail(['no scored cases registered — vacuous pass refused']);
+
+  for (const spec of scored) {
+    for (const s of sweeps) {
+      const condition = s?.condition ?? '?';
+      const c = (s?.document?.cases ?? []).find((x) => x.name === spec.name);
+      if (!c) {
+        v.push(`${spec.name}: registered and scored, but the '${condition}' sweep does not contain it — ` +
+          `re-run '${condition}' rather than publishing a comparison with a hole in it`);
+        continue;
+      }
+      if ((c.arms?.with ?? []).length === 0)
+        v.push(`${spec.name}: present in the '${condition}' sweep with an empty run list — an arm with ` +
+          'no runs is the absence of a measurement, not a score of zero');
+      const swept = s?.ablations?.[spec.name];
+      if (swept !== undefined && swept !== spec.ablation)
+        v.push(`${spec.name}: registered ablation '${spec.ablation}', but the '${condition}' sweep ran it ` +
+          `at '${swept}' — the number that came back does not answer the question that was registered`);
+    }
+  }
   return fail(v);
 }
 

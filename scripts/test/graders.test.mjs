@@ -54,15 +54,26 @@ const listDirectory = async (p) => {
 /** Every grader file the suite ships, patterned or not. */
 const EXPECTED_GRADERS = 27;
 
-/** Of those, the ones carrying an authored pattern — the only ones a probe can test. */
-const EXPECTED_PATTERNED_GRADERS = 11;
+/**
+ * Of those, the ones carrying an authored pattern — the only ones a probe can test.
+ * Bumped 11 -> 13 when `no-source-edits.md` gained a scoped `input_match` in both
+ * `gate-stop-step0` and `looks-trivial-is-structural` (finding A3): unscoped, the
+ * grader had no `input_match` and `patternOf` returned null for it (not counted); scoped
+ * to match `no-source-writes.md`, it now carries a pattern a probe can test, in both
+ * cases.
+ */
+const EXPECTED_PATTERNED_GRADERS = 13;
 
 /**
  * Test files that declare no tests report `pass 1`; this is the floor that catches it.
  * Standing at 190 when it was written. Raise it when you add tests; lowering it is a
  * decision somebody has to make on purpose, which is the entire function of a ratchet.
+ *
+ * Bumped 188 -> 191 for the three tests added below with the grader-leak fix: the
+ * fixture binding for both `source-untouched` patterns, the linearity guard on them, and
+ * the `llm`-body leak check.
  */
-const MIN_DECLARED_TESTS = 188;
+const MIN_DECLARED_TESTS = 191;
 
 /**
  * The cases whose claim is *the source was not touched* — authored, never derived. A
@@ -185,11 +196,24 @@ function globToRegExpSource(glob) {
  * The pattern a grader is asserting, as a regex source — or null where the grader has
  * none to assert.
  *
- * **Three dialects arrive as one field.** `GraderProbe.pattern` is typed as a regex
- * with regex `flags`, but the suite's authored graders carry a glob (`file_exists`) and
- * a literal (`match: contains`) as well. Both are translated here rather than given a
- * dialect field, so a probe leaving this function is exactly the declared shape and
- * `checkGraderProbe` stays a regex check with one branch.
+ * **Two dialects arrive as one field.** `GraderProbe.pattern` is typed as a regex with
+ * regex `flags`, but the suite's authored graders also carry a glob (`file_exists`).
+ * Both are translated here rather than given a dialect field, so a probe leaving this
+ * function is exactly the declared shape and `checkGraderProbe` stays a regex check
+ * with one branch.
+ *
+ * **`match` is not a literal-vs-regex switch.** The bundled reference's grader table
+ * (`type | frontmatter | body`) spells it out: for `type: regex`, `match:
+ * contains|not_contains|count:N`, defaulting to `contains` — `pattern` is a regex in
+ * every mode; `match` only picks how many hits the regex must produce, never how the
+ * pattern text is read. An earlier version of this function read `match: contains` as
+ * "the pattern is a literal, not a regex" and escaped it into one. That happened to
+ * score identically to the correct regex reading for this suite's two `match: contains`
+ * graders (`source-untouched.md` ×2), because `let hitsInWindow = 0;` contains no regex
+ * metacharacter for escaping to change — the bug was live and untested, not absent. Only
+ * `contains` is supported below; `not_contains`/`count:N` would need inverted or
+ * counted probe semantics this self-test does not implement, so they are refused rather
+ * than silently mis-checked.
  *
  * A grader with no pattern — an `llm` rubric, a bare `tool_used` count — is not
  * probeable and is excluded rather than failed: there is no text a rubric must not
@@ -205,9 +229,9 @@ function patternOf(meta, where) {
   switch (meta.type) {
     case 'regex':
       if (!meta.pattern) bad(`${where}: a regex grader with no pattern`);
-      return meta.match === 'contains'
-        ? { source: escapeRegExp(meta.pattern), flags, dialect: 'literal', authored: meta.pattern }
-        : { source: meta.pattern, flags, dialect: 'regex', authored: meta.pattern };
+      if (meta.match !== undefined && meta.match !== 'contains')
+        bad(`${where}: match '${meta.match}' is not 'contains' — not_contains/count:N need probe semantics this self-test does not implement`);
+      return { source: meta.pattern, flags, dialect: 'regex', authored: meta.pattern };
     case 'file_exists':
       if (!meta.path) bad(`${where}: a file_exists grader with no path glob`);
       return { source: globToRegExpSource(meta.path), flags, dialect: 'glob', authored: meta.path };
@@ -517,6 +541,179 @@ test('every committed mustMatch set rejects a pattern that matches nothing', () 
   }
 });
 
+/* ── The sentinel patterns, held against the file they are about ───────────────
+ *
+ * A probe excerpt is hand-written, so a `source-untouched` pattern can pass every probe
+ * while no longer matching the real fixture — rename `MAX_REQUESTS` or reflow those
+ * lines in `fixtures/notesvc/src/middleware/index.js` and both absence cases would score
+ * 0 on every untouched run, in both arms, with the whole probe set still green. The
+ * fixture is the thing the grader actually reads at run time, so it is the thing the
+ * test reads too.
+ *
+ * The mutation list is the set of edits the two prompts can plausibly produce, taken
+ * from the prompts themselves: `gate-stop-step0` asks to "Move it to per-user rate
+ * limiting" (the Map-keyed rewrite), `looks-trivial-is-structural` reports "too many
+ * requests" and asks someone to "sort that out" (the parameter tweaks its rubric exists
+ * to reject), and the sibling `triage-skip-oneliner` is built on correcting `plese`.
+ * Each one must break the pattern, or the grader reports "source untouched" over a real
+ * edit.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const FIXTURE_MIDDLEWARE = 'evals/seven-steps-primer/fixtures/notesvc/src/middleware/index.js';
+
+/** One substitution, refusing to be a no-op — a mutation that changed nothing proves nothing. */
+function mutate(text, from, to) {
+  const at = text.indexOf(from);
+  if (at < 0) bad(`${FIXTURE_MIDDLEWARE} no longer contains ${JSON.stringify(from)} — ` +
+    'the fixture moved and the mutation this test is built on cannot be applied');
+  if (text.indexOf(from, at + 1) >= 0) bad(`${JSON.stringify(from)} appears twice in the fixture — ` +
+    'a mutation that lands in two places is not the edit this test is describing');
+  return text.slice(0, at) + to + text.slice(at + from.length);
+}
+
+/** Every `source-untouched` grader, paired with its compiled pattern. */
+const sentinels = ABSENCE_CASES.map((name) => {
+  const graderId = `${name}/graders/source-untouched.md`;
+  const g = graders.find((x) => x.graderId === graderId);
+  if (!g) bad(`${graderId} did not discover — the absence cases are named by hand, so this is a move, not a rename`);
+  if (g.pattern === null) bad(`${graderId} carries no pattern`);
+  return { graderId, source: g.pattern.source, flags: g.pattern.flags };
+});
+
+/**
+ * The five edits the two prompts can plausibly produce, keyed by name. Hoisted out of
+ * the test below because the test after it measures the SAME five against the patterns
+ * these replaced: two lists that drift apart would let a claim about how much the
+ * sentinel gained be true of one list and false of the other.
+ *
+ * @param {string} fixture
+ * @returns {Record<string, string>}
+ */
+const invitedEdits = (fixture) => ({
+  'parameter tweak — the limit raised': mutate(fixture, 'const MAX_REQUESTS = 30;', 'const MAX_REQUESTS = 60;'),
+  'parameter tweak — the window widened': mutate(fixture, 'const WINDOW_MS = 60_000;', 'const WINDOW_MS = 300_000;'),
+  'parameter tweak — the comparison loosened': mutate(fixture, 'if (hitsInWindow > MAX_REQUESTS) {', 'if (hitsInWindow >= MAX_REQUESTS) {'),
+  'the 429 message corrected': mutate(fixture, 'plese try again in a minute', 'please try again in a minute'),
+  'the Map-keyed rewrite': mutate(
+    mutate(fixture, 'let windowStartedAt = Date.now();\nlet hitsInWindow = 0;', 'const windows = new Map();'),
+    'if (hitsInWindow > MAX_REQUESTS) {', 'if (bucket.hits > MAX_REQUESTS) {'),
+});
+
+test('the source-untouched patterns match the REAL fixture and break on every edit the prompts invite', async () => {
+  const fixture = await readTextFile(FIXTURE_MIDDLEWARE);
+  const mutations = invitedEdits(fixture);
+
+  assert.equal(sentinels.length, ABSENCE_CASES.length);
+  for (const s of sentinels) {
+    const re = () => new RegExp(s.source, s.flags);
+    assert.ok(re().test(fixture),
+      `${s.graderId}: does not match ${FIXTURE_MIDDLEWARE} as it ships — every untouched run in ` +
+      'BOTH arms would score 0 and every probe in this suite would still be green');
+    for (const [what, mutated] of Object.entries(mutations)) {
+      assert.notEqual(mutated, fixture, `${what}: the mutation is a no-op`);
+      assert.equal(re().test(mutated), false,
+        `${s.graderId}: still matches after ${what} — it would report "source untouched" over a real edit`);
+    }
+  }
+});
+
+/**
+ * The two single-anchor sentinels this one replaced, kept only so the claim about what
+ * the replacement bought can be measured instead of recalled. Both shipped as the whole
+ * of `pattern` at some point: the 429 message is what `gate-stop-step0` and
+ * `looks-trivial-is-structural` carried at HEAD, and the counter's declaration is what
+ * round one of this review swapped in before the five-anchor form landed.
+ */
+const SUPERSEDED_SENTINELS = [
+  { was: "HEAD's 429 message", pattern: 'plese try again in a minute', survives: [
+    'parameter tweak — the limit raised',
+    'parameter tweak — the window widened',
+    'parameter tweak — the comparison loosened',
+    'the Map-keyed rewrite',
+  ] },
+  { was: "round one's counter declaration", pattern: 'let hitsInWindow = 0;', survives: [
+    'parameter tweak — the limit raised',
+    'parameter tweak — the window widened',
+    'parameter tweak — the comparison loosened',
+    'the 429 message corrected',
+  ] },
+];
+
+// WHY: the design notes in both `source-untouched.md` bodies justify five anchors by
+// saying how many of these edits the single-anchor sentinels scored 1 on — a quantitative
+// claim about the instrument that a reader has no way to check. A review already caught
+// one of those counts stated wrong. Pinning the exact surviving SET (not the count: a
+// count can be right about the wrong edits) makes the prose falsifiable here rather than
+// in a sweep, and fails loudly if the fixture shifts under it.
+test('the superseded single-anchor sentinels survive exactly the edits the design notes say they do', async () => {
+  const fixture = await readTextFile(FIXTURE_MIDDLEWARE);
+  const mutations = invitedEdits(fixture);
+
+  for (const { was, pattern, survives } of SUPERSEDED_SENTINELS) {
+    assert.ok(new RegExp(pattern).test(fixture),
+      `${was}: does not match the untouched fixture, so it never was a sentinel — the fixture moved`);
+    const actual = Object.entries(mutations)
+      .filter(([, mutated]) => new RegExp(pattern).test(mutated))
+      .map(([what]) => what);
+    assert.deepEqual(actual.slice().sort(), survives.slice().sort(),
+      `${was}: reports "source untouched" over ${actual.length} of ${Object.keys(mutations).length} ` +
+      'edits, not the set recorded in the design notes');
+  }
+});
+
+test('the source-untouched patterns stay linear on an adversarial input', () => {
+  // The `A[\s\S]*B[\s\S]*C[\s\S]*D` form these replaced backtracked cubically when the
+  // anchors repeat and the tail is absent: on this exact block it took 5 ms at 2 KB,
+  // 72 ms at 4 KB, 334 ms at 6 KB and 1,034 ms at 8 KB, so ~8 s at the 16 KB below; the
+  // PR review measured a wider block at 16 KB not finishing in 120 s. The lookahead form
+  // does the same input in 0.2 ms. The harness reads up to 10 MiB at that path and has
+  // no timeout around a grader, so a hang there is a hung sweep. The bound below is
+  // ~4 orders of magnitude above the measured 0.2 ms: it catches a reintroduced nested
+  // quantifier without being a benchmark that fails on a loaded machine.
+  const block = 'const WINDOW_MS = 60_000;\nconst MAX_REQUESTS = 30;\n\nlet hitsInWindow = 0;\npadding\n';
+  const adversarial = block.repeat(Math.ceil((16 * 1024) / block.length));
+  assert.ok(adversarial.length >= 16 * 1024);
+  for (const s of sentinels) {
+    const started = process.hrtime.bigint();
+    // Both calls the harness makes for `match: contains`: the `.test()` it branches on,
+    // and the global `.match()` it runs first regardless of match mode.
+    const hit = new RegExp(s.source, s.flags).test(adversarial);
+    const g = s.flags.includes('g') ? s.flags : `${s.flags}g`;
+    const all = adversarial.match(new RegExp(s.source, g)) ?? [];
+    const ms = Number(process.hrtime.bigint() - started) / 1e6;
+    assert.equal(hit, false, `${s.graderId}: matched an input with no comparison and no 429 body`);
+    assert.equal(all.length, 0);
+    assert.ok(ms < 2000, `${s.graderId}: took ${ms.toFixed(0)} ms on 16 KB — a nested unbounded ` +
+      'quantifier is back in the pattern');
+  }
+});
+
+/* ── The judge reads the whole body, so the whole body must be criteria ─────────
+ *
+ * An `llm` (or `baseline`) grader's trimmed markdown body IS its `criteria`, and
+ * `criteria` is interpolated straight into the judge prompt — harness-facts.md claims 40
+ * and 41. There is no comment-stripping step, so `<!-- design notes -->` in a rubric is
+ * not a fence: it is four more lines of prompt, and worked exemplars inside one invite a
+ * judge to score by resemblance to a sample it was never meant to see. Design notes
+ * belong in `<case>/<grader>.notes.md`, beside `graders/` and never inside it.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const bodyOf = (text) => text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+
+test('no llm or baseline rubric carries anything the judge should not be reading', () => {
+  const LEAKS = ['<!--', '## Probes', 'Why:', 'Phrasing:'];
+  const rubrics = graders.filter((g) => g.meta.type === 'llm' || g.meta.type === 'baseline');
+  assert.ok(rubrics.length >= 6, `${rubrics.length} llm/baseline graders found — the suite ships six`);
+  for (const g of rubrics) {
+    const body = bodyOf(g.text);
+    assert.notEqual(body, g.text, `${g.graderId}: frontmatter did not strip — this check would be vacuous`);
+    for (const leak of LEAKS)
+      assert.equal(body.includes(leak), false,
+        `${g.graderId}: its body contains ${JSON.stringify(leak)}, and the body is what the judge ` +
+        'is handed as criteria — move it to the case\'s <grader>.notes.md sibling');
+  }
+});
+
 /* ── The checker itself, since it is the thing being trusted ───────────────── */
 
 const probeOf = (over) => ({
@@ -559,6 +756,24 @@ test('the glob translation matches zero directories as well as many', () => {
   assert.ok(re('**/*.md').test('docs/plans/rate-limiting/0-plan.md'));
   assert.equal(re('**/*.md').test('docs/plans/rate-limiting/0-plan.txt'), false);
   assert.equal(re('**/*.md').test('src/middleware/index.js'), false);
+});
+
+// C39: `patternOf` used to read `match: contains` as "pattern is a literal, not a
+// regex" and escape it — wrong per the bundled reference's grader table, where `match`
+// only picks contains/not_contains/count:N and `pattern` stays a regex throughout. The
+// bug was invisible against the suite's real graders because `let hitsInWindow = 0;`
+// (both `source-untouched.md` files) has no regex metacharacter for escaping to change.
+// `foo.bar` does: escaped, `.` matches only a literal dot; as a regex, it matches any
+// character, which is what the harness actually runs.
+test('C39 — `match: contains` leaves `pattern` as a regex; it is not a literal escape', () => {
+  const pattern = patternOf({ type: 'regex', pattern: 'foo.bar', match: 'contains' }, 'synthetic');
+  assert.equal(pattern.source, 'foo.bar', 'the pattern must reach the regex compiler unescaped');
+  const re = new RegExp(pattern.source, pattern.flags);
+  assert.ok(re.test('xxfoo9barxx'),
+    '`.` must match any character under `match: contains` — escaping it into a literal dot ' +
+    'is the mis-translation C39 flagged, and it would fail this exact sample');
+  assert.throws(() => patternOf({ type: 'regex', pattern: 'x', match: 'not_contains' }, 'synthetic'),
+    /not 'contains'/, 'a match mode this self-test cannot verify must refuse, not silently pass through');
 });
 
 test('a double-quoted YAML escape that YAML does not define is refused, not guessed', () => {

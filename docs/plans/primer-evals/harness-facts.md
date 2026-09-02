@@ -54,10 +54,10 @@ python3 -c 'import sys; print("FOUND" if sys.argv[2] in
   "$BIN" '<marker>'
 ```
 
-Verified on 2.1.250: **11/11 DOC markers recover** under the decode, having returned
-zero hits under `strings`. Pick the newest version by `sort -V`, not `tail -1` on an
-unsorted listing — 2.1.247 sorts after 2.1.250 lexically, and the wrong binary is a
-silently wrong answer.
+Verified on 2.1.250: **14/14 DOC markers recover** under the decode, having returned
+zero hits under `strings`; the five CODE markers recover under `strings`. Pick the newest
+version by `sort -V`, not `tail -1` on an unsorted listing — 2.1.247 sorts after 2.1.250
+lexically, and the wrong binary is a silently wrong answer.
 
 Note also that `claude` may not execute the newest installed version: 2.1.247 was on
 disk while 2.1.250 was what actually ran. Confirm with `--version` rather than `ls`.
@@ -85,9 +85,30 @@ need.
 | 13 | An `llm` grader passes on **at least 2 of 3** judge votes; the judge is a small fast model by default | DOC | `votes PASS on the rubric in at least 2 of 3 votes` |
 | 14 | `--max-cost-usd` breach skips remaining cases, marks `partial` / `cost_ceiling`, **exit 2** | DOC | ``with reason `cost_ceiling`, exit 2`` |
 | 15 | The command is early access; `CLAUDE_CODE_WALNUT_SPIRE=1` opens it | CODE + RUN | `is currently in early access` |
+| 40 | A grader file's **trimmed markdown body fills one frontmatter key** when that key is absent: `criteria` for `llm` and `baseline`, `pattern` for `regex`. There is no comment-stripping step, so an HTML comment in an `llm` body is part of `criteria` | CODE | `llm:"criteria",baseline:"criteria",regex:"pattern"` |
+| 41 | `criteria` is interpolated **straight into the judge prompt** — `Criterion:\n${criteria}` — with nothing between the file and the judge. Fencing a design note in `<!-- -->` therefore hides it from nobody | CODE | `You are grading the output of a coding agent against a criterion.` |
+| 42 | `input_match` is a **regex over the JSON-encoded tool input**, not a substring test | DOC | ``optional `input_match` (regex over the JSON-encoded tool input)`` |
+| 43 | A `regex` grader's `pattern` is a **JavaScript RegExp source in every `match` mode**; `match` (`contains` default, `not_contains`, `count:N`) only chooses how many hits it must produce | DOC | ``The pattern is (or is not) found in the target; `count:N` requires exactly N.`` |
 
 Claim 15 was re-run directly: without the variable the command prints the
 early-access line; with it, the same invocation reports `No eval cases found`.
+
+**Claims 40-43 are what the graders in `evals/seven-steps-primer/` now rest on.** 40 and
+41 together are why every `llm` grader's body holds nothing but its criteria and every
+design note lives in a `<case>/<grader>.notes.md` sibling outside `graders/`: a comment
+in the body is shipped to the judge verbatim, so "fence it in a comment" removes nothing
+and only makes the prompt longer. 42 is what `no-source-edits.md` and
+`no-source-writes.md` assume when they anchor on `"file_path"\s*:\s*"…`. 43 is what
+`source-untouched.md` assumes when it declares `match: contains` beside a pattern full of
+metacharacters — and it is the claim `graders.test.mjs`'s C39 test pins, after an earlier
+version of `patternOf` read `contains` as "the pattern is a literal" and escaped it.
+
+The regex grader's own code confirms 43 and adds one operational detail the timings in
+`source-untouched.md` depend on: under **every** match mode the harness first runs
+`text.match(new RegExp(pattern, flags + 'g'))` and only then branches on `match`. A
+pattern that backtracks badly costs that scan whether or not `contains` would have
+short-circuited, which is why both `source-untouched.md` patterns are anchored with `^`
+and use non-nesting lookaheads.
 
 ## Claims from observation only
 
@@ -105,7 +126,7 @@ been replicated across sessions, so treat them as strong leads rather than settl
 | 36 | `--json` no longer consumes a following target the way `--tag` and `--allow-tools` still do | Target-first remains the rule; only the failure mode differs |
 | 37 | **2.1.251:** a `plugins` entry may not name the case directory, its graders or mocks, "or a directory covering them — a plugin shipped with a case must sit in its own subdirectory". Fails at RUN time, not load | Broke `_condition/` living inside the eval dir; it now sits at `evals/_conditions/current`, which 2.1.250 also accepts |
 | 38 | **2.1.251:** a Bash-granting evaluation refuses to run when `~/.docker` holds a symlink anywhere inside it — "keep the store's contents in one plain directory (its root may be a link)". `DOCKER_CONFIG` does not redirect the check | **Blocks this suite entirely on 2.1.251.** Every case grants Bash, and Docker Desktop installs `cli-plugins/*` as symlinks |
-| 39 | **2.1.251:** the bundled reference is no longer readable by decoding the binary — the asset is still named (`plugin-eval-a0f9bd9e.md`) but its text appears in no plain encoding, so it is compressed | All 12 DOC markers stop resolving. Grep-based citation ends at 2.1.250 |
+| 39 | **2.1.251:** the bundled reference is no longer readable by decoding the binary — the asset is still named (`plugin-eval-a0f9bd9e.md`) but its text appears in no plain encoding, so it is compressed | All 14 DOC markers stop resolving. Grep-based citation ends at 2.1.250 |
 
 ## Why the pin is 2.1.250 and not the newest
 

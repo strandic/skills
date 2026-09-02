@@ -13,10 +13,16 @@ context:
   # first), message {role, content}, sessionId, cwd, version, userType, isSidechain and
   # timestamp; assistant content is a block list, user content a plain string.
   #
-  # Method-neutral by construction: the assistant turn reads as an ordinary engineering
-  # reply. No gates, no step numbering, no marker vocabulary, and the literal token the
-  # graders hunt for appears nowhere in it. A transcript that named the method would
-  # teach it by imitation, and the case would then measure copying rather than capability.
+  # Not fully method-neutral, corrected here to match what history.jsonl actually
+  # contains. The seed turn (record 0) opens "Use the seven-steps-primer skill for
+  # this." — the skill is named outright. Each scripted assistant turn (records 1, 3,
+  # 5) reads as an ordinary engineering reply and closes on a bare "**Gate N.**" —
+  # SKILL.md's own convention, which ends every step with "**Gate.**", numbered 0-7 —
+  # and each scripted user turn in reply (records 2, 4) opens "Gate N cleared." before
+  # naming what comes next. That is real method vocabulary in the transcript, not
+  # absent from it. What genuinely is absent: no "self-certify", no "clear the gate"
+  # as a phrase, no "step 0/1/2" prose, and the literal token the graders hunt for
+  # (`TODO`) is nowhere in it — `grep -c TODO history.jsonl` is 0.
   history_file: history.jsonl
   # Both file graders read the service out of the workspace, so the service has to be
   # there — the same delegating scaffold every other case uses. Without it,
@@ -29,7 +35,13 @@ execution:
   timeout_seconds: 600
   allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
 runs: 5
-# Graders live in graders/*.md beside this file — three of them. An empty list here is
-# valid and is not a defect anyone should "fix": the merge with the directory precedes
-# the minimum-one check, so the case loads with the three the directory supplies.
+# Graders live in graders/*.md beside this file — four of them: markers-in-middleware,
+# markers-in-source, not-a-doc-list, skill-fired. An empty list here is valid and is not a
+# defect anyone should "fix": the merge with the directory precedes the minimum-one check,
+# so the case loads with the four the directory supplies.
+#
+# `not-a-doc-list.notes.md` beside this file is NOT a grader. Design notes for an `llm`
+# grader live outside graders/ on purpose: that grader's markdown body is handed to the
+# judge verbatim as its criteria, so a note left in the body — comment or not — is scored
+# against. See docs/plans/primer-evals/harness-facts.md claims 40 and 41.
 graders: []
