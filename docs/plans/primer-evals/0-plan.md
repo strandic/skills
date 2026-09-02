@@ -350,14 +350,17 @@ before the first run rather than after.
 
 ## Pending changes to SKILL.md
 
-Four changes we believe improve the skill, held until they can be measured rather
-than assumed (D4). The ledger — each with its argument, its prediction, and space
-for the result — lives at **`docs/seven-steps-primer/pending-changes.md`**, not
-here: it outlives this plan and keeps growing.
+Changes we believe improve the skill, held until they can be measured rather than
+assumed (D4). They are tracked as **beans** (`beans list`), not in this plan — they
+outlive it and keep growing, and a plan that tracks its own follow-ups becomes a
+tracker nobody updates.
 
-Three of the four surfaced from *building the evals* rather than from reading the
-skill. Only two are cleanly measurable by Tier 1, which is recorded there rather
-than glossed.
+Most of them surfaced from *building the evals* rather than from reading the skill,
+which is the exercise paying for itself before a number exists. Only some are cleanly
+measurable by Tier 1; the beans say which, and why the others are not.
+
+One has been measured and shipped — the setup choices moving to gate 0 — and its result
+lives with the other measurements in `evals/seven-steps-primer/PRE-REGISTRATION.md`.
 
 ## Recon targets — questions the harness must answer, not the human
 
