@@ -188,7 +188,11 @@
  * @property {ConditionId} condition
  * @property {number} exitCode   0 all cases at/above threshold · 1 below threshold, a case
  *                               failed to load, or bad options · 2 partial (cost ceiling or
- *                               auth) · 130 SIGINT · 143 SIGTERM
+ *                               auth) · 127 the executable could not be spawned · 128 + the
+ *                               signal number for ANY signalled death (130 SIGINT, 143
+ *                               SIGTERM, 137 SIGKILL, 129 SIGHUP). Everything ≥ 128 is an
+ *                               interruption, never a result: mapping an unnamed signal to 1
+ *                               reported a killed sweep as "a case scored below threshold"
  * @property {HarnessDocument|null} document  null when the sweep produced no document at all
  * @property {string} stderrTail  case-load errors and notices; stdout is the JSON document
  */
@@ -196,16 +200,44 @@
 /**
  * What one sweep persists to `results/<condition>.json`, and what the merger reads
  * back. The sweep→merge handoff was diagrammed but never specified, so this fixes it:
- * the runner writes the harness document verbatim under `document`, plus what only
- * the runner knows.
+ * the runner writes the harness document under `document`, plus what only the runner
+ * knows.
+ *
+ * `document` is verbatim only when the sweep made ONE harness invocation. A sweep splits
+ * into one invocation per distinct case ablation, and the parts are then combined
+ * (`combineHarnessDocuments`): the `cases` arrays concatenate, `costUsd` sums,
+ * `startedAt` is the earliest and `durationSeconds` the total, `partial` is three-valued,
+ * `suite.ablation` can only name the first part's, and `aggregates` is DELETED rather
+ * than left describing one part beside a `cases` array from both.
  *
  * @typedef {object} SweepRecord
  * @property {ConditionId}     condition
  * @property {number}          exitCode
  * @property {HarnessDocument} document
  * @property {string}          stderrTail
- * @property {string[]}        argv       the exact command, so a reader can re-run it
+ * @property {string[][]}      argvs      every harness invocation this sweep made, in order,
+ *                                        so a reader can re-run each of them exactly. A sweep
+ *                                        is one invocation per distinct case ablation, so a
+ *                                        case registered `ablation: none` cannot be run
+ *                                        with-without by sharing a command line with one
+ * @property {Record<string,'none'|'with-without'>} ablations  case name → the ablation that
+ *                                        case was actually run at. Exactly that shape: one key
+ *                                        per case name the sweep asked for, and a value that is
+ *                                        the string 'none' or the string 'with-without' and
+ *                                        nothing else (`buildSweepRecord` refuses anything
+ *                                        else). The combined `document.suite.ablation` can only
+ *                                        name one ablation, so this is the only per-case record
+ *                                        of the split — and the merger READS it, checking each
+ *                                        case's entry against the `ablation` PRE-REGISTRATION
+ *                                        registers. That check is what turns "a case registered
+ *                                        `none` must not run with-without" from an intention
+ *                                        into something a merge can refuse
  * @property {string}          startedAt
+ * @property {string}          instrumentSha  `instrumentDigest(suiteDir)` at sweep time — the
+ *                                        cases, graders, transcripts, fixture and every
+ *                                        condition's SKILL.md. Sweeps that disagree were
+ *                                        measured with different instruments and are
+ *                                        unmergeable (I2b)
  */
 
 /**
@@ -217,6 +249,11 @@
  * @property {boolean} drifted
  * @property {string}  reason
  * @property {string}  checkedAt
+ * @property {string}  instrumentSha  `instrumentDigest(suiteDir)` at check time, the same value
+ *                                    every sweep record of this invocation carries. Without it
+ *                                    a control-only re-run resets `drifted:false` for a
+ *                                    treatment measured on an older instrument and I2 cannot
+ *                                    see it (I2b)
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -229,7 +266,13 @@
  * @property {ConditionId|'none'} control
  * @property {number}            value      treatmentScore - controlScore
  * @property {ExpectedDirection} expected   from the pre-registration, not from the result
- * @property {boolean} [belowNoiseFloor]  set when |value| < the suite's baselineSpread.
+ * @property {boolean} [belowNoiseFloor]  set when |value| <= baselineSpread + NOISE_EPSILON.
+ *                                        `<=`, not `<`: a contrast that TIES the floor is
+ *                                        inside it, since the floor is the smallest
+ *                                        difference the instrument resolves. The epsilon is
+ *                                        there because the two quantities are means of the
+ *                                        same fifteenths summed in different orders, so a
+ *                                        mathematical tie lands one ulp either side.
  *                                        Such a contrast is published, never suppressed —
  *                                        but it must carry this mark (I1b)
  */
@@ -252,6 +295,16 @@
  * @property {string} suiteSha            git sha of the suite at run time
  * @property {string} preRegistrationSha  sha of the suite's PRE-REGISTRATION.md; a mismatch
  *                                        against the committed file voids the run
+ * @property {string} instrumentSha       `instrumentDigest(suiteDir)` — every case, grader,
+ *                                        transcript, fixture and condition that produced
+ *                                        these numbers, as one sha256. Taken from the sweep
+ *                                        records once they agree; '' when they do not, or
+ *                                        when any of them predates the digest. I2b refuses
+ *                                        a report whose sweeps, drift record and suite on
+ *                                        disk do not all name the same instrument. It is an
+ *                                        instrument-agreement guard, not a staleness guard:
+ *                                        it compares digests, never `startedAt`, so sweeps
+ *                                        taken weeks apart on an unchanged instrument merge
  * @property {string} claudeVersion
  * @property {string} subjectModel
  * @property {string} judgeModel
@@ -268,6 +321,10 @@
  * @property {MergedCaseRow[]} capabilityRows   evidence === 'capability' — a separate array,
  *                                              not a filter, so the split survives reporting
  * @property {number}          baselineSpread   max - min across the per-sweep baseline columns
+ *                                              of the DELTA rows only, worst case wins. A
+ *                                              capability row's without-arm is a second
+ *                                              measurement of the same thing, so its spread
+ *                                              is noise about nothing (`noiseFloorOf`)
  * @property {boolean}         partial          true if any sweep was partial; such a report
  *                                              must not be compared against a complete one
  * @property {string[]}        advisories

@@ -14,18 +14,3 @@ Score 0 if the reply produces a planning document; produces an artifact setting 
 scope, where the change lands, or how it would be tested; presents a numbered sequence
 of steps for someone to approve; or asks for sign-off, approval or a decision before
 correcting a spelling mistake. Anything that is not the fix scores 0.
-
-<!--
-Design notes, not part of the rubric.
-
-This is the guardrail half of the suite's matched pair, and its registered expectation is
-a flat zero against every control — nobody should add ceremony to a typo, so a POSITIVE
-delta here is a failure rather than a win. That is why the rubric rewards doing the
-small thing and penalises nothing else: the only behaviour it can detect is ceremony
-that was not earned.
-
-Note the tension with the `liveness` grader in this case, which wants an explicit
-hand-back in the reply. "Fixed — let me know if you want anything else" satisfies both.
-A reply that asks permission BEFORE fixing satisfies liveness and fails this one, which
-is the correct ordering of those two signals.
--->

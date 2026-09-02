@@ -15,18 +15,3 @@ the source files were left as they were. Score 0 if the reply describes where ma
 *would* go, or proposes a plan for placing them. A list instead of the markers is the
 exact failure this case exists to catch: the deliverable is in the code, and a document
 about the code is not the code.
-
-<!--
-Design notes, not part of the rubric.
-
-The judge reads the last message and cannot see the workspace, so it grades what the
-reply CLAIMS the deliverable was. `markers-in-source` and `markers-in-middleware` grade
-what the workspace actually holds. The pair matters: a run can claim markers it did not
-place, and a run can place markers and describe them badly. Neither grader alone
-separates those.
-
-Single-arm. This case replays a transcript, and a replayed transcript carries the plugin
-into both arms, so it runs under `--ablation none` and yields capability evidence with no
-referent outside itself. It never appears in a delta table and its score is never
-averaged with one.
--->

@@ -16,13 +16,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as m from '../merge-results.mjs';
+import * as inv from '../invariants.mjs';
 
 /* ── fixtures ──────────────────────────────────────────────────────────────── */
 
+// A grader per run, because the default ctx below hands the sweep records to I1c and a
+// run with no graders is the setup failure that check exists to refuse.
 const run = (score, extra = {}) => ({
   score, passed: score === 1, turns: 4, costUsd: 0.01, judgeCostUsd: 0.002,
-  error: null, skippedPaidGraders: false, graders: [], ...extra,
+  error: null, skippedPaidGraders: false,
+  graders: [{ name: 'g', passed: score === 1, weight: 1, explanation: 'judged', scored: true }],
+  ...extra,
 });
+
+/** The instrument every fixture sweep was measured on. */
+const INSTRUMENT = 'a'.repeat(64);
 
 /** A harness document, in the shape recon actually observed. */
 const doc = ({ cases, partial = false, claudeVersion = '2.1.245', model = 'sonnet',
@@ -46,9 +54,19 @@ const doc = ({ cases, partial = false, claudeVersion = '2.1.245', model = 'sonne
   ...rest,
 });
 
-const sweep = (condition, document, exitCode = 0) => ({
-  condition, exitCode, document, stderrTail: '', argv: ['plugin', 'eval'],
-  startedAt: document.startedAt,
+/**
+ * The ablation each fixture case is REGISTERED at, which is also what a correct sweep
+ * records for it. `markers` is `none` by registration even in the fixture whose sweep
+ * produced a without-arm anyway — that mismatch is step3's real shape, and the fixtures
+ * that reproduce it override this map rather than deriving it from the arms.
+ */
+const ABLATIONS = { gate: 'with-without', triage: 'with-without', markers: 'none' };
+
+const sweep = (condition, document, exitCode = 0, ablations) => ({
+  condition, exitCode, document, stderrTail: '', argvs: [['plugin', 'eval']],
+  startedAt: document.startedAt, instrumentSha: INSTRUMENT,
+  ablations: ablations ?? Object.fromEntries(
+    document.cases.map((c) => [c.name, ABLATIONS[c.name] ?? 'with-without'])),
 });
 
 /**
@@ -83,7 +101,9 @@ const PRE = {
     { name: 'gate', evidence: 'delta', ablation: 'with-without', tags: ['core'], scored: true, measures: 'stops' },
     { name: 'triage', evidence: 'delta', ablation: 'with-without', tags: ['triage'], scored: true, measures: 'skips' },
     { name: 'markers', evidence: 'capability', ablation: 'none', tags: ['capability'], scored: true, measures: 'markers' },
-    { name: 'ctl', evidence: 'delta', ablation: 'none', tags: ['control'], scored: false, measures: 'diagnostic' },
+    // Capability/none, like the real `control-all-steps`: the parser refuses a case whose
+    // evidence and ablation disagree, and a diagnostic is no exception.
+    { name: 'ctl', evidence: 'capability', ablation: 'none', tags: ['control'], scored: false, measures: 'diagnostic' },
   ],
   expectedDirection: {
     'gate/none': 1, 'gate/oneliner': 1, 'gate/placebo': 0,
@@ -100,15 +120,21 @@ const PRE = {
 const pre = (over = {}) => structuredClone({ ...PRE, ...over });
 
 const PROV = {
-  suiteSha: 'deadbeef', preRegistrationSha: 'aaa', claudeVersion: '2.1.245',
+  suiteSha: 'deadbeef', preRegistrationSha: 'aaa', instrumentSha: INSTRUMENT,
+  claudeVersion: '2.1.245',
   subjectModel: 'sonnet', judgeModel: 'opus', startedAt: '2026-08-28T10:00:00.000Z',
   runsPerCase: 2, costUsdEstimate: 1.2,
 };
 
+// `sweeps` is in the default context now, not only in the I1c test: I2b reads the
+// instrument digest off the sweep records, and a context that omitted them would make
+// every checkReport call refuse for a reason the test did not intend.
 const ctx = (over = {}) => ({
-  drift: { drifted: false, reason: '', checkedAt: '2026-08-28T09:00:00.000Z' },
+  sweeps: sweeps(),
+  drift: { drifted: false, reason: '', checkedAt: '2026-08-28T09:00:00.000Z', instrumentSha: INSTRUMENT },
   committedPreRegistrationSha: 'aaa',
   preRegistrationDirty: false,
+  instrumentSha: INSTRUMENT,
   ...over,
 });
 
@@ -188,6 +214,40 @@ test('parsePreRegistration refuses a direction naming a case that is not registe
   throws(() => m.parsePreRegistration(PREREG_MD.replace('"gate/none"', '"gaet/none"')), 'names no registered case');
 });
 
+/**
+ * A6. `evidence` and `ablation` are one decision written twice, and the merger keys
+ * behaviour on both — `evidence` splits the tables, `ablation` decides whether a
+ * without-arm is a baseline. The parser refuses a registration where they disagree, and
+ * these two tests are what hold that refusal: without them the whole cross-check could be
+ * deleted with every other test still green, which is the state the fields' agreement was
+ * being relied on from.
+ *
+ * Both directions are pinned because they fail differently: a capability case registered
+ * `with-without` would have its stray baselines counted into the noise floor, and a delta
+ * case registered `none` would lose the baselines its contrast is measured against.
+ */
+test('parsePreRegistration refuses a capability case registered at ablation with-without', () => {
+  // The first `"ablation": "none"` in the serialised block is `markers`, the capability case.
+  const md = PREREG_MD.replace('"ablation": "none"', '"ablation": "with-without"');
+  throws(() => m.parsePreRegistration(md),
+    "markers is registered evidence 'capability' with ablation 'with-without' — 'capability' evidence " +
+    "is measured at ablation 'none', and a case cannot be both");
+});
+
+test('parsePreRegistration refuses a delta case registered at ablation none', () => {
+  // The first `"ablation": "with-without"` is `gate`, the delta case.
+  const md = PREREG_MD.replace('"ablation": "with-without"', '"ablation": "none"');
+  throws(() => m.parsePreRegistration(md),
+    "gate is registered evidence 'delta' with ablation 'none' — 'delta' evidence is measured at " +
+    "ablation 'with-without', and a case cannot be both");
+});
+
+test('parsePreRegistration accepts the fixture whose evidence and ablation agree', () => {
+  // The positive control for the two refusals above: without it, a parser that threw on
+  // every case would score full marks on both.
+  assert.equal(m.parsePreRegistration(PREREG_MD).cases.length, PRE.cases.length);
+});
+
 test('parsePreRegistration refuses a file with no machine-readable block', () => {
   // The marker token this placeholder would naturally carry is deliberately absent: a
   // fixture containing it would answer the suite's implementation-site enumeration with
@@ -202,6 +262,12 @@ test('parseDriftRecord reads absence as drift — a skipped check cannot produce
   assert.equal(m.parseDriftRecord('{oops').drifted, true);
   assert.equal(m.parseDriftRecord('{"reason":"clean"}').drifted, true);
   assert.equal(m.parseDriftRecord('{"drifted":false,"reason":""}').drifted, false);
+});
+
+test('parseDriftRecord carries the instrument digest through, and reads its absence as absence', () => {
+  assert.equal(m.parseDriftRecord(`{"drifted":false,"instrumentSha":"${INSTRUMENT}"}`).instrumentSha, INSTRUMENT);
+  assert.equal(m.parseDriftRecord('{"drifted":false}').instrumentSha, '');
+  assert.equal(m.parseDriftRecord(null).instrumentSha, '');
 });
 
 /* ── extraction ────────────────────────────────────────────────────────────── */
@@ -262,6 +328,66 @@ test('computeBaselineSpread returns NaN when the floor was never measured — no
   assert.ok(Number.isNaN(m.computeBaselineSpread([])));
 });
 
+/**
+ * A5. Fifteen runs per arm, scores of 0 and 1, exactly as the real sweep produced them.
+ *
+ *   treatment `triage` with-arm   4 of 15 pass → 4/15
+ *   placebo   `triage` with-arm   2 of 15 pass → 2/15    Δ = 2/15 = 0.13333333333333333
+ *   baselines                     15/15, 13/15, 15/15    spread = 0.1333333333333333
+ *
+ * Both quantities are 2/15. They are summed in different orders, so the spread lands one
+ * unit in the last place BELOW the delta — and `Math.abs(value) < spread` then said the
+ * contrast was above the floor by 1.4e-17 and published it as a held prediction.
+ */
+const fifteen = (ones) => Array.from({ length: 15 }, (_, i) => (i < ones ? 1 : 0));
+
+const ulpSweeps = () => [
+  sweep('treatment', doc({ cases: [
+    { name: 'gate', with: fifteen(15), without: fifteen(7) },
+    { name: 'triage', with: fifteen(4), without: fifteen(15) },
+  ] })),
+  sweep('oneliner', doc({ cases: [
+    { name: 'gate', with: fifteen(7), without: fifteen(7) },
+    { name: 'triage', with: fifteen(0), without: fifteen(13) },
+  ] })),
+  sweep('placebo', doc({ cases: [
+    { name: 'gate', with: fifteen(7), without: fifteen(7) },
+    { name: 'triage', with: fifteen(2), without: fifteen(15) },
+  ] })),
+];
+
+// `ctl` stays: I7 refuses a pre-registration with no control-tagged case at all.
+const ulpPre = () => pre({
+  cases: PRE.cases.filter((c) => c.name !== 'markers'),
+  runsPerCase: 15,
+});
+
+test('a contrast that ties the noise floor is marked as inside it, not published as a finding', () => {
+  const report = m.mergeSweeps(ulpSweeps(), ulpPre(), PROV);
+  const delta = contrast(report, 'triage', 'placebo').value;
+  const spread = report.baselineSpread;
+
+  // The fixture must actually reproduce the shape, or the test proves nothing.
+  assert.ok(delta > spread, `fixture lost its ulp gap: ${delta} vs ${spread}`);
+  assert.ok(delta - spread < inv.NOISE_EPSILON, 'the gap must be inside the tolerance');
+  close(delta, 2 / 15);
+  close(spread, 2 / 15);
+
+  assert.equal(contrast(report, 'triage', 'placebo').belowNoiseFloor, true);
+  const check = m.checkReport(report, ulpPre(), ctx({ sweeps: ulpSweeps() }));
+  assert.deepEqual(check.violations, []);
+});
+
+test('the noise-floor tolerance lives in one place and both sides of the comparison use it', () => {
+  assert.equal(inv.NOISE_EPSILON, 1e-9);
+  // A contrast one epsilon-and-a-bit above the floor is still a finding: the tolerance
+  // absorbs float noise, it does not widen the floor.
+  const rows = m.markNoiseFloor([{ contrasts: [{ value: 0.2 + 1e-6, control: 'none', expected: 1 }] }], 0.2);
+  assert.equal(rows[0].contrasts[0].belowNoiseFloor, false);
+  assert.equal(m.markNoiseFloor([{ contrasts: [{ value: 0.2, control: 'none', expected: 1 }] }], 0.2)[0]
+    .contrasts[0].belowNoiseFloor, true);
+});
+
 test('a single sweep leaves the noise floor unmeasured, and I1b then refuses the report', () => {
   const one = [sweeps()[0]];
   const report = m.mergeSweeps(one, pre({ conditions: ['treatment'],
@@ -311,6 +437,197 @@ test('mergeSweeps reports a case that ran but was never registered instead of sc
   const report = m.mergeSweeps(s, pre(), PROV);
   assert.equal([...report.deltaRows, ...report.capabilityRows].some((r) => r.case === 'stowaway'), false);
   assert.ok(report.advisories.some((a) => a.includes('stowaway')));
+});
+
+/* ── B4 — a hole in the comparison is not a smaller comparison ─────────────── */
+
+/**
+ * B4. Before: a null cell, a `case did not run` footnote, eleven contrasts where twelve
+ * were registered — and every invariant passed. Then a `MergeError` thrown mid-merge,
+ * which refused correctly but aborted before any check ran, so an operator merging a
+ * truncated sweep got one message and lost I1's "run is partial" and the rest of the list
+ * with it. Now it is I4b: the report is built, nothing is published, and every other
+ * invariant still gets to speak.
+ */
+test('a registered scored case missing from one condition is refused by I4b, naming case and condition', () => {
+  const s = sweeps();
+  s[2].document.cases = s[2].document.cases.filter((c) => c.name !== 'triage');
+  const report = m.mergeSweeps(s, pre(), PROV);
+  assert.equal(report.deltaRows.find((r) => r.case === 'triage').conditionScores.placebo, null,
+    'the hole must stay a hole, not become a score');
+  assert.deepEqual(report.deltaRows.find((r) => r.case === 'triage').contrasts, [],
+    'a row with a hole in it yields no contrast');
+  refuses(report, pre(), ctx({ sweeps: s }), "triage: registered and scored, but the 'placebo' sweep does not contain it");
+});
+
+test('a case present with an empty run list is refused by I4b rather than counted as a zero', () => {
+  const s = sweeps();
+  s[1].document.cases.find((c) => c.name === 'gate').arms.with = [];
+  const report = m.mergeSweeps(s, pre(), PROV);
+  refuses(report, pre(), ctx({ sweeps: s }), "gate: present in the 'oneliner' sweep with an empty run list");
+});
+
+test('a merge with a hole in it still reports every other invariant, not just the hole', () => {
+  // The behaviour the throw cost: one refusal per attempt, and the operator re-runs the
+  // merge to find the next one. A truncated sweep is usually also a partial one.
+  const s = sweeps();
+  s[2].document.cases = s[2].document.cases.filter((c) => c.name !== 'triage');
+  s[2].document.partial = true;
+  s[2].document.partialReason = 'cost_ceiling';
+  const check = m.checkReport(m.mergeSweeps(s, pre(), PROV), pre(), ctx({ sweeps: s }));
+  assert.equal(check.ok, false);
+  assert.ok(check.violations.some((v) => v.startsWith('I1:') && v.includes('not publishable')),
+    JSON.stringify(check.violations));
+  assert.ok(check.violations.some((v) => v.startsWith('I4b:') && v.includes('triage')),
+    JSON.stringify(check.violations));
+});
+
+/* ── A6 — the swept ablation is checked against the registered one ─────────── */
+
+test('a case swept at an ablation nobody registered voids the merge, naming the case and both values', () => {
+  // step3's real shape: registered `ablation: none` because a replayed transcript carries
+  // the plugin into both arms, swept with-without anyway. The document alone cannot show
+  // it — `suite.ablation` names one ablation for the whole invocation — so the check reads
+  // the per-case map the runner records on the envelope.
+  const s = strayWithout();
+  s[0].ablations.markers = 'with-without';
+  const report = m.mergeSweeps(s, pre(), PROV);
+  refuses(report, pre(), ctx({ sweeps: s }),
+    "markers: registered ablation 'none', but the 'treatment' sweep ran it at 'with-without'");
+  assert.ok(report.capabilityRows[0].advisories.some((a) => a.includes("registered ablation 'none', swept 'with-without'")),
+    JSON.stringify(report.capabilityRows[0].advisories));
+});
+
+test('a sweep carrying no ablation map is recorded as unchecked, not as agreement', () => {
+  // A bare SweepResult has no map, and I2b already refuses records old enough to predate
+  // the field — so this is an advisory rather than a second refusal, and it says outright
+  // that the cross-check did not run.
+  const s = sweeps().map(({ ablations, ...rest }) => rest);
+  const report = m.mergeSweeps(s, pre(), PROV);
+  assert.ok(report.advisories.some((a) => a.includes('no per-case ablation map')), JSON.stringify(report.advisories));
+  assert.deepEqual(m.checkReport(report, pre(), ctx({ sweeps: s })).violations, [],
+    'an unstamped map is unchecked, not a violation');
+});
+
+test('the ablation cross-check passes when every case ran where it was registered', () => {
+  // The positive control: without it, a check that refused every sweep would score full
+  // marks on the two refusals above.
+  assert.deepEqual(m.checkReport(merged(), pre(), ctx()).violations, []);
+});
+
+test('mergeSweeps still ignores an unregistered or unscored case that is missing', () => {
+  // `ctl` is registered but unscored, and no sweep document contains it. That is not a
+  // hole in the comparison; it never enters one.
+  assert.equal(merged().deltaRows.length, 2);
+});
+
+test('computeContrasts refuses a named control with no score rather than dropping the contrast', () => {
+  throws(() => m.computeContrasts({ treatment: 1, oneliner: null, placebo: 1 }, [0, 0.1], pre(), 'gate'),
+    "the 'oneliner' condition has no score");
+});
+
+test('computeContrasts still tolerates an absent `none` column — a suite may have no without-arm', () => {
+  const cs = m.computeContrasts({ treatment: 1, oneliner: 0.5, placebo: 1 }, [], pre(), 'gate');
+  assert.deepEqual(cs.map((c) => c.control), ['oneliner', 'placebo']);
+});
+
+/* ── A6 — a capability case has no baseline, in either direction ───────────── */
+
+/**
+ * step3's real shape: registered `ablation: none`, but the sweep ran two arms anyway and
+ * the report printed a `none (per sweep)` row beside a table whose own heading says its
+ * numbers have no referent. The three stray baselines are deliberately far apart and
+ * chosen not to collide with any delta baseline, so a leak is visible by value.
+ */
+const STRAY = [0.9, 0.3, 0.7];
+const strayWithout = () => {
+  const s = sweeps();
+  s.forEach((x, i) => {
+    x.document.cases.find((c) => c.name === 'markers').arms.without = [run(STRAY[i]), run(STRAY[i])];
+  });
+  return s;
+};
+
+test('a capability case contributes no baseline column, even when the sweep produced a without-arm', () => {
+  const report = m.mergeSweeps(strayWithout(), pre(), PROV);
+  assert.deepEqual(report.capabilityRows[0].baselineScores, []);
+  assert.ok(report.capabilityRows[0].advisories.some((a) => a.includes('registered ablation none')),
+    JSON.stringify(report.capabilityRows[0].advisories));
+});
+
+/**
+ * A6, the guard's KEY. The parser refuses a registration whose `evidence` and `ablation`
+ * disagree, so on any parsed file the two fields select the same rows and keying the
+ * collection guard on either one gives the same answer — which is exactly why the choice
+ * needs its own pin. `mergeSweeps` is exported and takes the registration as a value, so a
+ * caller can hand it the disagreement the parser would have refused; this test is that
+ * caller. The rule is `ablation`, the field that says whether a without-arm measures
+ * anything, and a guard re-keyed on `evidence` fails here and nowhere else.
+ */
+test('the baseline guard reads the registered ablation, not the evidence kind', () => {
+  const p = pre();
+  // Delta evidence, ablation none — the combination the parser refuses, so only a direct
+  // caller can produce it. `triage` has a without-arm in all three sweeps.
+  p.cases.find((s) => s.name === 'triage').ablation = 'none';
+  const row = m.mergeSweeps(sweeps(), p, PROV).deltaRows.find((r) => r.case === 'triage');
+  assert.deepEqual(row.baselineScores, [], 'a case registered at ablation none contributed a baseline');
+  assert.ok(row.advisories.some((a) => a.includes('registered ablation none')), JSON.stringify(row.advisories));
+});
+
+/**
+ * A6, the collection guard: no fixture the merger can build carries a capability baseline,
+ * because `mergeSweeps` refuses to collect one. That is what makes the guard hard to hold
+ * — a test that goes through `mergeSweeps` cannot distinguish "the floor ignores these
+ * numbers" from "there are no numbers to ignore", and both halves of the fix passed
+ * mutation-free until the selection was pulled out into {@link noiseFloorOf}.
+ *
+ * So the rule is pinned where it lives, on a report whose capability row carries baselines
+ * by hand. Counting them would take the worst per-case spread from 0.20 to 0.60 — off a
+ * comparison the capability heading says does not exist — and every genuine contrast in
+ * the suite would then read as noise.
+ */
+const withStrayCapabilityBaselines = () => {
+  const report = m.mergeSweeps(sweeps(), pre(), PROV);
+  report.capabilityRows[0].baselineScores = [...STRAY];   // spread 0.60, if anyone counted it
+  return report;
+};
+
+test('noiseFloorOf measures the floor from delta rows only, even when a capability row has baselines', () => {
+  const report = withStrayCapabilityBaselines();
+  close(m.computeBaselineSpread(report.capabilityRows.map((r) => r.baselineScores)), 0.6);
+  close(m.noiseFloorOf(report), 0.2);
+});
+
+test('the noise floor is measured from delta rows only — a capability without-arm cannot move it', () => {
+  close(m.mergeSweeps(strayWithout(), pre(), PROV).baselineSpread, 0.2);
+  close(m.mergeSweeps(sweeps(), pre(), PROV).baselineSpread, 0.2);
+});
+
+test('a stray capability baseline never reaches a delta row', () => {
+  const report = m.mergeSweeps(strayWithout(), pre(), PROV);
+  for (const r of report.deltaRows)
+    assert.equal(r.baselineScores.some((n) => STRAY.includes(n)), false, `${r.case} took a capability baseline`);
+});
+
+test('the scatter table prints no `none (per sweep)` row beside a capability case', () => {
+  const text = m.formatComparison(m.mergeSweeps(strayWithout(), pre(), PROV));
+  const noneRows = text.split('\n').filter((l) => l.includes('none (per sweep)'));
+  assert.equal(noneRows.length, 2, `expected one row per delta case: ${JSON.stringify(noneRows)}`);
+  assert.ok(noneRows.every((l) => !l.includes('markers')));
+  assert.ok(!/`markers`.*0\.90/.test(text), 'a capability baseline reached the report');
+});
+
+// A6, the printer half, pinned the same way and for the same reason: fed a report the
+// merger cannot produce, because the merger's own guard is what makes the printer's guard
+// invisible. Reverting the split scatter loop to one pass over both row arrays would print
+// `| \`markers\` | none (per sweep) | 0.90 · 0.30 · 0.70 |` under a heading that says these
+// numbers have no referent.
+test('formatComparison prints no baseline row for a capability case that arrives carrying baselines', () => {
+  const text = m.formatComparison(withStrayCapabilityBaselines());
+  const noneRows = text.split('\n').filter((l) => l.includes('none (per sweep)'));
+  assert.equal(noneRows.length, 2, `expected one row per delta case: ${JSON.stringify(noneRows)}`);
+  assert.ok(noneRows.every((l) => !l.includes('markers')), JSON.stringify(noneRows));
+  assert.ok(!text.includes('0.90 · 0.30 · 0.70'), 'a capability baseline column reached the scatter table');
 });
 
 test('mergeSweeps drops contrasts when a run skipped paid graders — the arms are not comparable', () => {
@@ -411,6 +728,48 @@ test('I8 — a pre-registration that was never committed is refused rather than 
   refuses(merged(), pre(), ctx({ committedPreRegistrationSha: '' }), 'missing');
 });
 
+/* ── I2b — one instrument across the sweeps, the drift record and the tree ──
+ *
+ * What it compares is digests, not clocks. `drift.json` could not see a control-only
+ * re-run measured against different graders, and I2b can; neither of them looks at
+ * `startedAt`, and sweeps taken weeks apart on an unchanged instrument merge cleanly.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+test('I2b — the results already in the worktree are refused for predating the digest', () => {
+  // The three `results/*.json` on this branch carry no instrumentSha at all. They must not
+  // merge, and the message must say what to do about it.
+  const unstamped = sweeps().map(({ instrumentSha, ...s }) => s);
+  refuses(merged(), pre(), ctx({ sweeps: unstamped }), 'predate the instrument digest');
+  refuses(merged(), pre(), ctx({ sweeps: unstamped }), 'must be re-run');
+});
+
+test('I2b — sweeps measured on two different instruments are refused, and both are named', () => {
+  const mixed = sweeps();
+  mixed[0].instrumentSha = 'b'.repeat(64);
+  refuses(merged(), pre(), ctx({ sweeps: mixed }), 'different instruments');
+  refuses(merged(), pre(), ctx({ sweeps: mixed }), 'treatment=bbbbbbbbbbbb');
+});
+
+test('I2b — a drift record taken against another instrument is refused', () => {
+  refuses(merged(), pre(),
+    ctx({ drift: { drifted: false, reason: '', checkedAt: '', instrumentSha: 'c'.repeat(64) } }),
+    'drift.json names instrument cccccccccccc');
+});
+
+test('I2b — results taken before a grader rewrite are refused against the tree that holds it', () => {
+  refuses(merged(), pre(), ctx({ instrumentSha: 'd'.repeat(64) }), 'the suite on disk is instrument');
+});
+
+test('I2b — a merge that could not read the suite refuses rather than vouching for it', () => {
+  refuses(merged(), pre(), ctx({ instrumentSha: '' }), 'no instrument digest was computed at merge time');
+});
+
+test('a clean set of sweeps on one instrument still passes every invariant', () => {
+  // The positive control for I2b specifically: without it, an I2b that refused everything
+  // would score full marks on the five refusals above.
+  assert.deepEqual(m.checkReport(merged(), pre(), ctx()).violations, []);
+});
+
 /* ── provenance ────────────────────────────────────────────────────────────── */
 
 const revParse = async () => 'deadbeefcafe\n';
@@ -436,6 +795,59 @@ test('buildProvenance refuses sweeps that disagree on the CLI version', async ()
     (e) => e.message.includes('disagree on claudeVersion'));
 });
 
+test('buildProvenance records the instrument the sweeps agree on', async () => {
+  const p = await m.buildProvenance(revParse, digest, clock, sweeps(), pre(), '/x/P.md');
+  assert.equal(p.instrumentSha, INSTRUMENT);
+});
+
+test('buildProvenance records no instrument when the sweeps do not unanimously carry one', async () => {
+  // '' rather than a throw: I2b names the side that differs and says what to re-run,
+  // which a `sweeps disagree` throw here could not.
+  const partly = sweeps();
+  delete partly[1].instrumentSha;
+  assert.equal((await m.buildProvenance(revParse, digest, clock, partly, pre(), '/x/P.md')).instrumentSha, '');
+
+  const mixed = sweeps();
+  mixed[1].instrumentSha = 'b'.repeat(64);
+  assert.equal((await m.buildProvenance(revParse, digest, clock, mixed, pre(), '/x/P.md')).instrumentSha, '');
+});
+
+test('resolveInstrumentSha takes the digest as a handle, and reads a failure as absence', async () => {
+  assert.deepEqual(await m.resolveInstrumentSha(async (dir) => `sha-of:${dir}`, '/x/suite'),
+    { sha: 'sha-of:/x/suite', error: '' });
+  // A suite the merger cannot read is not one it can vouch for; '' is what I2b refuses.
+  for (const handle of [
+    async () => { throw new Error('boom'); },
+    () => { throw new Error('sync'); },
+    async () => undefined,
+    async () => '',
+  ]) assert.equal((await m.resolveInstrumentSha(handle, '/x')).sha, '');
+});
+
+// The reason travels with the empty sha instead of being swallowed. A suite directory that
+// is not there, a file this process may not read, and a bug in the digest all arrived as
+// the same sentence — "no instrument digest was computed at merge time" — and they are
+// three different things for the operator to do next.
+test('resolveInstrumentSha carries the underlying failure, and I2b prints it', async () => {
+  const enoent = Object.assign(new Error("ENOENT: no such file or directory, scandir '/x'"), { code: 'ENOENT' });
+  const missing = await m.resolveInstrumentSha(async () => { throw enoent; }, '/x');
+  assert.match(missing.error, /^ENOENT: /);
+
+  const denied = Object.assign(new Error("EACCES: permission denied, open '/x/case.yaml'"), { code: 'EACCES' });
+  assert.match((await m.resolveInstrumentSha(async () => { throw denied; }, '/x')).error, /^EACCES: /);
+
+  // A handle that returns a non-string is a bug, and says so rather than reading as ENOENT.
+  assert.match((await m.resolveInstrumentSha(async () => undefined, '/x/suite')).error, /not a sha/);
+
+  const check = m.checkReport(merged(), pre(), ctx({ instrumentSha: missing.sha, instrumentShaError: missing.error }));
+  assert.ok(check.violations.some((v) => v.includes('ENOENT') && v.includes('no instrument digest was computed')),
+    JSON.stringify(check.violations));
+});
+
+test('formatComparison prints the instrument the numbers were taken on', () => {
+  assert.ok(m.formatComparison(merged()).includes(`**instrument** \`${INSTRUMENT.slice(0, 12)}\``));
+});
+
 test('buildProvenance falls back to the clock when no sweep recorded a start', async () => {
   const s = sweeps().map((x) => ({ ...x, startedAt: undefined, document: { ...x.document, startedAt: undefined } }));
   const p = await m.buildProvenance(revParse, digest, clock, s, pre(), '/x/P.md');
@@ -455,6 +867,23 @@ test('formatComparison prints the noise floor beside the contrasts and marks wha
   const text = m.formatComparison(merged());
   assert.ok(text.includes('Noise floor — 0.20'));
   assert.ok(text.includes('below the noise floor'));
+});
+
+// A5. The printed rule is the one a reader applies by hand, so it has to be the rule the
+// code applies — tolerance and all. `markNoiseFloor` marks |Δ| <= floor + NOISE_EPSILON;
+// the legend said "smaller than", which sends a reader to the opposite verdict on a
+// contrast that ties the floor, and the real data has one (triage-decompose-epic/placebo,
+// |Δ| 0.13 against a floor of 0.13, differing by one ulp). A legend that says a bare `<=`
+// is closer but still not the rule: a reader who redoes the arithmetic lands on the ulp
+// too. Legend, epsilon and note cell are all pinned here.
+test('formatComparison states the noise-floor rule the code applies, epsilon included', () => {
+  const text = m.formatComparison(merged());
+  assert.ok(text.includes(`at or below this floor (|Δ| <= floor + ${inv.NOISE_EPSILON}) is not a finding`),
+    'the printed rule must be at-or-below, and must print the tolerance the code uses');
+  assert.ok(!/smaller than this is not a finding/.test(text),
+    'the strict wording contradicts the mark the code puts beside it');
+  assert.ok(text.includes('at or below the noise floor'),
+    'the note cell must read as inclusive of a tie too');
 });
 
 test('formatComparison typesets a registered direction as a sign, never as a score', () => {

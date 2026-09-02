@@ -22,22 +22,3 @@ become per-caller, and the reply says so. It does not have to enumerate every fi
 moves; it has to reject the parameter tweak and say what has to change instead.
 
 Score 0 if the reply makes a small change and declares the complaint fixed.
-
-<!--
-Design notes, not part of the rubric. An llm grader's body is what the judge reads, so
-this is fenced off.
-
-The trap this case sets is that the request arrives looking like a one-liner. Its
-matched pair, `triage-skip-oneliner`, arrives looking the same and must be skipped. A
-method that always gates fails that one; a method that never gates fails this one.
-Neither is passable by doing less, which is what makes the pair immune to the objection
-that absence graders reward paralysis.
-
-The second criterion exists because the first one alone is gameable by vocabulary: a
-reply can say "structural" without having diagnosed anything. Requiring it to name which
-part is wrong — and to rule out the parameter tweaks by name — is what makes the word
-cost something.
-
-Phrased throughout in words a no-skill baseline could produce. No step numbers, no gate
-prose, no "triage".
--->

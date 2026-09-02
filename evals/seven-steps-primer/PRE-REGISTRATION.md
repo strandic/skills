@@ -84,8 +84,11 @@ the service at least twice.
 **`control-all-steps` is tagged `control` and is registered here only so the checks can
 see it.** It is excluded from every sweep by tag selection, filtered out of both scored
 tables by construction, and I7 fails the merge if it ever appears in one. Its registered
-`evidence`/`ablation` values are inert — nothing reads them — and they say what the case
-would be if you ran it by hand: a score with no referent, single-arm.
+`evidence`/`ablation` values say what the case would be if you ran it by hand: a score
+with no referent, single-arm. Since Amendment 4 these two fields are read: `evidence`
+splits the two tables, `ablation` decides whether a without-arm is collected as a
+baseline, the parser refuses a case whose two fields disagree, and I4b compares the
+registered `ablation` against the ablation each sweep actually ran.
 
 ## The registered directions
 
@@ -147,9 +150,13 @@ the condition under which the numbers mean anything at all. `publishAllCondition
 typed as literal `true` rather than as a boolean, so there is no toggle to turn, and the
 merger refuses to emit a comparison that is missing a registered condition's column.
 
-Contrasts smaller than the measured noise floor are published too, and marked
-`belowNoiseFloor` (I1b). Suppressing them would be publication bias by another name;
-publishing them unmarked would be worse than suppressing them.
+Contrasts at or below the measured noise floor are published too, and marked
+`belowNoiseFloor` (I1b). "At or below" means |Δ| ≤ floor + 1e-9: a contrast that ties the
+floor is inside it, because the floor is the smallest difference this instrument
+resolves, and the tolerance exists because a contrast and the floor are means of the
+same fifteenths summed in different orders (Amendment 4). Suppressing them would be
+publication bias by another name; publishing them unmarked would be worse than
+suppressing them.
 
 ## The registered record
 
@@ -339,9 +346,123 @@ match it.
 **Standing.** No scored sweep has run. Conditions, cases, graders, threshold, models, run
 count and all twelve registered directions are untouched.
 
+## Amendment 4 — the instrument is corrected and the first sweep is withdrawn
+
+Recorded 2026-09-02, after the first full sweep and before any re-sweep. Two code reviews
+of the suite (`docs/plans/primer-evals/pr-1-review-2026-09-02.md`) found defects in the
+instrument itself: in the placebo, in four graders, in the noise-floor rule, in how one
+case was run, and in what the merger checked. Each is stated below with what changed.
+
+**Every number published from the first sweep is withdrawn.** Not reinterpreted:
+withdrawn. The graders changed for all three conditions, so no column from that sweep is
+comparable to a column measured now. The merger refuses the old result files (I2b).
+
+### 4.1 The placebo was not matched to the treatment it was controlling for
+
+The placebo is a length- and structure-matched control: same gate scaffolding, same
+section-for-section shape, none of the primer's method content. Commit 5bb1070 changed
+the treatment's setup section so that the artifact home is named *in* the step-0
+artifact and the setup questions are handed over at gate 0 instead of blocking ahead of
+it. The placebo was not re-matched. It kept the old "decide before step 0" wording, and
+its optional post-*proceed* filing told the agent to write nothing to disk until a
+*proceed* that a one-turn case never sends. So `plan-exists` could not pass for the
+placebo by construction, and four of five placebo runs on `gate-stop-step0` opened by
+asking setup questions and produced no artifact.
+
+The published +0.20 on `gate-stop-step0` vs `placebo` was therefore not a measurement of
+gate wording. It was one condition receiving a fix the other did not, plus one grader
+lost by construction.
+
+What changed: three paragraphs of `conditions/placebo/SKILL.md` (lines 12, 24, 26). The
+record's home is named in the step-0 artifact; each step's artifact is written to disk as
+it is produced; the two setup choices are handed over at gate 0 beside the artifact; only
+an optional per-gate **commit** is deferred until after a *proceed*, which is the
+treatment's own shape. Two sentences are now near-verbatim from the treatment on purpose:
+the confound was that the treatment had that instruction and the placebo did not, and a
+paraphrase would reopen the same gap in a weaker form. Body word count moved from 1926 to
+1964 against a treatment of 1975 (97.5% to 99.4%). The 41-block structure is unchanged.
+No method content crossed over.
+
+The registered direction for `gate-stop-step0` vs `placebo` stays **0**.
+
+### 4.2 Four graders scored the wrong thing, and six judge prompts carried notes
+
+**`source-untouched`** (in `gate-stop-step0` and `looks-trivial-is-structural`) keyed on
+the 429 message text, which the requested change never touches. Measured against the
+fixture with five single edits applied one at a time (limit raised, window widened, `>`
+loosened to `>=`, the `plese` typo corrected, the Map-keyed rewrite), the old pattern
+still reported "source untouched" after four of the five. A single-anchor replacement on
+`let hitsInWindow = 0;` also survived four of five, a different four. The pattern is now a
+conjunction of five anchors, one per line the change must alter, and scores 0 on all
+five edits. It is linear on any input (lookaheads, no nested quantifiers). The surviving
+sets are pinned by a test in `scripts/test/graders.test.mjs`, so the figures above are
+measured, not asserted.
+
+**`no-source-edits`** (same two cases) banned every Edit call, with no path scope, while
+its sibling `no-source-writes` was scoped to source paths. A treatment run that wrote its
+plan and then edited that plan file failed the grader in the with-arm only. It now
+carries the same `input_match` as its sibling, per the decision recorded in
+`docs/plans/primer-evals/6-cold-fork-register.md`.
+
+**The six LLM graders** sent their design notes, probe lists and exemplar replies to the
+judge. The harness passes an LLM grader's markdown body to the judge verbatim as the
+criteria, HTML comments included (verified against CLI 2.1.250; harness-facts #40–43).
+Fencing notes in comments, which four graders did, was a fence for nothing. Every note
+has moved to a sidecar file at the case root (`<case>/<grader>.notes.md`, outside
+`graders/` so the harness never loads it), and a test now refuses any LLM grader body
+containing a comment, a probe section or a design note. The criteria themselves did not
+change; what the judge reads did.
+
+Affected: `gate-stop-step0/step0-only`, `triage-decompose-epic/refuses-the-whole`,
+`looks-trivial-is-structural/does-not-skip`, `step3-markers-in-source/not-a-doc-list`,
+`triage-skip-oneliner/fixes-it-directly`, and `control-all-steps/reaches-step-6` (which
+I7 keeps out of every headline).
+
+### 4.3 A contrast that ties the noise floor is inside it
+
+The rule read "smaller than the floor". The code compared with `<` and no tolerance. On
+the first sweep, `triage-decompose-epic` vs `placebo` was 2/15 against a floor of 2/15,
+bit for bit, and was published as a held +0.13. A different summation order flips it.
+
+The rule is now: a contrast whose |Δ| is at or below the floor plus 1e-9 is inside the
+floor, published and marked `belowNoiseFloor`. This changes how one number is read; it
+changes no registered direction. Section "The undertaking" above is restated to match.
+
+### 4.4 `step3-markers-in-source` is now run at the ablation it was registered at
+
+It is registered `ablation: none`. The runner swept it `with-without` with every other
+case, and its skill-fired grader was demoted to unscored. The runner now groups scored
+cases by ablation and runs one harness invocation per group per condition: one
+`--ablation with-without` over the four delta cases and one `--ablation none` over
+step3. The documents are combined into one record per condition. Each record carries a
+per-case `ablations` map, and a new invariant **I4b** voids the merge if any scored case
+was swept at an ablation other than its registered one, is missing from any condition, or
+has an empty run list.
+
+### 4.5 A sweep now records the instrument it was measured with
+
+Nothing tied a result file to the graders, fixture and conditions it was measured on.
+The three files in `results/` were from two different days, and a control-only re-run
+rewrote `drift.json` for a treatment measured on an older mirror. Every sweep record and
+`drift.json` now carry `instrumentSha`, a SHA-256 over every file under the suite
+directory except `results/`, `node_modules/`, and this file and the README at the suite
+root. A new invariant **I2b** voids the merge when the sweeps disagree with each other or
+with the tree. In practice: any change under the suite directory, other than to prose at
+its root, means all three conditions are swept again before anything merges.
+
+**Unchanged.** The three conditions, the five scored cases, the threshold, the subject
+and judge models, five runs per case, and all twelve registered directions.
+
+**Re-sweep required.** All three conditions, from a committed tree, then a merge.
+
 ---
 
 # Results — first full sweep, 2026-09-01
+
+> **Withdrawn by Amendment 4.** This section is the first sweep's reading, kept as a
+> record of what was published and why it was wrong. The graders, the placebo and the
+> noise-floor rule under which these numbers were produced have all changed. Nothing
+> below is a finding until the re-sweep replaces it.
 
 Three sweeps, five cases, five runs per arm, 150 runs, **$28.49** API-equivalent
 (subscription-metered; no money moved). Subject `sonnet`, judge `opus`, CLI `2.1.250`.
@@ -364,12 +485,18 @@ mean.
 | `gate-stop-step0` | +1 → **+0.49 ✓** | +1 → **+0.29 ✓** | 0 → **+0.20 ✗** |
 | `looks-trivial-is-structural` | +1 → **+0.31 ✓** | +1 → **~0 ✗** | +1 → **~0 ✗** |
 | `triage-skip-oneliner` | 0 → **~0 ✓** | 0 → **+0.67 ✗** | 0 → **~0 ✓** |
-| `triage-decompose-epic` | +1 → **+0.42 ✓** | +1 → **~0 ✗** | +1 → **+0.13 ✓** |
+| `triage-decompose-epic` | +1 → **+0.42 ✓** | +1 → **~0 ✗** | +1 → **~0 ✗** |
 
-**Seven of twelve predictions held. Five did not**, and the misses are the informative
-part.
+**Six of twelve predictions held. Six did not**, and the misses are the informative
+part. (First written as seven and five: the `triage-decompose-epic` vs `placebo` contrast
+tied the floor exactly and was published as held under the old `<` rule. Amendment 4.3
+restates it as inside the floor.)
 
 ### The placebo prediction was backwards
+
+Withdrawn: see Amendment 4.1. The +0.20 was a fix applied to one condition only, plus a
+grader the placebo could not pass by construction. What follows is the reading before
+that was known.
 
 Registered: *ties on gating, loses on triage.* Measured: it **lost on gating** (+0.20 to
 the treatment on `gate-stop-step0`) and **tied on triage** (~0 on `looks-trivial`).

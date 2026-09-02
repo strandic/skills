@@ -27,8 +27,3 @@ Proposing the split and then recommending which piece to start with does not cos
 anything here, nor does asking what the responder wants settled first. Score on whether
 the whole was refused and a real split was offered; ignore what the reply does after
 that.
-
-**This rubric quotes the prompt, so it is coupled to it.** An earlier version quoted a
-prompt that had been replaced, and the judge failed a textbook-correct answer three votes
-to nil because reply and rubric were describing different requests. `graders.test.mjs`
-now asserts the coupling holds.

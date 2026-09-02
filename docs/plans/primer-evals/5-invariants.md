@@ -13,10 +13,13 @@ Artifacts: `scripts/invariants.mjs` (the checks) and
 | # | Invariant | Enforcement |
 |---|---|---|
 | **I1** | A run must be **complete** to be publishable. | `partial: true` fails. |
-| **I1b** | A contrast **below the noise floor is still published** — but marked. | Every sub-spread contrast must carry `belowNoiseFloor`. |
-| **I2** | A run is **void** on any of: dirty or mismatched pre-registration, drifted treatment condition, changed subject model, changed CLI version. | All four compared against the pre-registered values. |
+| **I1b** | A contrast **at or below the noise floor is still published** — but marked. | Every contrast with \|Δ\| ≤ spread + 1e-9 must carry `belowNoiseFloor`; a tie is inside the floor. |
+| **I1c** | A sweep with a run that produced no graders, or a grader that threw, is **not publishable**, whatever `partial` says. | Every run in every case is checked. |
+| **I2** | A run is **void** on any of: dirty or mismatched pre-registration, drifted treatment condition, changed subject model, changed CLI series, sweeps on different CLIs. | Compared against the pre-registered values and across the merged sweeps. |
+| **I2b** | The merged sweeps were measured with **one instrument, the one in the tree**. | Every sweep record and `drift.json` carry `instrumentSha`; all must agree with each other and with the digest of the suite directory at merge time. |
 | **I3** | The claim ceiling is a **hard rule**. | Tripwire: the ceiling sentence must be present verbatim, and the claims section may not change while the pre-registration digest does not. |
 | **I4** | Delta and capability evidence are **never mixed**, and no combined mean is emitted. | Row kinds checked against expected counts; an `overallScore` field is itself a violation. |
+| **I4b** | Every registered scored case was **measured in every condition, at its registered ablation**. | Each sweep's per-case `ablations` map is compared to the registration; a missing case or an empty run list is a violation, reported with the rest. |
 | **I5** | A grader may not ship without **complete** probes. | Both halves required — at least one must-match *and* one must-not-match. |
 | **I6** | An **absence claim needs content evidence**. | Every absence case must carry a `{source: file}` grader; tool-name graders alone fail. |
 | **I7** | A **control-tagged case never reaches a headline**. | It may not appear in either scored table. |

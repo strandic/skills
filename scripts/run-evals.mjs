@@ -27,14 +27,18 @@
 /** @import { ConditionId, CaseSpec, EvalInvocation, SweepResult, SweepRecord,
  *            DriftRecord, SuitePaths } from './types.mjs' */
 /** @import { ReadTextFile, WriteTextFile, CopyDirectory, SpawnCapture, Clock,
- *            EvalCommand, ResultsLocator } from './interfaces.mjs' */
+ *            EvalCommand } from './interfaces.mjs' */
 
 import { readFile, writeFile, mkdir, readdir, cp, rm } from 'node:fs/promises';
-import { homedir } from 'node:os';
+// Synchronous, and only for the signal handler: a handler that calls `process.exit`
+// gives no turn to a promise, so the async `removeDirectory` would never run.
+import { rmSync } from 'node:fs';
+import { homedir, constants as osConstants } from 'node:os';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { check as checkDrift, paths as mirrorPaths } from './build-conditions.mjs';
+import { instrumentDigest } from './instrument.mjs';
 
 /** Raised by a pure function that refuses its input, or by the loop before it spends. */
 export class RunError extends Error {
@@ -151,6 +155,17 @@ export function buildEvalArgv(inv) {
     bad('buildEvalArgv: the judge is the subject — same-model self-preference is the ' +
       'confound the judge pin exists to avoid');
 
+  // `--case` and `--tag` are never passed together, because how the harness combines
+  // them is not known. Recon passed exactly one `--case` and never with `--tag`
+  // (4-recon.md § seam 1; 6-cold-fork-register.md records both as underdetermined). If
+  // they OR, a `--case`-scoped invocation silently readmits every tagged case — the
+  // `ablation: none` invocation would run all five cases at the wrong ablation and the
+  // split would be undone. Refusing here means no code path can depend on the answer.
+  if ((inv.caseGlobs ?? []).length > 0 && (inv.tagFilters ?? []).length > 0)
+    bad('buildEvalArgv: --case and --tag in one invocation — how the harness combines them ' +
+      'is undetermined (OR would readmit every tagged case, including the control), so an ' +
+      'invocation scoped by name carries no tag filter');
+
   const variadic = (flag, values) => {
     for (const v of values) {
       if (typeof v !== 'string' || v === '') bad(`${flag}: an empty value`);
@@ -186,7 +201,7 @@ export function buildEvalArgv(inv) {
     // NO `--json`. It suppresses every progress line, and a sweep you cannot watch is
     // one you cannot diagnose — worth dropping on its own, since the harness writes
     // aggregate-result.json into `<eval-dir>/results/<timestamp>/` regardless and that
-    // is the path ResultsLocator reads. `--json` was only ever the fallback.
+    // is the path the results snapshot reads. `--json` was only ever the fallback.
     //
     // It was NOT, however, the cause of the killed sweeps, and an earlier version of
     // this comment said it was. Four attempts: 41m killed, 34m killed, ~34m completed,
@@ -248,8 +263,29 @@ export function selectAllowTools(cases) {
 }
 
 /**
+ * Does a `--case` selector name this case? `*` and `?` are the only metacharacters
+ * assumed; everything else is matched literally, so an exact name is the common path.
+ *
+ * @param {string} glob
+ * @param {string} name
+ */
+const globMatches = (glob, name) =>
+  new RegExp(`^${glob.replace(/[.*+?^${}()|[\]\\]/g, (c) => (c === '*' ? '.*' : c === '?' ? '.' : `\\${c}`))}$`)
+    .test(name);
+
+/**
  * One sweep's invocation, assembled from what the suite declares plus the operator's
  * overrides. Pure, so the whole command line is decided before anything is spawned.
+ *
+ * Two ways of selecting cases, never both (see `buildEvalArgv`):
+ *
+ *   - no `caseGlobs` — the recon-verified shape: `--tag` names every scored tag and the
+ *     control case is kept out by not being named.
+ *   - `caseGlobs` — the per-ablation split. `--tag` is DROPPED, because an OR between the
+ *     two would readmit the cases the split exists to separate. The tag filter's job
+ *     (keep the control out) is then done by the names themselves, so the names are
+ *     checked here: one that selects a control case, or that selects no discovered case
+ *     at all, is refused rather than swept.
  *
  * @param {ConditionId} condition
  * @param {SuitePaths} paths
@@ -258,6 +294,17 @@ export function selectAllowTools(cases) {
  * @returns {EvalInvocation}
  */
 export function invocationFor(condition, paths, cases, overrides = {}) {
+  const globs = overrides.caseGlobs ?? [];
+  if (globs.length > 0) {
+    const readmitted = globs.filter((g) => (cases ?? []).some((c) => !c.scored && globMatches(g, c.name)));
+    if (readmitted.length > 0)
+      bad(`invocationFor: --case ${readmitted.join(', ')} selects a control case, and a name-scoped ` +
+        'invocation carries no --tag filter to keep it out — the diagnostic would run and eat the budget');
+    const unmatched = globs.filter((g) => !(cases ?? []).some((c) => globMatches(g, c.name)));
+    if (unmatched.length > 0)
+      bad(`invocationFor: --case ${unmatched.join(', ')} matches no discovered case — the invocation ` +
+        'would sweep less than it says, which is a shorter run rather than an error');
+  }
   return {
     condition,
     suiteDir: paths.suiteDir,
@@ -268,7 +315,7 @@ export function invocationFor(condition, paths, cases, overrides = {}) {
     allowTools: selectAllowTools(cases),
     threshold: DEFAULTS.threshold,
     caseGlobs: [],
-    tagFilters: selectTagFilters(cases),
+    tagFilters: globs.length > 0 ? [] : selectTagFilters(cases),
     scaffold: DEFAULTS.scaffold,
     outputDir: paths.resultsDir,
     ...overrides,
@@ -458,26 +505,55 @@ export function evalCommandFrom(env) {
 }
 
 /**
- * ResultsLocator — the newest `<eval-dir>/results/<ISO-timestamp>/aggregate-result.json`,
- * or '' when the suite has none.
+ * ResultsSnapshot — the NAMES of every `<eval-dir>/results/<ISO-timestamp>/` directory,
+ * sorted, or `[]` when the suite has none.
+ *
+ * A set, not "the newest". `ResultsLocator` handed back the newest timestamped path and
+ * the caller compared it before and after, which is only correct while this process is
+ * the sole writer: any other harness run started against the same eval dir during a
+ * sweep (the README's control-all-steps diagnostic, say) produces a newer directory, and
+ * newest-wins then attributes somebody else's run to this sweep with every number still
+ * looking plausible. Comparing the two SETS says exactly which directories this sweep is
+ * responsible for, and how many.
  *
  * Only timestamp-shaped directories count: the runner keeps its own `<condition>.json`
- * and `drift.json` in the same folder, and the harness's five recon directories are
- * sitting there too. Which is exactly why the caller compares the path before and
- * after — "newest" on its own would happily hand back somebody else's run from August.
+ * and `drift.json` in the same folder, and the harness's recon directories sit there too.
  *
  * @param {(path: string) => Promise<{name: string, isDirectory: boolean}[]>} listDirectory
- * @returns {ResultsLocator}
+ * @returns {(inv: EvalInvocation) => Promise<string[]>}
  */
-export const makeResultsLocator = (listDirectory) => async (inv) => {
+export const makeResultsSnapshot = (listDirectory) => async (inv) => {
   const dir = `${inv.suiteDir}/results`;
   const entries = await listDirectory(dir).catch(() => []);
-  const stamped = entries
+  return entries
     .filter((e) => e.isDirectory && TIMESTAMP_DIR.test(e.name))
     .map((e) => e.name)
     .sort();
-  return stamped.length === 0 ? '' : join(dir, stamped[stamped.length - 1], 'aggregate-result.json');
 };
+
+/**
+ * CasesMissingFrom — the cases this invocation asked for that its document does not report.
+ *
+ * The mirror of the stranger check, and the one that catches a `--case` semantics
+ * surprise: if the flag turned out to be last-one-wins rather than repeatable, a
+ * four-case invocation comes back with one case, every name in it expected, and nothing
+ * refuses until the merger — three rate-limit windows later. Naming the gap here lets the
+ * loop stop after the first invocation instead.
+ *
+ * @param {any} document
+ * @param {string[]} expected
+ * @returns {string[]}
+ */
+export function casesMissingFrom(document, expected) {
+  const reported = new Set(
+    (Array.isArray(document?.cases) ? document.cases : []).map((c) => c?.name)
+  );
+  return (expected ?? []).filter((name) => !reported.has(name));
+}
+
+/** The document inside one results directory. Pure, so the tests can name the path. */
+export const aggregatePathFor = (inv, dirName) =>
+  join(`${inv.suiteDir}/results`, dirName, 'aggregate-result.json');
 
 /**
  * RunSweep — spawn the harness, come back with a result rather than an exception.
@@ -486,42 +562,82 @@ export const makeResultsLocator = (listDirectory) => async (inv) => {
  * is a finding; exit 2 means partial and must not be compared against a complete run;
  * 130/143 mean somebody interrupted it. Throwing would erase all three distinctions.
  *
- * The document is located, not assumed: the results directory is read BEFORE the spawn
- * and again after, and only a directory that was not there before can be this sweep's
- * output. A sweep that produced none falls back to the `--json` document on stdout, and
- * failing that reports `document: null` — which the merger refuses, out loud.
+ * The document is claimed, not assumed. The set of timestamped results directories is
+ * read BEFORE the spawn and again after, and this sweep owns its output only when
+ * EXACTLY ONE directory is new:
  *
- * `readTextFile` is appended to the declared signature: `ResultsLocator` hands back a
- * path and nothing in `RunSweep`'s parameters could read it. Recorded as an insufficiency
- * rather than smuggled in.
+ *   1 new  — that is this sweep's document, provided the cases inside it are ones this
+ *            invocation asked for.
+ *   0 new  — nothing was written; fall back to a `--json` document on stdout, and
+ *            failing that report `document: null`, which the merger refuses out loud.
+ *   2+ new — another harness run wrote into this suite while the sweep was running.
+ *            Neither directory can be attributed, so `document: null` and say which
+ *            they were. Guessing here publishes a number measured by somebody else.
+ *
+ * `expectedCases` is the second half of the same guard: a document that reports a case
+ * this invocation did not ask for is not this invocation's, whatever its timestamp says.
+ *
+ * `readTextFile` and `expectedCases` are appended to the declared signature:
+ * `ResultsLocator` hands back a path and nothing in `RunSweep`'s parameters could read
+ * it or know what was asked for. Recorded as an insufficiency rather than smuggled in.
  *
  * @param {SpawnCapture} spawnCapture
  * @param {EvalCommand} evalCommand
- * @param {ResultsLocator} resultsLocator
+ * @param {(inv: EvalInvocation) => Promise<string[]>} resultsSnapshot
  * @param {EvalInvocation} inv
  * @param {ReadTextFile} readTextFile
+ * @param {string[]} [expectedCases]  case names this invocation asked for; [] skips the check
  * @returns {Promise<SweepResult>}
  */
-export async function runSweep(spawnCapture, evalCommand, resultsLocator, inv, readTextFile) {
+export async function runSweep(
+  spawnCapture, evalCommand, resultsSnapshot, inv, readTextFile, expectedCases = []
+) {
   const { command, env } = evalCommand();
   const argv = buildEvalArgv(inv);
-  const before = await resultsLocator(inv);
+  const before = new Set(await resultsSnapshot(inv));
 
   const { code, stdout, stderr } = await spawnCapture(command, argv, env);
 
   const notes = [];
-  const located = await resultsLocator(inv);
+  const after = await resultsSnapshot(inv);
+  const fresh = after.filter((name) => !before.has(name));
   let document = null;
-  if (located !== '' && located !== before) {
+
+  if (fresh.length === 1) {
+    const located = aggregatePathFor(inv, fresh[0]);
     try {
       document = JSON.parse(await readTextFile(located));
     } catch (e) {
       notes.push(`runner: ${located} could not be read as JSON — ${e.message}`);
     }
+    const strangers = expectedCases.length === 0
+      ? []
+      : (Array.isArray(document?.cases) ? document.cases : [])
+        .map((c) => c?.name)
+        .filter((name) => !expectedCases.includes(name));
+    if (strangers.length > 0) {
+      // A document holding a case this invocation did not ask for was written by some
+      // other run, or by ours and merged with one. Either way it is not evidence here.
+      notes.push(`runner: ${located} reports case(s) ${strangers.join(', ')}, which this sweep did ` +
+        `not ask for (it asked for ${[...expectedCases].sort().join(', ')}) — not claiming it`);
+      document = null;
+    }
+    // Kept, not nulled: a document short of a case is still evidence for the cases it
+    // does carry, and the merger refuses the incomplete set out loud. The note is what
+    // lets the caller stop before paying for the remaining conditions.
+    const absent = document === null ? [] : casesMissingFrom(document, expectedCases);
+    if (absent.length > 0)
+      notes.push(`runner: ${located} reports no result for ${absent.join(', ')}, which this sweep ` +
+        'asked for by name — the invocation ran less than it was told to');
+  } else if (fresh.length > 1) {
+    notes.push(`runner: ${fresh.length} new results directories appeared during this sweep ` +
+      `(${fresh.join(', ')}) — another harness run wrote into this suite during the sweep, so none ` +
+      'of them can be attributed to it');
   } else {
-    notes.push(located === ''
+    notes.push(after.length === 0
       ? 'runner: the sweep wrote no results directory'
-      : `runner: no NEW results directory — ${located} predates this sweep and is not its output`);
+      : 'runner: no NEW results directory — ' +
+        `${aggregatePathFor(inv, after[after.length - 1])} predates this sweep and is not its output`);
     try {
       document = JSON.parse(stdout);
       notes.push('runner: recovered the document from stdout (unexpected — --json is not passed)');
@@ -535,6 +651,187 @@ export async function runSweep(spawnCapture, evalCommand, resultsLocator, inv, r
     exitCode: code,
     document,
     stderrTail: tail([stderr, ...notes].filter(Boolean).join('\n')),
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Pure — one sweep, several harness invocations.
+ *
+ * A case registered `ablation: none` must never be run `with-without`: its `without`
+ * arm carries the plugin in through a replayed transcript, so the contrast it produces
+ * has no referent, and the report prints a scatter row beside a row it says has none.
+ * `readCaseSpec` has always derived the field; until now nothing read it. Enforcing it
+ * means one harness invocation per distinct ablation value (`--case` already scopes an
+ * invocation), and one document assembled from those.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** The ablations a case may declare, in the order their invocations run. */
+const ABLATIONS = /** @type {('with-without'|'none')[]} */ (['with-without', 'none']);
+
+/**
+ * GroupCasesByAblation — the scored cases, split into one group per ablation value.
+ *
+ * `with-without` runs first because it is the registered primary evidence: if a sweep is
+ * interrupted, the delta arm is the one already in hand. A value that is neither is
+ * refused rather than defaulted — defaulting is how `ablation: none` came to run
+ * with-without in the first place.
+ *
+ * @param {CaseSpec[]} cases
+ * @returns {{ablation: 'with-without'|'none', cases: CaseSpec[]}[]}
+ */
+export function groupCasesByAblation(cases) {
+  const scored = (cases ?? []).filter((c) => c.scored);
+  if (scored.length === 0) bad('groupCasesByAblation: no scored case — a sweep over nothing scores nothing');
+  const stray = scored.filter((c) => !ABLATIONS.includes(c.ablation));
+  if (stray.length > 0)
+    bad(`groupCasesByAblation: ${stray.map((c) => `${c.name} (${JSON.stringify(c.ablation)})`).join(', ')} ` +
+      "declare an ablation that is neither 'none' nor 'with-without'");
+  return ABLATIONS
+    .map((ablation) => ({ ablation, cases: scored.filter((c) => c.ablation === ablation) }))
+    .filter((g) => g.cases.length > 0);
+}
+
+/**
+ * Severity order for exit codes, so a sweep made of several invocations reports the
+ * worst thing that happened rather than the last: interrupted (≥128) and 127 beat
+ * partial (2), which beats below-threshold (1), which beats clean (0).
+ */
+const severityOf = (code) => (code >= 128 || code === 127 ? 4 : code === 2 ? 3 : code === 1 ? 2 : code === 0 ? 1 : 3);
+
+/**
+ * CombineHarnessDocuments — one document from the per-ablation invocations.
+ *
+ * Safe only because the merger reads a narrow, checked slice: `cases[]` by name,
+ * `suite.modelOverride` / `suite.judgeModel`, `claudeVersion`, `costUsd`, `partial`.
+ * So the parts must agree on the first three (they are not one sweep otherwise), the
+ * cases concatenate, cost sums and `partial` stays three-valued — absent when any part
+ * could not establish it, because absence read as `false` is absence read as agreement.
+ *
+ * `suite.ablation` is the FIRST part's and cannot be anything else: the combined
+ * document covers two. The per-case truth lives in `SweepRecord.ablations`.
+ *
+ * Any other field that describes ONE invocation is removed or recomputed rather than
+ * carried through by the spread — see the `aggregates` / `durationSeconds` comment
+ * below. A number that is true of part 0 only, sitting beside a `cases` array from
+ * every part, is the plausible-number failure this file's header is about.
+ *
+ * Never throws: refusing here costs a sweep that has already been paid for, so a
+ * refusal comes back as `document: null` plus a note the record carries.
+ *
+ * @param {{ablation: string, document: any}[]} parts
+ * @returns {{document: any, notes: string[]}}
+ */
+export function combineHarnessDocuments(parts) {
+  if (!Array.isArray(parts) || parts.length === 0) bad('combineHarnessDocuments: nothing to combine');
+  /** @type {string[]} */
+  const notes = [];
+  const missing = parts.filter((p) => !p.document);
+  if (missing.length > 0) {
+    notes.push(`runner: the ${missing.map((p) => p.ablation).join(' and ')} invocation(s) produced no ` +
+      'document, so this sweep has no combinable result');
+    return { document: null, notes };
+  }
+  if (parts.length === 1) return { document: parts[0].document, notes };
+
+  for (const p of parts)
+    if (p.document.schemaVersion !== 1) {
+      notes.push(`runner: the ${p.ablation} invocation reports schemaVersion ` +
+        `${JSON.stringify(p.document.schemaVersion)} — only 1 is understood, so the parts are not combinable`);
+      return { document: null, notes };
+    }
+  for (const [label, read] of /** @type {[string, (d: any) => unknown][]} */ ([
+    ['claudeVersion', (d) => d.claudeVersion],
+    ['subject model', (d) => d.suite?.modelOverride],
+    ['judge model', (d) => d.suite?.judgeModel],
+  ])) {
+    const values = new Set(parts.map((p) => JSON.stringify(read(p.document) ?? null)));
+    if (values.size > 1) {
+      notes.push(`runner: the invocations disagree on ${label} (${[...values].join(', ')}) — they are ` +
+        'not one sweep and must not be combined into one document');
+      return { document: null, notes };
+    }
+  }
+
+  /** @type {Map<string,string>} */
+  const seen = new Map();
+  const cases = [];
+  for (const p of parts)
+    for (const c of p.document.cases ?? []) {
+      if (seen.has(c.name)) {
+        notes.push(`runner: case '${c.name}' is in both the ${seen.get(c.name)} and ${p.ablation} ` +
+          'invocations — one case ran at two ablations, which is the thing this split exists to prevent');
+        return { document: null, notes };
+      }
+      seen.set(c.name, p.ablation);
+      cases.push(c);
+    }
+
+  const document = {
+    ...parts[0].document,
+    cases,
+    costUsd: parts.reduce((sum, p) => sum + (p.document.costUsd ?? 0), 0),
+    startedAt: parts.map((p) => p.document.startedAt).filter(Boolean).sort()[0]
+      ?? parts[0].document.startedAt,
+  };
+  // WHY: the spread above carried part 0's `aggregates` and `durationSeconds` through
+  // unchanged, next to a `cases` array from every part — `casesTotal: 4` beside five
+  // cases, an `overallScore`/`meanDelta` measured over the with-without invocation
+  // alone, and a duration that omits the second invocation.
+  //
+  // `aggregates` is DELETED, not recomputed: `overallScore` and `meanDelta` are the
+  // harness's own weighting of its own per-run scores, so a re-derivation here would be
+  // this file's guess wearing the harness's field name. The merger reads none of it.
+  // `durationSeconds` IS recomputed, because the invocations run sequentially and the
+  // sum is therefore the real elapsed time — but only when every part reports one;
+  // otherwise it goes too, since a sum missing a term is a shorter run than happened.
+  delete document.aggregates;
+  const durations = parts.map((p) => p.document.durationSeconds);
+  if (durations.every((d) => typeof d === 'number'))
+    document.durationSeconds = durations.reduce((a, b) => a + b, 0);
+  else delete document.durationSeconds;
+
+  const partials = parts.map((p) => p.document.partial);
+  if (partials.every((p) => typeof p === 'boolean')) document.partial = partials.some(Boolean);
+  else delete document.partial;
+  const reason = parts.map((p) => p.document.partialReason).find(Boolean);
+  if (reason) document.partialReason = reason;
+
+  notes.push(`runner: combined ${parts.length} harness invocations — ` +
+    `${parts.map((p) => `${p.ablation}: ${(p.document.cases ?? []).map((c) => c.name).join(', ') || 'no case'}`).join('; ')}. ` +
+    "`suite.ablation` below is the first invocation's; the per-case truth is the record's `ablations`. " +
+    '`aggregates` is dropped (it counted one invocation) and `durationSeconds` is the sum of the parts.');
+  return { document, notes };
+}
+
+/**
+ * CombineSweepParts — the per-ablation invocations of ONE condition as one SweepResult,
+ * plus the case→ablation map the merger needs to see that `none` really ran as `none`.
+ *
+ * @param {ConditionId} condition
+ * @param {{ablation: 'with-without'|'none', cases: string[], result: SweepResult}[]} parts
+ * @returns {SweepResult & {ablations: Record<string,'with-without'|'none'>}}
+ */
+export function combineSweepParts(condition, parts) {
+  if (!Array.isArray(parts) || parts.length === 0)
+    bad(`combineSweepParts: ${condition} ran no invocation`);
+  const { document, notes } = combineHarnessDocuments(
+    parts.map((p) => ({ ablation: p.ablation, document: p.result.document }))
+  );
+  /** @type {Record<string,'with-without'|'none'>} */
+  const ablations = {};
+  for (const p of parts) for (const name of p.cases) ablations[name] = p.ablation;
+  const exitCode = parts
+    .map((p) => p.result.exitCode)
+    .reduce((worst, code) => (severityOf(code) > severityOf(worst) ? code : worst));
+  return {
+    condition,
+    exitCode,
+    document,
+    stderrTail: tail([
+      ...parts.map((p) => `── ${condition} · --ablation ${p.ablation} · exit ${p.result.exitCode}\n${p.result.stderrTail}`),
+      ...notes,
+    ].filter(Boolean).join('\n')),
+    ablations,
   };
 }
 
@@ -554,6 +851,83 @@ export async function writeDriftRecord(writeTextFile, paths, record) {
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
+ * Pure — the records, and the digest that makes them comparable.
+ *
+ * The instrument is everything a score depends on: the cases, their graders, the
+ * transcripts they replay, the fixture, and every condition's SKILL.md. The
+ * pre-registration digest does not cover it and `drift.json` covers only the treatment
+ * mirror, so a treatment measured against last week's graders merged against this
+ * week's controls and every invariant passed. Both records carry the digest; the merger
+ * refuses (I2b) when they disagree with each other or with the tree it can see.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const SHA256 = /^[0-9a-f]{64}$/;
+
+const requireDigest = (where, sha) => {
+  if (typeof sha !== 'string' || !SHA256.test(sha))
+    bad(`${where}: ${JSON.stringify(sha)} is not an instrument digest — a record without one is ` +
+      'unmergeable under I2b, and omitting it silently is how results measured on a different ' +
+      'instrument get merged');
+  return sha;
+};
+
+/**
+ * @param {{drifted: boolean, reason: string}} drift
+ * @param {string} checkedAt
+ * @param {string} instrumentSha
+ * @returns {DriftRecord}
+ */
+export function buildDriftRecord(drift, checkedAt, instrumentSha) {
+  return {
+    drifted: drift.drifted,
+    reason: drift.reason,
+    checkedAt,
+    instrumentSha: requireDigest('buildDriftRecord', instrumentSha),
+  };
+}
+
+/**
+ * WHY this is checked rather than assumed: the merger cross-checks this map, case by
+ * case, against the `ablation` PRE-REGISTRATION registers — it is the only thing at
+ * merge time that can see that a case registered `none` really ran as `none`. A third
+ * value, or a map that is not a map, is not something it can read, so it is refused
+ * here where a sweep has not been paid for yet.
+ *
+ * @param {Record<string,'none'|'with-without'>} map
+ * @returns {Record<string,'none'|'with-without'>}
+ */
+const requireAblations = (map) => {
+  if (map === null || typeof map !== 'object' || Array.isArray(map))
+    bad(`buildSweepRecord: ablations ${JSON.stringify(map)} is not a {case name → ablation} map`);
+  for (const [name, ablation] of Object.entries(map))
+    if (!ABLATIONS.includes(/** @type {any} */ (ablation)))
+      bad(`buildSweepRecord: ablations[${JSON.stringify(name)}] is ${JSON.stringify(ablation)}, ` +
+        "which is neither 'none' nor 'with-without' — the merger checks this map against the " +
+        'registration and cannot read a third value');
+  return map;
+};
+
+/**
+ * @param {{condition: ConditionId, exitCode: number, document: any, stderrTail: string,
+ *          ablations: Record<string,'none'|'with-without'>}} combined
+ * @param {{argvs: string[][], startedAt: string, instrumentSha: string}} run
+ * @returns {SweepRecord}
+ */
+export function buildSweepRecord(combined, run) {
+  return {
+    condition: combined.condition,
+    exitCode: combined.exitCode,
+    document: combined.document,
+    stderrTail: combined.stderrTail,
+    ablations: requireAblations(combined.ablations),
+    // One entry per harness invocation, so a reader can re-run each of them exactly.
+    argvs: run.argvs,
+    startedAt: run.startedAt,
+    instrumentSha: requireDigest('buildSweepRecord', run.instrumentSha),
+  };
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
  * Pure — the operator's own arguments.
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -562,11 +936,16 @@ const USAGE = `usage: node scripts/run-evals.mjs [--condition <id>]... [--runs <
   --condition <id>  treatment | oneliner | placebo. Repeatable, or comma-separated.
                     Default: all three, swept in that order.
   --runs <n>        Runs per case. Default ${DEFAULTS.runs} — the pre-registered count.
-  --smoke           The cheap pilot: one scored case, one run. Do this before a sweep.`;
+  --smoke           The cheap pilot: one scored case, one run. Do this before a sweep.
+                    Cannot be combined with --runs: it fixes the count at 1.`;
 
 /** @param {string[]} argv */
 export function parseArgv(argv) {
   const args = { conditions: /** @type {ConditionId[]} */ ([]), runs: DEFAULTS.runs, smoke: false, help: false };
+  // Both flags write `runs`, so whichever came last used to win silently — `--smoke
+  // --runs 5` spent a full sweep believing it was a pilot. Remembered, then refused
+  // after the loop, so the order they were typed in makes no difference.
+  let sawRuns = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--help' || a === '-h') args.help = true;
@@ -575,7 +954,11 @@ export function parseArgv(argv) {
       args.runs = 1;
     } else if (a === '--condition') {
       const value = argv[++i] ?? bad(`--condition needs a value\n${USAGE}`);
-      for (const id of value.split(',').map((s) => s.trim()).filter(Boolean)) {
+      const ids = value.split(',').map((s) => s.trim()).filter(Boolean);
+      // `--condition ''` and `--condition ,` used to name nothing and then fall through
+      // to the default: all three conditions, a full sweep nobody asked for.
+      if (ids.length === 0) bad(`--condition needs at least one condition id\n${USAGE}`);
+      for (const id of ids) {
         if (!CONDITION_IDS.includes(/** @type {any} */ (id)))
           bad(`--condition ${id}: not one of ${CONDITION_IDS.join(', ')}`);
         if (!args.conditions.includes(/** @type {any} */ (id))) args.conditions.push(/** @type {any} */ (id));
@@ -584,13 +967,150 @@ export function parseArgv(argv) {
       const n = Number(argv[++i]);
       if (!Number.isInteger(n) || n < 1) bad(`--runs needs a whole number ≥ 1\n${USAGE}`);
       args.runs = n;
+      sawRuns = true;
     } else bad(`unknown option ${a}\n${USAGE}`);
   }
+  if (args.smoke && sawRuns) bad(`--smoke fixes runs to 1; drop one of the flags\n${USAGE}`);
   // Sweep order is the declared order, not the order they were typed: the treatment
   // first means a broken condition costs one sweep rather than three.
   if (args.conditions.length === 0) args.conditions = [...CONDITION_IDS];
   else args.conditions = CONDITION_IDS.filter((c) => args.conditions.includes(c));
   return args;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Pure — the whole run, decided before anything is spawned.
+ *
+ * WHY these two functions exist at all: the decisions that matter most used to sit in
+ * the un-exported `main` — which cases share a command line, whether an invocation is
+ * scoped by name or by tag, which conditions are checked before the first sweep, and
+ * when to stop. `invocationFor` was pinned byte for byte while `main` was free to call
+ * it with `group.cases` instead of `cases`, or without `caseGlobs`, and every test
+ * still passed. Everything that decides something is pure; `main` only spends.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @typedef {object} PlannedInvocation
+ * @property {'with-without'|'none'} ablation
+ * @property {string[]} cases   the case names this invocation asks for, by name
+ * @property {EvalInvocation} inv
+ * @property {string[]} argv    what `main` will spawn, built here so a test can read it
+ */
+
+/**
+ * @typedef {object} SweepPlan
+ * @property {string[]} scored     scored case names, in discovery order
+ * @property {string[]} excluded   the control cases, which no invocation names
+ * @property {{ablation: 'with-without'|'none', cases: string[]}[]} groups
+ * @property {boolean} scopeByName whether the invocations select by `--case` or by `--tag`
+ * @property {{path: string, why: string}[]} preChecks  files that must exist before spending
+ * @property {{condition: ConditionId, invocations: PlannedInvocation[]}[]} sweeps
+ */
+
+/**
+ * PlanSweep — every invocation this run will make, in order, plus the pre-checks that
+ * must pass before the first one spends anything.
+ *
+ * The argv is built here, for every condition, so that a command line the runner cannot
+ * assemble is a refusal before the first sweep rather than after two.
+ *
+ * @param {CaseSpec[]} cases  every discovered case, control cases included
+ * @param {{conditions: ConditionId[], runs: number, smoke: boolean}} args
+ * @param {SuitePaths} [suitePaths]
+ * @returns {SweepPlan}
+ */
+export function planSweep(cases, args, suitePaths = paths) {
+  if (!args || !Array.isArray(args.conditions) || args.conditions.length === 0)
+    bad('planSweep: no condition to sweep');
+  const all = cases ?? [];
+  const scored = all.filter((c) => c.scored);
+  const excluded = all.filter((c) => !c.scored).map((c) => c.name);
+
+  // One invocation per distinct ablation, because a case registered `ablation: none`
+  // must not be run with-without: its without-arm carries the plugin in through a
+  // replayed transcript, so the contrast has no referent. `--case` scopes an invocation,
+  // and the documents are combined afterwards.
+  let groups = groupCasesByAblation(all);
+  if (args.smoke) {
+    const pilot = scored.find((c) => c.evidence === 'delta');
+    if (!pilot) bad('--smoke: no scored delta case to pilot');
+    groups = [{ ablation: pilot.ablation, cases: [pilot] }];
+  }
+  // Scope by name only when the ablations actually differ (or the pilot asked for one
+  // case). A single group keeps the tag-filter-only command line recon verified — and a
+  // name-scoped invocation drops `--tag` entirely (invocationFor), because how the
+  // harness combines the two flags is undetermined and an OR would undo the split.
+  const scopeByName = groups.length > 1 || args.smoke;
+
+  return {
+    scored: scored.map((c) => c.name),
+    excluded,
+    groups: groups.map((g) => ({ ablation: g.ablation, cases: g.cases.map((c) => c.name) })),
+    scopeByName,
+    // Every condition is checked BEFORE the first sweep. A condition with no SKILL.md
+    // loads as no plugin at all, and the with-arm quietly becomes a second baseline:
+    // every delta then reads 0.00 and looks like a null result. Checked inside the sweep
+    // loop, as it used to be, a missing third condition cost two full sweeps first.
+    preChecks: args.conditions.map((condition) => ({
+      path: join(suitePaths.conditionsDir, condition, 'SKILL.md'),
+      why: 'that condition would sweep as no plugin at all',
+    })),
+    sweeps: args.conditions.map((condition) => ({
+      condition,
+      invocations: groups.map((group) => {
+        const names = group.cases.map((c) => c.name);
+        const inv = invocationFor(condition, suitePaths, all, {
+          runs: args.runs,
+          ablation: group.ablation,
+          ...(scopeByName ? { caseGlobs: names } : {}),
+        });
+        return { ablation: group.ablation, cases: names, inv, argv: buildEvalArgv(inv) };
+      }),
+    })),
+  };
+}
+
+/**
+ * SweepStopReason — why this invocation must be the run's last, or null to carry on.
+ *
+ * Three ways an invocation ends a run, and all three used to be handled differently or
+ * not at all:
+ *
+ *   - interrupted — somebody killed the child; the next ablation's budget buys nothing.
+ *   - NO DOCUMENT — `runSweep` could not attribute an output to this invocation (no
+ *     results directory, two of them, unreadable JSON, or a document reporting a case
+ *     this invocation never asked for). This branch used to read `result.document ?
+ *     casesMissingFrom(...) : []`, i.e. a null document meant zero missing cases, so the
+ *     loop swept the next ablation and then both remaining conditions after the first
+ *     invocation had already proved unattributable.
+ *   - short — the document reports fewer cases than the invocation named.
+ *
+ * @param {{ablation: 'with-without'|'none', cases: string[], result: SweepResult}} part
+ * @returns {{why: string, hint: string|null}|null}
+ */
+export function sweepStopReason({ ablation, cases, result }) {
+  const named = `the --ablation ${ablation} invocation named ${(cases ?? []).join(', ')}`;
+  if (isInterrupted(result.exitCode))
+    return { why: `${named} and was killed by a signal (exit ${result.exitCode})`, hint: null };
+  if (result.document === null)
+    return {
+      why: `${named} but produced no document this sweep can claim as its own`,
+      hint: 'the record\'s stderrTail says which: no results directory, more than one (another ' +
+        'harness run wrote into this suite), unreadable JSON, or a document reporting a case ' +
+        'this invocation never asked for — none of them is attributable evidence',
+    };
+  const absent = casesMissingFrom(result.document, cases);
+  if (absent.length > 0)
+    return {
+      why: `${named} but its document reports no result for ${absent.join(', ')}`,
+      // Almost certainly the one thing about this command line nobody has verified: recon
+      // passed exactly one `--case` and never alongside `--tag`, so whether the flag is
+      // repeatable is an assumption (6-cold-fork-register.md). If it is last-one-wins, a
+      // multi-case invocation runs one case and this is where that shows up.
+      hint: 'if the invocation named several cases, `--case` is probably not repeatable ' +
+        '(recon verified exactly one selector) — run one case per invocation and re-check',
+    };
+  return null;
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -619,36 +1139,83 @@ const copyDirectory = async (from, to) => {
   await cp(from, to, { recursive: true });
 };
 
+/** The inverse of {@link selectCondition}: leave no condition standing at the fixed path. */
+const removeDirectory = (path) => rm(path, { recursive: true, force: true });
+
 const listDirectory = async (path) => {
   const entries = await readdir(path, { withFileTypes: true });
   return entries.map((e) => ({ name: e.name, isDirectory: e.isDirectory() }));
 };
 
 /**
- * SpawnCapture. Buffers rather than streams — the child may emit up to 64 MiB under
- * `--json`, which is fine at this suite's size and wrong if it grows.
+ * The shell convention for a child killed by a signal: 128 + the signal number.
+ * SIGINT 130, SIGTERM 143, SIGKILL 137, SIGHUP 129.
  *
- * A signalled child exits with no code, and the shell convention 128+signal is applied
- * here so `SweepResult.exitCode` can carry 130 and 143 as the interface says it does.
+ * The previous mapping named SIGINT and SIGTERM and sent everything else to 1 — which
+ * is "a case scored below threshold", a RESULT. A sweep killed by the OOM killer or by
+ * a closed terminal therefore recorded a finding and the loop swept on to the next
+ * condition, publishing a comparison against a run that never finished.
  *
- * @type {SpawnCapture}
+ * @param {string|null|undefined} signal
+ * @returns {number}
  */
-const spawnCapture = (command, args, env) =>
-  new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (d) => (stdout += d));
-    child.stderr.on('data', (d) => {
-      stderr += d;
-      process.stderr.write(d); // the harness's per-case progress is the only sign of life
+export const exitCodeForSignal = (signal) => {
+  const number = signal ? /** @type {any} */ (osConstants.signals)[signal] : undefined;
+  return typeof number === 'number' ? 128 + number : 1;
+};
+
+/** Any exit at or above 128 is a signalled death, and no sweep may continue past one. */
+export const isInterrupted = (code) => Number.isInteger(code) && code >= 128;
+
+/**
+ * SpawnCapture, as a factory over `spawn` so a fake child can drive it in a test.
+ *
+ * Buffers rather than streams — the child may emit up to 64 MiB under `--json`, which is
+ * fine at this suite's size and wrong if it grows.
+ *
+ * The returned function carries `forwardSignal`. What it fixes is Node's default SIGINT
+ * handler ending this process before the child's `close` event can fire — so the 130 path
+ * and the results write were unreachable and `_conditions/current` was left populated.
+ * Forwarding kills the child, `close` reports the signal, and the record is written on the
+ * way out. (At a terminal SIGINT already goes to the whole foreground process group, so
+ * the child normally gets one anyway; the forward is what makes `kill -INT <pid>` and
+ * every non-tty case behave the same.)
+ *
+ * @param {typeof spawn} spawnProcess
+ * @returns {SpawnCapture & {forwardSignal: (signal: NodeJS.Signals) => boolean}}
+ */
+export function makeSpawnCapture(spawnProcess) {
+  /** The child currently running, or null. One at a time: sweeps are sequential. */
+  let live = null;
+  const capture = (command, args, env) =>
+    new Promise((resolve) => {
+      const child = spawnProcess(command, args, { stdio: ['ignore', 'pipe', 'pipe'], env });
+      live = child;
+      let stdout = '';
+      let stderr = '';
+      const done = (value) => {
+        live = null;
+        resolve(value);
+      };
+      child.stdout.on('data', (d) => (stdout += d));
+      child.stderr.on('data', (d) => {
+        stderr += d;
+        process.stderr.write(d); // the harness's per-case progress is the only sign of life
+      });
+      child.on('error', (e) => done({ code: 127, stdout, stderr: `${stderr}${e}` }));
+      child.on('close', (code, signal) =>
+        done({ code: code ?? exitCodeForSignal(signal), stdout, stderr }));
     });
-    child.on('error', (e) => resolve({ code: 127, stdout, stderr: `${stderr}${e}` }));
-    child.on('close', (code, signal) => {
-      const signalled = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : 1;
-      resolve({ code: code ?? signalled, stdout, stderr });
-    });
-  });
+  capture.forwardSignal = (signal) => {
+    if (live === null) return false;
+    live.kill(signal);
+    return true;
+  };
+  return capture;
+}
+
+/** @type {ReturnType<typeof makeSpawnCapture>} */
+const spawnCapture = makeSpawnCapture(spawn);
 
 /** @type {Clock} */
 const clock = () => new Date().toISOString();
@@ -739,19 +1306,25 @@ export async function main(argv) {
   }
 
   const cases = await discoverCases(readTextFile, listDirectory, paths);
-  const scored = cases.filter((c) => c.scored);
-  const excluded = cases.filter((c) => !c.scored).map((c) => c.name);
+  // The whole run is decided here, before anything is read or spawned: the groups, the
+  // per-condition invocations, their argv, and the files that must exist first. Every
+  // refusal it can raise (a stray ablation, a selector that reaches the control case, an
+  // unbuildable command line) therefore costs nothing.
+  const plan = planSweep(cases, args);
+
+  for (const check of plan.preChecks)
+    await readTextFile(check.path).catch(() => bad(`no ${check.path} — ${check.why}`));
 
   // Drift first, and it is fatal. A drifted mirror makes the run void under I2, so
   // sweeping anyway would spend a rate-limit window measuring a version of the skill
   // that no longer exists. The record is written either way — the merger reads its
   // absence as drift, and a refusal you cannot inspect is worse than none.
   const drift = await checkDrift(readTextFile, mirrorPaths);
-  await writeDriftRecord(writeTextFile, paths, {
-    drifted: drift.drifted,
-    reason: drift.reason,
-    checkedAt: clock(),
-  });
+  // Once per invocation, and the same value on drift.json and on every sweep record: it
+  // is the digest that lets the merger tell three sweeps of one instrument from three
+  // sweeps of three.
+  const instrumentSha = await instrumentDigest(paths.suiteDir);
+  await writeDriftRecord(writeTextFile, paths, buildDriftRecord(drift, clock(), instrumentSha));
   if (drift.drifted) {
     console.error(`DRIFT: the treatment mirror is not the shipped skill minus the flag`);
     console.error(`  ${drift.reason}`);
@@ -760,57 +1333,62 @@ export async function main(argv) {
     return 1;
   }
 
-  /** @type {Partial<EvalInvocation>} */
-  const overrides = { runs: args.runs };
-  if (args.smoke) {
-    const pilot = scored.find((c) => c.evidence === 'delta');
-    if (!pilot) bad('--smoke: no scored delta case to pilot');
-    overrides.caseGlobs = [pilot.name];
-  }
-
-  console.error(`suite ${paths.suiteDir} — ${scored.length} scored case(s)` +
-    (excluded.length > 0 ? `, excluding ${excluded.join(', ')}` : ''));
+  console.error(`suite ${paths.suiteDir} — ${plan.scored.length} scored case(s)` +
+    (plan.excluded.length > 0 ? `, excluding ${plan.excluded.join(', ')}` : ''));
   console.error(`drift: none — ${mirrorPaths.treatmentMirror.replace(`${repoRoot}/`, '')} is current`);
+  console.error(`instrument: ${instrumentSha.slice(0, 12)}… (every case, grader, fixture and condition)`);
+  for (const g of plan.groups)
+    console.error(`  --ablation ${g.ablation}: ${g.cases.join(', ')}`);
 
   let failed = 0;
-  for (const [index, condition] of args.conditions.entries()) {
-    const inv = invocationFor(condition, paths, cases, overrides);
-    const sweepArgv = buildEvalArgv(inv);
+  for (const [index, sweep] of plan.sweeps.entries()) {
+    const { condition, invocations } = sweep;
     const startedAt = clock();
-
-    // A condition with no SKILL.md loads as no plugin at all, and the with-arm quietly
-    // becomes a second baseline: every delta then reads 0.00 and looks like a null result.
-    const source = join(paths.conditionsDir, condition, 'SKILL.md');
-    await readTextFile(source).catch(() => bad(`no ${source} — that condition would sweep as no plugin at all`));
-
-    console.error(`\nsweep ${index + 1}/${args.conditions.length} · ${condition} · ` +
-      `${inv.runs} run(s) · ${inv.subjectModel}/${inv.judgeModel} · threshold ${inv.threshold}`);
+    console.error(`\nsweep ${index + 1}/${plan.sweeps.length} · ${condition} · ` +
+      `${args.runs} run(s) · ${DEFAULTS.subjectModel}/${DEFAULTS.judgeModel} · ` +
+      `${invocations.length} invocation(s)`);
     await selectCondition(copyDirectory, paths, condition);
     console.error(`  ${paths.conditionUnderTest} ← conditions/${condition}`);
 
     const evalCommand = () => evalCommandFrom(process.env);
-    console.error(`  ${evalCommand().command} ${sweepArgv.join(' ')}`);
+    /** @type {{ablation: 'with-without'|'none', cases: string[], argv: string[], result: SweepResult}[]} */
+    const parts = [];
+    /** Set when an invocation ended the run: interrupted, unattributable, or short. */
+    let stop = null;
+    for (const planned of invocations) {
+      console.error(`  ${evalCommand().command} ${planned.argv.join(' ')}`);
+      const result = await runSweep(
+        spawnCapture, evalCommand, makeResultsSnapshot(listDirectory), planned.inv, readTextFile,
+        planned.cases
+      );
+      console.error(`    exit ${result.exitCode} · ${result.document ? 'document' : 'NO DOCUMENT'}`);
+      parts.push({ ablation: planned.ablation, cases: planned.cases, argv: planned.argv, result });
+      // Whether the next ablation is worth its budget is a decision, so it is made by a
+      // pure function a test can drive rather than by three conditions inline here.
+      stop = sweepStopReason({ ablation: planned.ablation, cases: planned.cases, result });
+      if (stop !== null) break;
+    }
 
-    const result = await runSweep(
-      spawnCapture, evalCommand, makeResultsLocator(listDirectory), inv, readTextFile
-    );
-
-    /** @type {SweepRecord} */
-    const record = {
-      condition,
-      exitCode: result.exitCode,
-      document: result.document,
-      stderrTail: result.stderrTail,
-      argv: sweepArgv,
+    const combined = combineSweepParts(condition, parts);
+    const record = buildSweepRecord(combined, {
+      argvs: parts.map((p) => p.argv),
       startedAt,
-    };
+      instrumentSha,
+    });
     const out = join(paths.resultsDir, `${condition}.json`);
     await writeTextFile(out, `${JSON.stringify(record, null, 2)}\n`);
-    console.error(`  exit ${result.exitCode} · ${result.document ? 'document kept' : 'NO DOCUMENT'} → ${out}`);
+    console.error(`  exit ${record.exitCode} · ${record.document ? 'document kept' : 'NO DOCUMENT'} → ${out}`);
 
-    if (result.document === null || result.exitCode > 1) failed++;
-    if (result.exitCode === 130 || result.exitCode === 143) {
-      console.error('  interrupted — stopping rather than sweeping the remaining conditions');
+    if (record.document === null || record.exitCode > 1) failed++;
+    if (stop !== null) {
+      // The record is already written; what is left is the condition copy, which would
+      // otherwise sit at the fixed path and be evaluated by whatever runs next.
+      console.error(`  ${stop.why}`);
+      if (stop.hint) console.error(`  ${stop.hint}`);
+      console.error('  stopping rather than sweeping the remaining conditions against a run that ' +
+        'has already stopped being evidence');
+      await removeDirectory(paths.conditionUnderTest);
+      console.error(`  removed ${paths.conditionUnderTest}`);
       return 1;
     }
   }
@@ -826,6 +1404,29 @@ export async function main(argv) {
 const invokedDirectly =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
+  // Ctrl-C at a terminal reaches this process, and Node's default handler ends it before
+  // the child's `close` event can fire — so the interrupted path never ran, no record was
+  // written, and `_conditions/current` was left populated with whichever condition was
+  // mid-sweep. Forward the signal instead: the child dies, `close` reports it as 128+N,
+  // and `main` writes the record and clears the path on its way out. With no child
+  // running there is nothing to wait for, so exit as the shell expects.
+  for (const signal of /** @type {NodeJS.Signals[]} */ (['SIGINT', 'SIGTERM'])) {
+    process.on(signal, () => {
+      if (spawnCapture.forwardSignal(signal)) return;
+      // WHY: with no child to wait for — between `selectCondition` and the spawn, during
+      // the record write, or between conditions — this exits without ever reaching main's
+      // cleanup, and the condition copy stays at the fixed path for whatever runs next to
+      // evaluate as though somebody had chosen it.
+      try {
+        // Absolute: `main` chdirs to the repo root, but a signal can arrive before it has,
+        // and a relative path would then name something else (or nothing).
+        rmSync(join(paths.repoRoot, paths.conditionUnderTest), { recursive: true, force: true });
+      } catch {
+        // Nothing left to remove, or nothing we can do about it while exiting.
+      }
+      process.exit(exitCodeForSignal(signal));
+    });
+  }
   process.exitCode = await main(process.argv.slice(2)).catch((e) => {
     process.stderr.write(`${e instanceof RunError ? e.message : e.stack}\n`);
     return 1;

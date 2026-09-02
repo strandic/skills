@@ -25,6 +25,7 @@ import { spawn } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as inv from './invariants.mjs';
+import { instrumentDigest } from './instrument.mjs';
 
 /** The three conditions we author. `none` arrives as the harness's own without-arm. */
 const CONDITION_IDS = ['treatment', 'oneliner', 'placebo'];
@@ -160,6 +161,16 @@ export function parsePreRegistration(markdown) {
       bad(`${at('cases')}: ${s.name} evidence '${s.evidence}' is neither delta nor capability`);
     if (s.ablation !== 'none' && s.ablation !== 'with-without')
       bad(`${at('cases')}: ${s.name} ablation '${s.ablation}' is not a harness ablation`);
+    // A6. The two fields are one decision written twice, and the merger keys behaviour on
+    // both: `evidence` splits the tables, `ablation` decides whether a without-arm is a
+    // baseline. A registration where they disagree makes those two answers contradict
+    // each other, so it is refused here rather than resolved later by whichever field the
+    // code happened to read.
+    const impliedAblation = s.evidence === 'delta' ? 'with-without' : 'none';
+    if (s.ablation !== impliedAblation)
+      bad(`${at('cases')}: ${s.name} is registered evidence '${s.evidence}' with ablation ` +
+        `'${s.ablation}' — '${s.evidence}' evidence is measured at ablation '${impliedAblation}', and a ` +
+        `case cannot be both`);
     if (!Array.isArray(s.tags)) bad(`${at('cases')}: ${s.name} has no tags array`);
     if (typeof s.scored !== 'boolean') bad(`${at('cases')}: ${s.name} has no scored flag`);
     if (typeof s.measures !== 'string') bad(`${at('cases')}: ${s.name} has no measures line`);
@@ -197,21 +208,40 @@ export function parsePreRegistration(markdown) {
  * DRIFTED: absence of evidence is not evidence of compliance, and a run that skipped
  * the drift check must not be able to quietly produce a report.
  *
+ * **What this record is not.** It is not a staleness guard, and nothing here should be
+ * read as one. `drifted:false` means the generated treatment mirror matched its source
+ * SKILL.md at the moment the check ran. It says nothing about the graders, the fixture,
+ * the replayed transcripts or the other two conditions; it carries no timestamp the
+ * merger compares; and the runner rewrites it on every invocation, so re-sweeping one
+ * condition resets it for two conditions measured on an older instrument. What catches
+ * that is `instrumentSha` and I2b — which is why this record now carries one too. I2b
+ * compares instruments, not times: it certifies that the sweeps, this record and the tree
+ * hash to the same cases, graders, fixture and conditions, and nothing anywhere compares
+ * how long ago any of them ran.
+ *
  * @param {string|null} json  null when the file is not there
  * @returns {DriftRecord}
  */
 export function parseDriftRecord(json) {
+  const drifted = (reason) => ({ drifted: true, reason, checkedAt: '', instrumentSha: '' });
   if (json === null || json === undefined)
-    return { drifted: true, reason: 'no results/drift.json — the drift check did not run', checkedAt: '' };
+    return drifted('no results/drift.json — the drift check did not run');
   let value;
   try {
     value = JSON.parse(json);
   } catch (e) {
-    return { drifted: true, reason: `results/drift.json is not JSON: ${e.message}`, checkedAt: '' };
+    return drifted(`results/drift.json is not JSON: ${e.message}`);
   }
   if (!value || typeof value.drifted !== 'boolean')
-    return { drifted: true, reason: 'results/drift.json carries no `drifted` boolean', checkedAt: '' };
-  return { drifted: value.drifted, reason: value.reason ?? '', checkedAt: value.checkedAt ?? '' };
+    return drifted('results/drift.json carries no `drifted` boolean');
+  return {
+    drifted: value.drifted,
+    reason: value.reason ?? '',
+    checkedAt: value.checkedAt ?? '',
+    // Carried through rather than defaulted to the current tree: an absent digest must
+    // reach I2b as absent, not as agreement.
+    instrumentSha: typeof value.instrumentSha === 'string' ? value.instrumentSha : '',
+  };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -272,7 +302,18 @@ export function computeContrasts(conditionScores, baselineScores, preRegistratio
   const out = [];
   for (const control of controls) {
     const score = control === 'none' ? mean(baselineScores) : conditionScores[control] ?? null;
-    if (score === null) continue; // the control did not run here; the row says so in its advisories
+    // B4: a NAMED control with no score means the case did not run in that condition.
+    // That used to `continue`, so the contrast vanished and the report printed eleven
+    // rows where twelve were registered — a missing measurement wearing the shape of a
+    // smaller table, with every invariant still passing. MergeSweeps refuses the same
+    // condition upstream; this is the second door on the same room, for a caller that
+    // hands the scores in directly.
+    if (score === null && control !== 'none')
+      bad(`${caseName}/${control}: the '${control}' condition has no score for this case — a contrast ` +
+        `against a control that did not run is not a contrast`);
+    // `none` is different in kind: it is the mean of the per-sweep without-arms, and a
+    // suite run under `--ablation none` legitimately has none. The row's advisories say so.
+    if (score === null) continue;
     const key = `${caseName}/${control}`;
     const expected = preRegistration.expectedDirection?.[key];
     if (expected !== -1 && expected !== 0 && expected !== 1)
@@ -307,6 +348,25 @@ export function computeBaselineSpread(perCaseBaselines) {
 }
 
 /**
+ * NoiseFloorOf — which rows the floor is measured from, as its own function.
+ *
+ * A6. The rule is that only DELTA rows feed the floor: a capability case is registered
+ * `ablation: none`, so any without-arm it has measures the same thing twice and its
+ * spread is noise about nothing. That rule used to live as a `.map` inside
+ * {@link mergeSweeps}, where no test could reach it — widening it to every row is a
+ * one-word tidy-up, and the collection guard upstream keeps `capabilityRows[*]
+ * .baselineScores` empty, so the widened version returns the same number on every fixture
+ * the merger can build. Pulling the selection out gives the rule a seam a test can hand a
+ * capability row WITH baselines to, which is the only way to hold it.
+ *
+ * @param {{deltaRows: MergedCaseRow[], capabilityRows?: MergedCaseRow[]}} rows
+ * @returns {number}
+ */
+export function noiseFloorOf(rows) {
+  return computeBaselineSpread((rows?.deltaRows ?? []).map((r) => r.baselineScores));
+}
+
+/**
  * I1b's stamp, applied as its own pass rather than inside ComputeContrasts — the
  * spread is a suite-wide quantity and is not known while a single case's contrasts are
  * being built. Keeping it separate also means a report assembled without this pass
@@ -315,13 +375,23 @@ export function computeBaselineSpread(perCaseBaselines) {
  * Every contrast is stamped, not only the sub-noise ones, so the field's ABSENCE never
  * has to be interpreted.
  *
+ * The comparison is `<=` against `spread + NOISE_EPSILON`, and the constant is imported
+ * rather than repeated so this and I1b can never drift apart. A contrast that ties the
+ * floor is INSIDE it: the floor is the smallest difference this instrument resolves, so
+ * a difference equal to it resolves nothing. Both quantities are means of the same
+ * fifteenths summed in different orders, which is why a mathematical tie lands one unit
+ * in the last place either side and a strict `<` published `triage-decompose-epic` at
+ * +0.13 as a held prediction.
+ *
  * @param {MergedCaseRow[]} rows
  * @param {number} spread
  */
 export function markNoiseFloor(rows, spread) {
   for (const row of rows)
     for (const c of row.contrasts ?? [])
-      c.belowNoiseFloor = Number.isFinite(spread) ? Math.abs(c.value) < spread : false;
+      c.belowNoiseFloor = Number.isFinite(spread)
+        ? Math.abs(c.value) <= spread + inv.NOISE_EPSILON
+        : false;
   return rows;
 }
 
@@ -342,10 +412,14 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
   if (!Array.isArray(sweeps) || sweeps.length === 0) bad('no sweeps to merge');
   /** @type {Map<ConditionId, HarnessDocument>} */
   const docs = new Map();
+  /** The envelopes themselves, for what only they carry: the per-case `ablations` map. */
+  /** @type {Map<ConditionId, SweepRecord>} */
+  const records = new Map();
   for (const s of sweeps) {
     if (!s?.document) bad(`sweep '${s?.condition}' carries no document`);
     if (docs.has(s.condition)) bad(`two sweeps for condition '${s.condition}'`);
     docs.set(s.condition, s.document);
+    records.set(s.condition, s);
   }
   for (const c of preRegistration.conditions)
     if (!docs.has(c))
@@ -360,6 +434,13 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
     else if (s.exitCode === 1)
       advisories.push(`${s.condition}: sweep exited 1 — a case scored below threshold, which is a ` +
         `result rather than a failure`);
+
+  // A6. Recorded once per sweep rather than once per case: an absent map is a property of
+  // the record, and I4b treats it as unchecked rather than as agreement.
+  for (const s of sweeps)
+    if (!s.ablations || typeof s.ablations !== 'object')
+      advisories.push(`${s.condition}: the sweep record carries no per-case ablation map, so what each ` +
+        `case ran cannot be checked against the ablation it was registered at`);
 
   const registered = new Set(preRegistration.cases.map((s) => s.name));
   for (const [condition, doc] of docs)
@@ -390,18 +471,50 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
     for (const condition of preRegistration.conditions) {
       const doc = docs.get(condition);
       const c = findCase(doc, spec.name);
+      // B4. A registered scored case with no measurement in one condition is a hole in the
+      // comparison, not a smaller comparison — but the refusal is I4b's, not a throw here.
+      // A throw aborts before any check runs, so an operator merging a truncated sweep got
+      // one message and lost I1's "run is partial" and the rest of the list with it. The
+      // cell is left null and the row is marked incomparable, so the hole cannot turn into
+      // a contrast on the way past.
       if (!c) {
         row.conditionScores[condition] = null;
         row.conditionRunScores[condition] = [];
-        row.advisories.push(`${condition}: case did not run`);
+        comparable = false;
+        row.advisories.push(`${condition}: registered and scored, but this sweep does not contain the case`);
         continue;
       }
       const runs = extractRunScores(doc, spec.name);
+      if (runs.with.length === 0) {
+        comparable = false;
+        row.advisories.push(`${condition}: present with an empty run list — an arm with no runs is the ` +
+          `absence of a measurement, not a score of zero`);
+      }
       row.conditionScores[condition] = mean(runs.with);
       row.conditionRunScores[condition] = runs.with;
-      if (runs.without.length > 0) row.baselineScores.push(mean(runs.without));
-      else if (spec.evidence === 'delta')
-        row.advisories.push(`${condition}: no without-arm, so this sweep contributes no baseline`);
+      // A6. A case registered `ablation: none` is single-arm by construction, because a
+      // replayed transcript carries the plugin into both arms and the without column would
+      // be measuring the same thing twice. When a sweep produces one anyway (the runner did
+      // not enforce the field), it is recorded as an advisory and NOT collected: a baseline
+      // here would print a `none (per sweep)` row beside a table whose own heading says its
+      // numbers have no referent, and would drag a meaningless spread into the suite-wide
+      // noise floor.
+      //
+      // The guard reads the REGISTERED ablation, which is the field A6 is about — the
+      // parser refuses a registration whose `evidence` and `ablation` disagree, so the two
+      // keys select the same rows, but only one of them names the rule.
+      if (spec.ablation !== 'with-without') {
+        if (runs.without.length > 0)
+          row.advisories.push(`${condition}: registered ablation none, but the sweep produced a ` +
+            `without-arm; it contributes no baseline and is not reported`);
+      } else if (runs.without.length > 0) row.baselineScores.push(mean(runs.without));
+      else row.advisories.push(`${condition}: no without-arm, so this sweep contributes no baseline`);
+
+      // A6, the other half: what the sweep says it actually did, per case. The refusal is
+      // I4b's; this is the same fact in the report a reader has in front of them.
+      const sweptAblation = records.get(condition)?.ablations?.[spec.name];
+      if (sweptAblation !== undefined && sweptAblation !== spec.ablation)
+        row.advisories.push(`${condition}: registered ablation '${spec.ablation}', swept '${sweptAblation}'`);
 
       // skippedPaidGraders means the arms were scored on different grader sets. The
       // harness omits its own delta for exactly this reason; so do we.
@@ -420,7 +533,7 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
     else bad(`case '${spec.name}': unknown evidence kind '${spec.evidence}'`);
   }
 
-  const spread = computeBaselineSpread(rows.delta.map((r) => r.baselineScores));
+  const spread = noiseFloorOf({ deltaRows: rows.delta, capabilityRows: rows.capability });
   markNoiseFloor(rows.delta, spread);
 
   // `partial` is three-valued on purpose. A document with no boolean cannot establish
@@ -472,7 +585,12 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
  *
  * @param {MergedReport} report
  * @param {PreRegistration} preRegistration
- * @param {{drift: DriftRecord, committedPreRegistrationSha: string, preRegistrationDirty: boolean}} ctx
+ * @param {{sweeps?: SweepRecord[], drift: DriftRecord, committedPreRegistrationSha: string,
+ *          preRegistrationDirty: boolean, instrumentSha?: string, instrumentShaError?: string}} ctx
+ *   `instrumentSha` is `instrumentDigest(suiteDir)` taken at merge time — the suite as
+ *   it stands now, which I2b compares against what the sweeps say they measured.
+ *   `instrumentShaError` says why it is empty when it is empty; I2b prints it, because a
+ *   missing directory, an unreadable file and a bug are three different remedies.
  * @returns {{ ok: boolean, violations: string[] }}
  */
 export function checkReport(report, preRegistration, ctx) {
@@ -496,7 +614,15 @@ export function checkReport(report, preRegistration, ctx) {
       inv.i1cNoFailedRuns(s.document, preRegistration.runsPerCase)]),
     ['I1b', inv.i1bNoiseFloorMarked(report)],
     ['I2', inv.i2RunNotVoid(report, registered, ctx.drift, ctx.preRegistrationDirty)],
+    // Per SWEEP RECORD, like I1c: the digest is something only the runner knows, so it
+    // rides on the envelope rather than on the merged report. I2 cannot see any of it.
+    ['I2b', inv.i2bInstrumentAgreement(ctx.sweeps, ctx.drift, ctx.instrumentSha, ctx.instrumentShaError)],
     ['I4', inv.i4EvidenceKindsNeverMixed(report, expectedDelta, expectedCapability)],
+    // Also per SWEEP: whether a registered case was measured at all, and at the ablation
+    // it was registered at, is a fact about the documents. The merged report cannot show
+    // it — a hole arrives as a null cell that looks exactly like a case that scored
+    // nothing.
+    ['I4b', inv.i4bEveryScoredCaseMeasured(ctx.sweeps, preRegistration.cases)],
     ['I7', inv.i7ControlNeverInHeadline(report, preRegistration.cases)],
     ['I8', inv.i8PreRegistrationFrozen(
       ctx.committedPreRegistrationSha, report?.provenance?.preRegistrationSha, ctx.preRegistrationDirty)],
@@ -519,8 +645,17 @@ const direction = (d) => (d > 0 ? '+1' : d < 0 ? '-1' : '0');
 /**
  * FormatComparison — delta and capability under separate headings, the noise floor
  * printed beside them, per-run scatter kept, and no combined mean anywhere. A contrast
- * smaller than the spread is published and marked; suppressing it would be publication
+ * no larger than the spread is published and marked; suppressing it would be publication
  * bias, and publishing it unmarked would be worse.
+ *
+ * A5. The printed rule is the rule the code applies, tolerance included: a contrast is
+ * inside the floor when `|Δ| <= floor + NOISE_EPSILON`. It used to say "smaller than
+ * this is not a finding", which sends a reader applying it by hand to the opposite
+ * verdict on exactly the row the code marks — `triage-decompose-epic`/placebo comes out
+ * |Δ| 0.13 against a floor of 0.13, and the two differ by one unit in the last place.
+ * The legend prints the epsilon rather than describing an exact `<=` the code does not
+ * implement, because a reader who reproduces the arithmetic will land on the ulp too.
+ * Both the legend and the note cell are pinned by tests.
  *
  * @param {MergedReport} report
  * @returns {string}
@@ -536,11 +671,16 @@ export function formatComparison(report) {
     `**runs/case** ${p.runsPerCase} · **started** ${p.startedAt}`);
   out.push('');
   out.push(`**Suite** \`${p.suiteSha}\` · **pre-registration** \`${p.preRegistrationSha}\` · ` +
+    `**instrument** \`${String(p.instrumentSha ?? '').slice(0, 12) || 'unrecorded'}\` · ` +
     `**cost** ~$${(p.costUsdEstimate ?? 0).toFixed(2)} API-equivalent (subscription-metered; no money moved)`);
   out.push('');
   out.push(`**Noise floor — ${typeof spread === 'number' ? f2(spread) : 'unmeasured'}.** The worst per-case ` +
-    `spread between the stock-Claude columns the sweeps produced against identical cases. A contrast ` +
-    `smaller than this is not a finding, and every one below it is marked.`);
+    `spread between the stock-Claude columns the sweeps produced against identical cases. A contrast at ` +
+    `or below this floor (|Δ| <= floor + ${inv.NOISE_EPSILON}) is not a finding, and every one of them ` +
+    `is marked. A contrast that ties the floor is inside it: the floor is the smallest difference this ` +
+    `instrument resolves, so a difference equal to it resolves nothing. The tolerance is there because ` +
+    `a contrast and the floor are means of the same fractions summed in different orders, so a ` +
+    `mathematical tie lands one unit in the last place either side.`);
   out.push('');
 
   out.push('## Delta evidence', '');
@@ -561,7 +701,9 @@ export function formatComparison(report) {
     for (const r of report.deltaRows)
       for (const c of r.contrasts)
         out.push(`| \`${r.case}\` | ${c.control} | ${signed(c.value)} | ${direction(c.expected)} | ` +
-          `${c.belowNoiseFloor ? 'below the noise floor' : ''} |`);
+          // A5. "at or below" so a tie with the floor — which the code marks — reads the
+          // same way in the cell as it does in the legend above.
+          `${c.belowNoiseFloor ? 'at or below the noise floor' : ''} |`);
     out.push('');
     out.push('The direction column is the sign registered before any run. It is a prediction, not a ' +
       'measurement, and it is typeset as a sign so it can never be read as one.', '');
@@ -585,12 +727,21 @@ export function formatComparison(report) {
     'three and one that works every time have the same mean.', '');
   out.push('| case | condition | runs |');
   out.push('|---|---|---|');
-  for (const r of [...report.deltaRows, ...report.capabilityRows]) {
+  const scatter = (r) => {
     for (const c of conditions)
       out.push(`| \`${r.case}\` | ${c} | ${(r.conditionRunScores[c] ?? []).map((n) => f2(n)).join(' · ') || '—'} |`);
+  };
+  for (const r of report.deltaRows) {
+    scatter(r);
     if (r.baselineScores.length > 0)
       out.push(`| \`${r.case}\` | none (per sweep) | ${r.baselineScores.map((n) => f2(n)).join(' · ')} |`);
   }
+  // A6. Capability rows get no `none (per sweep)` row, and the loop is split rather than
+  // guarded so the rule is structural: these cases are registered `ablation: none`, so a
+  // baseline row here would print numbers for the comparison the heading above says does
+  // not exist. MergeSweeps already refuses to collect the baselines; this is the printer
+  // saying the same thing, so neither half alone has to be remembered.
+  for (const r of report.capabilityRows) scatter(r);
   out.push('');
 
   const notes = [...report.advisories, ...report.deltaRows.flatMap((r) => r.advisories.map((a) => `${r.case}: ${a}`)),
@@ -624,6 +775,10 @@ export function formatComparison(report) {
  * that disagree on any of the three are refused: three sweeps run under two CLI
  * versions are not one comparison.
  *
+ * `instrumentSha` is recorded the same way and for the same reason — it says which
+ * cases, graders, fixture and conditions produced these numbers — but a disagreement is
+ * left to I2b rather than thrown here. See the comment at the assignment.
+ *
  * @param {RevParse} revParse
  * @param {(path: string) => Promise<{digest: string, dirty: boolean}>} digest
  * @param {Clock} clock
@@ -644,12 +799,21 @@ export async function buildProvenance(revParse, digest, clock, sweeps, preRegist
   const subjectModel = agree('subject model', docs.map((d) => d.suite?.modelOverride));
   const judgeModel = agree('judge model', docs.map((d) => d.suite?.judgeModel));
 
+  // NOT routed through `agree`. A mixed set — some sweeps stamped, some not — must be
+  // refused by I2b, which can name the side that differs and say what to re-run; a throw
+  // here could only say "they disagree", and an absent digest is not a disagreement.
+  // Anything short of unanimity records '' and I2b does the refusing.
+  const shas = sweeps.map((s) => s.instrumentSha).filter((x) => typeof x === 'string' && x !== '');
+  const instrumentSha =
+    shas.length === sweeps.length && new Set(shas).size === 1 ? shas[0] : '';
+
   const starts = sweeps.map((s) => s.startedAt ?? s.document.startedAt).filter(Boolean).sort();
   const { digest: preRegistrationSha } = await digest(preRegistrationPath);
 
   return {
     suiteSha: (await revParse('HEAD')).trim(),
     preRegistrationSha,
+    instrumentSha,
     claudeVersion: claudeVersion ?? '',
     subjectModel: subjectModel ?? '',
     judgeModel: judgeModel ?? '',
@@ -684,6 +848,39 @@ export const makePreRegistrationDigest = (readTextFile, git) => async (path) => 
  * even on a tree git reports clean — and a file that is not committed at all yields
  * '', which I8 refuses rather than reading as agreement.
  */
+/**
+ * The instrument as it stands at merge time, for I2b to compare against what the sweeps
+ * recorded. Takes the digest function as a handle rather than calling `instrumentDigest`
+ * directly, so a test can supply one without a suite on disk — the same seam as
+ * {@link RevParse} and {@link PreRegistrationDigest}.
+ *
+ * A digest that cannot be taken yields '', and I2b refuses that: a suite the merger
+ * cannot read is not a suite it can vouch for, and returning the sweeps' own sha here
+ * would be the check confirming itself.
+ *
+ * The failure travels WITH the empty sha rather than being swallowed. "No instrument
+ * digest was computed" is the same sentence for a suite directory that is not there, a
+ * file the process may not read, and a bug in the digest itself — and those are three
+ * different things for the operator to do next. The reason is not thrown, because the
+ * other invariants still have things to say about this report.
+ *
+ * @param {(suiteDir: string) => Promise<string>} digestSuite
+ * @param {string} suiteDir
+ * @returns {Promise<{sha: string, error: string}>}
+ */
+export const resolveInstrumentSha = (digestSuite, suiteDir) =>
+  Promise.resolve()
+    .then(() => digestSuite(suiteDir))
+    .then((d) =>
+      typeof d === 'string' && d !== ''
+        ? { sha: d, error: '' }
+        : { sha: '', error: `the digest of ${suiteDir} came back as ${JSON.stringify(d)}, not a sha` })
+    // `code` first: ENOENT and EACCES are the two an operator can act on directly.
+    .catch((e) => ({
+      sha: '',
+      error: `${e?.code ? `${e.code}: ` : ''}${e?.message ?? String(e)}`,
+    }));
+
 async function committedDigest(git, absPath) {
   const root = await git(['rev-parse', '--show-toplevel']);
   if (root.code !== 0) return '';
@@ -735,7 +932,9 @@ async function main(argv) {
   const clock = () => new Date().toISOString();
 
   const resultsDir = resolve(args.resultsDir);
-  // SuitePaths puts results at <suiteDir>/results, so the pre-registration is its sibling.
+  // SuitePaths puts results at <suiteDir>/results, so the suite is its parent and the
+  // pre-registration is its sibling.
+  const suiteDir = resolve(resultsDir, '..');
   const preRegPath = resolve(args.preRegistration || join(resultsDir, '..', 'PRE-REGISTRATION.md'));
   const outPath = args.out ? resolve(args.out) : '';
 
@@ -756,11 +955,17 @@ async function main(argv) {
   const provenance = await buildProvenance(revParse, memoisedDigest, clock, sweeps, preRegistration, preRegPath);
   const report = mergeSweeps(sweeps, preRegistration, provenance);
 
+  // Taken now, over the tree being merged from — so a grader, fixture or condition edited
+  // between the sweeps and this merge is caught by I2b rather than published.
+  const instrument = await resolveInstrumentSha(instrumentDigest, suiteDir);
+
   const check = checkReport(report, preRegistration, {
     sweeps,
     drift,
     committedPreRegistrationSha: await committedDigest(git, preRegPath),
     preRegistrationDirty: dirty,
+    instrumentSha: instrument.sha,
+    instrumentShaError: instrument.error,
   });
   if (!check.ok) {
     process.stderr.write('refusing to emit a report — invariants violated:\n');
