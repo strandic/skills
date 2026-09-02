@@ -437,3 +437,45 @@ That sentence survives, with two qualifications the numbers require:
 And what these numbers still cannot say, unchanged: nothing about whether the software
 comes out better. That is Tier 2, and it is not purchasable at this budget.
 
+---
+
+## Earlier measurement — setup choices moved to gate 0
+
+Measured and shipped before the full sweep, and recorded here because this is where the
+project's measurements live.
+
+**The change.** SKILL.md told the agent to settle the artifact home *before* step 0, and
+separately that the two setup choices were "the human's call, never yours". It obeyed
+both: it stopped and asked, producing nothing. Five of five runs replied with 670–1030
+characters of triage and questions, and step 0 never happened.
+
+The choices are still the human's. They now arrive **at gate 0**, beside the step-0
+artifact, so one reply settles all three instead of spending a round-trip that gives the
+human nothing to review.
+
+**Result**, at n=5, one case, `--ablation none`, `sonnet` subject / `opus` judge, against
+a grader that did not change between arms:
+
+| | before | after |
+|---|---|---|
+| `plan-exists` | **0/5** | **4/5** |
+| mean score | 0.72 | 0.85 |
+
+A later figure of 0.95 circulated for the "after" arm. It is not comparable: the rubric
+changed between those runs, so it blends the skill change with a grader fix. Against a
+constant grader the effect is 0.72 → 0.85, and that is the number.
+
+**The grader fix, which the experiment exposed.** `plan-exists` and `step0-only` were
+mutually exclusive by construction — one demanded the plan in a file, the other judged
+the reply, and five runs split cleanly: four wrote the file and failed the rubric, one
+kept the plan inline and failed the file check. **No run could satisfy both**, so the
+pair was measuring itself. `step0-only` now accepts a plan either set out in the reply or
+written to a file the reply names.
+
+**Contamination, stated rather than waved off.** This was a change to the skill made in
+response to eval output, by the author of the skill, the grader, the fixture and the
+case. Three things bound it: the mechanism was visible in the replies rather than
+inferred from a score, the criterion was the method's own claim (does step 0 happen)
+rather than a grader's invention, and 0/5 → 4/5 is not a shift a fitted instrument
+manufactures. None of that makes it independent evidence.
+
