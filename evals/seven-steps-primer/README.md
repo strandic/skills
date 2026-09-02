@@ -168,8 +168,9 @@ how to read the numbers inside it.
 
 **A delta is a contrast, and a contrast is only worth the floor it clears.** Four cases
 carry contrasts: treatment minus `none`, minus `oneliner`, minus `placebo`. Every contrast
-is stamped against the measured baseline spread, and one smaller than the spread is
-published *and marked* — never suppressed, never read as a finding.
+is stamped against the measured baseline spread, and one at or below the spread (within
+1e-9, so a tie is inside) is published *and marked* — never suppressed, never read as a
+finding.
 
 **A capability score is a description, not evidence of anything comparative.**
 `step3-markers-in-source` replays a hand-written transcript, and a replay carries the
@@ -265,14 +266,15 @@ treatment cannot win by lexical echo — but that is mitigation, not validation.
 regex matching everything. They were written before any sweep existed, so re-cut the
 negatives from the real `without` column after the first one.
 
-**The self-tests do not yet run the probes.** `scripts/test/graders.test.mjs` declares no
-tests today — and **a file declaring no tests reports `pass 1`**, which is the same
-vacuous-pass defect the invariants are built against, one level up. I1, I1b, I2, I4, I7
-and I8 are enforced by the merger, which refuses to write a report that violates one; I3,
-I5 and I6 are enforced nowhere yet, so the ceiling sentence, the probe completeness and
-the content-evidence rule currently rest on this file and on review.
-`node --test scripts/test/*.test.mjs` runs 162 tests over the pure functions; the trailing
-glob matters, since a bare directory is read as a module path and fails to load.
+**The self-tests run the probes.** `scripts/test/graders.test.mjs` checks every grader's
+frontmatter shape, runs each regex against its own probes, binds the `source-untouched`
+patterns to the real fixture and the edits they must catch, and refuses any LLM grader
+body that carries a comment or a design note (the judge reads the body verbatim). I1, I1b,
+I1c, I2, I2b, I4, I4b, I7 and I8 are enforced by the merger, which refuses to write a
+report that violates one; I3, I5 and I6 are enforced nowhere yet, so the ceiling
+sentence, the probe completeness and the content-evidence rule rest on the test file and
+on review. `node --test scripts/test/*.test.mjs` runs the suite; the trailing glob
+matters, since a bare directory is read as a module path and fails to load.
 
 **The noise floor is unmeasured until three sweeps land.** No case has run at `runs: 5`, so
 every statement about the spread in this file is a design intention rather than an

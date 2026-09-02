@@ -94,14 +94,25 @@
  */
 
 /**
- * @callback ResultsLocator
+ * @callback ResultsSnapshot
  * @param {EvalInvocation} inv
- * @returns {Promise<string>} path to that sweep's `aggregate-result.json`
+ * @returns {Promise<string[]>} the NAMES of every `<eval-dir>/results/<ISO-timestamp>/`
+ *   directory, sorted; `[]` when the suite has none
  *
  * RESOLVED in recon: with target `.` and `--eval-dir evals/<skill>`, the harness
  * writes `<eval-dir>/results/<ISO-timestamp>/aggregate-result.json` alongside
- * `report.html`. Take the newest timestamped directory. `--eval-dir` accepts a
- * PATH, not only a bare directory name.
+ * `report.html`. `--eval-dir` accepts a PATH, not only a bare directory name.
+ *
+ * REPLACES `ResultsLocator`, which handed back the newest timestamped path. Newest-wins
+ * is only correct while this process is the sole writer: any other harness run against
+ * the same eval dir during a sweep (the README's control-all-steps diagnostic, say)
+ * produces a newer directory, and the sweep then claims somebody else's numbers with
+ * everything still looking plausible. The caller takes this snapshot before and after
+ * the spawn and compares the two SETS, so it can say exactly which directories the sweep
+ * is responsible for — and how many. Exactly one is attributable; none or several is not.
+ *
+ * Only timestamp-shaped names count: `<condition>.json` and `drift.json` live in the
+ * same folder.
  */
 
 /**
@@ -169,23 +180,65 @@
  * @callback RunSweep
  * @param {SpawnCapture} spawnCapture
  * @param {EvalCommand} evalCommand
- * @param {ResultsLocator} resultsLocator
+ * @param {ResultsSnapshot} resultsSnapshot
  * @param {EvalInvocation} inv
+ * @param {ReadTextFile} readTextFile   reads the located `aggregate-result.json`; a locator
+ *                                      that hands back a path leaves nobody able to open it
+ * @param {string[]} [expectedCases]    the case names this invocation asked for; `[]` skips
+ *                                      the check. A document reporting a case the invocation
+ *                                      never named is not this invocation's, whatever its
+ *                                      timestamp says, and one missing a case it did name is
+ *                                      a shorter run than it claims
  * @returns {Promise<SweepResult>}
  *
  * Does not throw on non-zero exit: 1 means "scored below threshold", a result
  * rather than a failure. Exit 2 is partial and must not be compared to a complete run.
+ * Anything ≥ 128 is a signalled death and no sweep may continue past one.
+ *
+ * `document` is null whenever the output cannot be attributed to this invocation. The
+ * caller must treat that as a stop, not as "nothing missing".
  */
 
 /**
  * @callback DiscoverCases
  * @param {ReadTextFile} readTextFile
+ * @param {(path: string) => Promise<{name: string, isDirectory: boolean}[]>} listDirectory
  * @param {SuitePaths} paths
  * @returns {Promise<CaseSpec[]>}
  *
  * Reads each case directory's frontmatter for name and tags. The runner needs this
  * before it can exclude the control case or pick the smoke case, and no other
- * signature supplied it.
+ * signature supplied it. `listDirectory` is appended to the declared signature:
+ * discovery is a directory walk and `ReadTextFile` cannot enumerate.
+ */
+
+/**
+ * @callback PlanSweep
+ * @param {CaseSpec[]} cases   every discovered case, control cases included
+ * @param {{conditions: ConditionId[], runs: number, smoke: boolean}} args
+ * @param {SuitePaths} [suitePaths]
+ * @returns {{scored: string[], excluded: string[],
+ *            groups: {ablation: 'with-without'|'none', cases: string[]}[],
+ *            scopeByName: boolean,
+ *            preChecks: {path: string, why: string}[],
+ *            sweeps: {condition: ConditionId, invocations: {ablation: 'with-without'|'none',
+ *                     cases: string[], inv: EvalInvocation, argv: string[]}[]}[]}}
+ *
+ * Pure. The WHOLE run — one invocation per distinct case ablation per condition, their
+ * argv already built, plus the files that must exist before the first one spends
+ * anything. These decisions used to live in the entry point, where `BuildEvalArgv` could
+ * be pinned byte for byte while the caller passed it the wrong arguments unobserved.
+ */
+
+/**
+ * @callback SweepStopReason
+ * @param {{ablation: 'with-without'|'none', cases: string[], result: SweepResult}} part
+ * @returns {{why: string, hint: string|null}|null}
+ *
+ * Pure. Why this invocation must be the run's last, or null to carry on: a signalled
+ * death, a document that cannot be attributed to it (`document: null` — NOT "no cases
+ * missing"), or a document reporting fewer cases than it named. Each costs one
+ * invocation to discover and would otherwise cost three conditions' rate-limit windows.
  */
 
 /**
@@ -203,6 +256,27 @@
 /* ────────────────────────────────────────────────────────────────────────────
  * merge-results — turning three sweeps into one comparison
  * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @callback ResolveInstrumentSha
+ * @param {(suiteDir: string) => Promise<string>} digestSuite the digest function itself
+ * @param {string} suiteDir
+ * @returns {Promise<{sha: string, error: string}>} the digest of the instrument as it
+ * stands on disk, or `''` and the reason it could not be taken
+ *
+ * The merger's own view of `instrumentDigest(suiteDir)` — the cases, their graders, the
+ * transcripts they replay, the fixture and every condition's SKILL.md. `digestSuite` is
+ * injected rather than called directly so a test can drive the disagreement without a
+ * suite on disk: I2b refuses a merge whose sweep records disagree with each other, or
+ * with the tree the merger can see, because a treatment measured against last week's
+ * graders merges cleanly against this week's controls and every other invariant passes.
+ *
+ * The failure travels WITH the empty sha rather than being swallowed, because "no
+ * instrument digest was computed" is the same sentence for a missing suite directory, a
+ * file the process may not read, and a bug in the digest — three different things for
+ * the operator to do next. It is returned, not thrown: the other invariants still have
+ * things to say about the report.
+ */
 
 /**
  * @callback ParseHarnessDocument
@@ -269,7 +343,8 @@
  * @returns {string}
  *
  * Pure. Delta and capability tables under separate headings, noise floor beside
- * them: a contrast smaller than the spread must not read as a finding.
+ * them: a contrast at or below the spread (within NOISE_EPSILON) must not read as a
+ * finding.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────

@@ -14,12 +14,16 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
   buildEvalArgv, selectTagFilters, selectAllowTools, invocationFor, evalCommandFrom,
-  makeResultsLocator, runSweep, selectCondition, discoverCases, readCaseSpec, yamlish,
-  frontmatter, inlineList, parseArgv, tail, paths, suitePathsFor, RunError,
+  makeResultsSnapshot, aggregatePathFor, runSweep, selectCondition, discoverCases, casesMissingFrom,
+  readCaseSpec, yamlish, frontmatter, inlineList, parseArgv, tail, paths, suitePathsFor,
+  groupCasesByAblation, combineHarnessDocuments, combineSweepParts, buildSweepRecord,
+  buildDriftRecord, makeSpawnCapture, exitCodeForSignal, isInterrupted, RunError,
+  planSweep, sweepStopReason,
 } from '../run-evals.mjs';
 
 /** The real handles, read-only, so the suite's own case files are what gets asserted. */
@@ -65,7 +69,7 @@ test('the argv is exactly this, in exactly this order', () => {
 });
 
 test('the smoke pilot is one case at one run, and nothing else moves', () => {
-  assert.deepEqual(buildEvalArgv(invocation({ runs: 1, caseGlobs: ['gate-stop-step0'] })), [
+  assert.deepEqual(buildEvalArgv(invocation({ runs: 1, caseGlobs: ['gate-stop-step0'], tagFilters: [] })), [
     'plugin', 'eval', '.',
     '--eval-dir', 'evals/seven-steps-primer',
     '--ablation', 'with-without',
@@ -76,9 +80,20 @@ test('the smoke pilot is one case at one run, and nothing else moves', () => {
     '--scaffold',
     '--no-publish',
     '--case', 'gate-stop-step0',
-    '--tag', 'capability', 'core', 'gate', 'guardrail', 'scored', 'triage',
     '--allow-tools', 'Bash', 'Edit', 'Write',
   ]);
+});
+
+test('--case and --tag are never passed together — how they combine is unverified', () => {
+  // Recon passed exactly one `--case` and never with `--tag`; 6-cold-fork-register.md
+  // records the combination as underdetermined. If the harness ORs them, the name-scoped
+  // `--ablation none` invocation readmits all five tagged cases and the ablation split is
+  // silently undone — a plausible number, not an error.
+  assert.throws(
+    () => buildEvalArgv(invocation({ caseGlobs: ['step3-markers-in-source'] })),
+    RunError
+  );
+  assert.doesNotThrow(() => buildEvalArgv(invocation({ caseGlobs: ['x'], tagFilters: [] })));
 });
 
 test('the suite\'s real cases build the command that will actually run', async () => {
@@ -101,18 +116,22 @@ test('the suite\'s real cases build the command that will actually run', async (
 /* ── The order rules, stated as rules rather than implied by the array above ── */
 
 test('the target precedes every option that would consume it', () => {
-  const argv = buildEvalArgv(invocation({ caseGlobs: ['x'] }));
-  const target = argv.indexOf('.');
-  assert.equal(target, 2, 'the target is the argument right after `plugin eval`');
-  for (const flag of ['--tag', '--allow-tools'])
-    assert.ok(target < argv.indexOf(flag), `${flag} would consume a target that came after it`);
+  for (const [argv, flags] of [
+    [buildEvalArgv(invocation()), ['--tag', '--allow-tools']],
+    [buildEvalArgv(invocation({ caseGlobs: ['x'], tagFilters: [] })), ['--case', '--allow-tools']],
+  ]) {
+    const target = argv.indexOf('.');
+    assert.equal(target, 2, 'the target is the argument right after `plugin eval`');
+    for (const flag of flags)
+      assert.ok(target < argv.indexOf(flag), `${flag} would consume a target that came after it`);
+  }
 });
 
 test('--json is never passed — it silences the run, and silence gets a sweep killed', () => {
   // Two 90-minute sweeps were killed after 41 and 34 minutes of producing no output at
   // all, which is what --json does: it suppresses every progress line. The document
   // still lands in <eval-dir>/results/<timestamp>/, which is what ResultsLocator reads.
-  assert.ok(!buildEvalArgv(invocation({ caseGlobs: ['x'] })).includes('--json'));
+  assert.ok(!buildEvalArgv(invocation({ caseGlobs: ['x'], tagFilters: [] })).includes('--json'));
   assert.ok(!buildEvalArgv(invocation()).includes('--json'));
 });
 
@@ -324,22 +343,20 @@ test('the parent environment survives, minus the undefined entries spawn rejects
   assert.ok(!('GONE' in env));
 });
 
-/* ── ResultsLocator ────────────────────────────────────────────────────────── */
+/* ── ResultsSnapshot ───────────────────────────────────────────────────────── */
 
 const entries = (...names) => names.map((name) => ({ name, isDirectory: !name.endsWith('.json') }));
 
-test('the newest timestamped directory wins, and only timestamped directories count', async () => {
-  const locate = makeResultsLocator(async () =>
-    entries('2026-08-27T14-06-02-737Z', '2026-08-27T14-08-43-660Z', 'treatment.json', 'drift.json'));
-  assert.equal(
-    await locate({ suiteDir: 'evals/s' }),
-    'evals/s/results/2026-08-27T14-08-43-660Z/aggregate-result.json'
-  );
+test('the snapshot is every timestamped directory, sorted, and nothing else', async () => {
+  const snapshot = makeResultsSnapshot(async () =>
+    entries('2026-08-27T14-08-43-660Z', '2026-08-27T14-06-02-737Z', 'treatment.json', 'drift.json'));
+  assert.deepEqual(await snapshot({ suiteDir: 'evals/s' }),
+    ['2026-08-27T14-06-02-737Z', '2026-08-27T14-08-43-660Z']);
 });
 
-test('no results directory yields the empty string, not a throw and not a guess', async () => {
-  const locate = makeResultsLocator(async () => { throw new Error('ENOENT'); });
-  assert.equal(await locate({ suiteDir: 'evals/s' }), '');
+test('no results directory yields an empty list, not a throw and not a guess', async () => {
+  const snapshot = makeResultsSnapshot(async () => { throw new Error('ENOENT'); });
+  assert.deepEqual(await snapshot({ suiteDir: 'evals/s' }), []);
 });
 
 /* ── RunSweep — a result, never an exception ───────────────────────────────── */
@@ -347,31 +364,38 @@ test('no results directory yields the empty string, not a throw and not a guess'
 const doc = { schemaVersion: 1, cases: [] };
 const evalCommand = () => ({ command: 'claude', env: {} });
 
-/** Locates nothing, then the given path — a sweep that produced a fresh directory. */
-const locatorYielding = (...sequence) => {
+const FRESH = '2026-08-27T14-08-43-660Z';
+const STALE = '2026-08-01T00-00-00-000Z';
+
+/** The directory listing before the spawn, then after it. */
+const snapshotYielding = (...sequence) => {
   let i = 0;
   return async () => sequence[Math.min(i++, sequence.length - 1)];
 };
 
 test('a fresh results directory is this sweep\'s document', async () => {
+  let read = null;
   const result = await runSweep(
     async () => ({ code: 0, stdout: '', stderr: 'ok' }),
     evalCommand,
-    locatorYielding('', 'evals/s/results/2026-08-27T14-08-43-660Z/aggregate-result.json'),
+    snapshotYielding([], [FRESH]),
     invocation(),
-    async () => JSON.stringify(doc)
+    async (path) => {
+      read = path;
+      return JSON.stringify(doc);
+    }
   );
   assert.deepEqual(result.document, doc);
+  assert.equal(read, aggregatePathFor(invocation(), FRESH));
   assert.equal(result.exitCode, 0);
   assert.equal(result.condition, 'treatment');
 });
 
 test('a results directory that was already there is NOT this sweep\'s output', async () => {
-  const stale = 'evals/s/results/2026-08-01T00-00-00-000Z/aggregate-result.json';
   const result = await runSweep(
     async () => ({ code: 1, stdout: 'not json', stderr: '' }),
     evalCommand,
-    locatorYielding(stale, stale),
+    snapshotYielding([STALE], [STALE]),
     invocation(),
     async () => assert.fail('the stale document must not be read')
   );
@@ -379,11 +403,71 @@ test('a results directory that was already there is NOT this sweep\'s output', a
   assert.match(result.stderrTail, /predates this sweep/);
 });
 
+test('two new directories are two runs — neither is claimed, and both are named', async () => {
+  // The README's control-all-steps diagnostic, or a second sweep, started against the
+  // same eval dir while this one ran. Newest-wins would hand its document over silently.
+  const other = '2026-08-27T14-09-00-000Z';
+  const result = await runSweep(
+    async () => ({ code: 0, stdout: JSON.stringify(doc), stderr: '' }),
+    evalCommand,
+    snapshotYielding([STALE], [STALE, FRESH, other]),
+    invocation(),
+    async () => assert.fail('neither document may be read')
+  );
+  assert.equal(result.document, null);
+  assert.match(result.stderrTail, /another harness run wrote into this suite during the sweep/);
+  assert.match(result.stderrTail, new RegExp(FRESH));
+  assert.match(result.stderrTail, new RegExp(other));
+});
+
+test('a document naming a case this sweep did not ask for is not this sweep\'s', async () => {
+  const strayDoc = { schemaVersion: 1, cases: [{ name: 'gate-stop-step0' }, { name: 'control-all-steps' }] };
+  const result = await runSweep(
+    async () => ({ code: 0, stdout: '', stderr: '' }),
+    evalCommand,
+    snapshotYielding([], [FRESH]),
+    invocation(),
+    async () => JSON.stringify(strayDoc),
+    ['gate-stop-step0']
+  );
+  assert.equal(result.document, null);
+  assert.match(result.stderrTail, /control-all-steps/);
+  assert.match(result.stderrTail, /did not ask for/);
+});
+
+test('a document over a subset of the asked cases is still this sweep\'s, and says what is missing', async () => {
+  // Kept, because it is real evidence for the case it does carry and the merger refuses
+  // the incomplete set anyway. Named, because this is what a non-repeatable `--case`
+  // would look like: four names in, one case out, every name expected.
+  const partialDoc = { schemaVersion: 1, cases: [{ name: 'gate-stop-step0' }] };
+  const result = await runSweep(
+    async () => ({ code: 0, stdout: '', stderr: '' }),
+    evalCommand,
+    snapshotYielding([], [FRESH]),
+    invocation(),
+    async () => JSON.stringify(partialDoc),
+    ['gate-stop-step0', 'triage-skip-oneliner']
+  );
+  assert.deepEqual(result.document, partialDoc);
+  assert.match(result.stderrTail, /no result for triage-skip-oneliner/);
+  assert.ok(!/no result for gate-stop-step0/.test(result.stderrTail));
+});
+
+test('the missing-case check reads the document\'s own case list, and skips when nothing was named', () => {
+  const document = { cases: [{ name: 'gate-stop-step0' }, { name: 'triage-skip-oneliner' }] };
+  assert.deepEqual(casesMissingFrom(document, ['gate-stop-step0', 'step3-markers-in-source']),
+    ['step3-markers-in-source']);
+  assert.deepEqual(casesMissingFrom(document, ['gate-stop-step0']), []);
+  assert.deepEqual(casesMissingFrom(document, []), []);
+  assert.deepEqual(casesMissingFrom(null, ['gate-stop-step0']), ['gate-stop-step0']);
+  assert.deepEqual(casesMissingFrom({ cases: 'nope' }, ['gate-stop-step0']), ['gate-stop-step0']);
+});
+
 test('a sweep that wrote no directory still recovers a document from stdout if one is there', async () => {
   const result = await runSweep(
     async () => ({ code: 0, stdout: JSON.stringify(doc), stderr: '' }),
     evalCommand,
-    locatorYielding('', ''),
+    snapshotYielding([], []),
     invocation(),
     async () => assert.fail('there is no file to read')
   );
@@ -395,7 +479,7 @@ test('exit 1 is a result — below threshold — and is passed through, not thro
   const result = await runSweep(
     async () => ({ code: 1, stdout: '', stderr: '' }),
     evalCommand,
-    locatorYielding('', 'evals/s/results/2026-08-27T14-08-43-660Z/aggregate-result.json'),
+    snapshotYielding([], [FRESH]),
     invocation(),
     async () => JSON.stringify(doc)
   );
@@ -407,7 +491,7 @@ test('exit 2 and 130 travel intact, so partial and interrupted stay distinguisha
   for (const code of [2, 130, 143]) {
     const result = await runSweep(
       async () => ({ code, stdout: '', stderr: '' }), evalCommand,
-      locatorYielding('', ''), invocation(), async () => ''
+      snapshotYielding([], []), invocation(), async () => ''
     );
     assert.equal(result.exitCode, code);
     assert.equal(result.document, null);
@@ -422,7 +506,7 @@ test('the sweep is spawned with the argv the pure builder produced', async () =>
       return { code: 0, stdout: '', stderr: '' };
     },
     () => ({ command: 'claude-personal', env: { CLAUDE_CODE_WALNUT_SPIRE: '1' } }),
-    locatorYielding('', ''), invocation(), async () => ''
+    snapshotYielding([], []), invocation(), async () => ''
   );
   assert.equal(seen.command, 'claude-personal');
   assert.deepEqual(seen.args, buildEvalArgv(invocation()));
@@ -473,6 +557,22 @@ test('an unknown option or a bad value is refused rather than ignored', () => {
   assert.throws(() => parseArgv(['--runs', '0']), RunError);
 });
 
+test('--condition naming nothing is refused, not read as "all three"', () => {
+  // `--condition ''` used to sweep every condition: a full rate-limit window spent on a
+  // command that asked for one.
+  for (const value of ['', ' ', ',', ' , ,'])
+    assert.throws(() => parseArgv(['--condition', value]),
+      /--condition needs at least one condition id/, `--condition ${JSON.stringify(value)}`);
+});
+
+test('--smoke and --runs together are refused in either order, not silently merged', () => {
+  assert.throws(() => parseArgv(['--smoke', '--runs', '5']), /--smoke fixes runs to 1/);
+  assert.throws(() => parseArgv(['--runs', '5', '--smoke']), /--smoke fixes runs to 1/);
+  // Whichever came last used to win: `--smoke --runs 5` spent a whole sweep as a pilot.
+  assert.equal(parseArgv(['--smoke']).runs, 1);
+  assert.equal(parseArgv(['--runs', '5']).runs, 5);
+});
+
 /* ── stderrTail ────────────────────────────────────────────────────────────── */
 
 test('the tail keeps the end, where the case-load errors are, and says what it cut', () => {
@@ -480,4 +580,468 @@ test('the tail keeps the end, where the case-load errors are, and says what it c
   assert.ok(kept.endsWith('ERROR'));
   assert.match(kept, /bytes trimmed/);
   assert.equal(tail('short', 5), 'short');
+});
+
+/* ── Ablation grouping — `ablation: none` must never run with-without ───────── */
+
+test('the scored cases split by ablation, with-without first', () => {
+  const groups = groupCasesByAblation([
+    spec('control-all-steps', ['control'], { ablation: 'none' }),
+    spec('step3', ['capability'], { ablation: 'none', evidence: 'capability' }),
+    spec('gate', ['gate', 'scored']),
+  ]);
+  assert.deepEqual(groups.map((g) => g.ablation), ['with-without', 'none']);
+  assert.deepEqual(groups[0].cases.map((c) => c.name), ['gate']);
+  assert.deepEqual(groups[1].cases.map((c) => c.name), ['step3'],
+    'the control is not a scored case and never reaches an invocation');
+});
+
+test('a group is omitted rather than emitted empty', () => {
+  const groups = groupCasesByAblation([spec('gate', ['gate', 'scored'])]);
+  assert.deepEqual(groups.map((g) => g.ablation), ['with-without']);
+});
+
+test('an ablation that is neither value is refused, not defaulted', () => {
+  assert.throws(() => groupCasesByAblation([spec('gate', ['scored'], { ablation: 'with-only' })]), RunError);
+  assert.throws(() => groupCasesByAblation([spec('c', ['control'])]), RunError);
+});
+
+test('the real suite runs step3-markers-in-source at ablation none and nothing else with it', async () => {
+  // PRE-REGISTRATION registers step3 as `ablation: none`; readCaseSpec derived it and
+  // nothing read it, so it ran with-without against a transcript that carries the plugin
+  // into BOTH arms — a contrast with no referent.
+  const groups = groupCasesByAblation(await discoverCases(readTextFile, listDirectory, paths));
+  const none = groups.find((g) => g.ablation === 'none');
+  const delta = groups.find((g) => g.ablation === 'with-without');
+  assert.deepEqual(none.cases.map((c) => c.name), ['step3-markers-in-source']);
+  assert.ok(!delta.cases.some((c) => c.name === 'step3-markers-in-source'));
+  for (const group of groups)
+    assert.deepEqual(buildEvalArgv(invocationFor('treatment', paths, group.cases, {
+      ablation: group.ablation, caseGlobs: group.cases.map((c) => c.name),
+    })).slice(5, 7), ['--ablation', group.ablation]);
+});
+
+test('the two per-ablation command lines the re-sweep will actually run, byte for byte', async () => {
+  // The split introduces a command line nobody has run: several `--case` flags at once.
+  // Whatever `--case` turns out to mean, it must not be combined with `--tag` — recon
+  // never ran the two together, and an OR between them would put every tagged case back
+  // into the `none` invocation. So the names carry the whole selection here.
+  const cases = await discoverCases(readTextFile, listDirectory, paths);
+  const groups = groupCasesByAblation(cases);
+  const argvFor = (group) => buildEvalArgv(invocationFor('treatment', paths, cases, {
+    ablation: group.ablation, caseGlobs: group.cases.map((c) => c.name),
+  }));
+
+  assert.deepEqual(argvFor(groups[0]), [
+    'plugin', 'eval', '.',
+    '--eval-dir', 'evals/seven-steps-primer',
+    '--ablation', 'with-without',
+    '--runs', '5',
+    '--model', 'sonnet',
+    '--judge-model', 'opus',
+    '--threshold', '0.6',
+    '--scaffold',
+    '--no-publish',
+    '--case', 'gate-stop-step0',
+    '--case', 'looks-trivial-is-structural',
+    '--case', 'triage-decompose-epic',
+    '--case', 'triage-skip-oneliner',
+    '--allow-tools', 'Bash', 'Edit', 'Write',
+  ]);
+  assert.deepEqual(argvFor(groups[1]), [
+    'plugin', 'eval', '.',
+    '--eval-dir', 'evals/seven-steps-primer',
+    '--ablation', 'none',
+    '--runs', '5',
+    '--model', 'sonnet',
+    '--judge-model', 'opus',
+    '--threshold', '0.6',
+    '--scaffold',
+    '--no-publish',
+    '--case', 'step3-markers-in-source',
+    '--allow-tools', 'Bash', 'Edit', 'Write',
+  ]);
+  for (const group of groups)
+    assert.ok(!argvFor(group).includes('--tag'), 'a name-scoped invocation carries no tag filter');
+});
+
+test('a name-scoped invocation refuses a selector that would readmit the control case', () => {
+  // `--tag` is what used to keep `control-all-steps` out, and a name-scoped invocation
+  // no longer carries it. The control case sorts first and ate a whole cost ceiling in
+  // recon, so a selector that reaches it is refused before anything spawns.
+  const cases = [
+    spec('control-all-steps', ['control'], { scored: false }),
+    spec('gate-stop-step0', ['gate', 'scored']),
+  ];
+  assert.throws(() => invocationFor('treatment', paths, cases, { caseGlobs: ['control-all-steps'] }), RunError);
+  assert.throws(() => invocationFor('treatment', paths, cases, { caseGlobs: ['control-*'] }), RunError);
+  assert.doesNotThrow(() => invocationFor('treatment', paths, cases, { caseGlobs: ['gate-stop-step0'] }));
+});
+
+test('a selector that matches no discovered case is refused, not swept as a shorter run', () => {
+  const cases = [spec('gate-stop-step0', ['gate', 'scored'])];
+  assert.throws(() => invocationFor('treatment', paths, cases, { caseGlobs: ['gate-stop-step-0'] }), RunError);
+});
+
+/* ── Combining the per-ablation documents into one sweep ───────────────────── */
+
+const harnessDoc = (over = {}) => ({
+  schemaVersion: 1, claudeVersion: '2.1.250', startedAt: '2026-09-02T10:00:00.000Z',
+  costUsd: 1, partial: false, suite: { ablation: 'with-without', threshold: 0.6 }, cases: [],
+  ...over,
+});
+
+test('the parts concatenate: every case, cost summed, earliest start', () => {
+  const { document } = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc({ cases: [{ name: 'gate' }], costUsd: 2 }) },
+    { ablation: 'none', document: harnessDoc({
+      cases: [{ name: 'step3' }], costUsd: 3, startedAt: '2026-09-02T09:00:00.000Z',
+      suite: { ablation: 'none', threshold: 0.6 } }) },
+  ]);
+  assert.deepEqual(document.cases.map((c) => c.name), ['gate', 'step3']);
+  assert.equal(document.costUsd, 5);
+  assert.equal(document.startedAt, '2026-09-02T09:00:00.000Z');
+  assert.equal(document.partial, false);
+});
+
+test('no number survives that was only true of the first invocation', () => {
+  // The spread used to carry part 0's `aggregates` and `durationSeconds` through beside a
+  // `cases` array from both parts: `casesTotal: 1` next to two cases, an `overallScore`
+  // measured over one invocation, and a duration missing the other.
+  const { document } = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc({
+      cases: [{ name: 'gate' }], durationSeconds: 100,
+      aggregates: { casesTotal: 1, casesPassed: 1, overallScore: 1, meanDelta: 0.5 } }) },
+    { ablation: 'none', document: harnessDoc({
+      cases: [{ name: 'step3' }], durationSeconds: 40,
+      aggregates: { casesTotal: 1, casesPassed: 0, overallScore: 0, meanDelta: 0 } }) },
+  ]);
+  assert.ok(!('aggregates' in document),
+    'the harness weights its own runs; a re-derivation here would be a guess in its field name');
+  assert.equal(document.durationSeconds, 140, 'the invocations run one after the other');
+  assert.equal(document.cases.length, 2);
+});
+
+test('a duration missing from any part is dropped rather than summed short', () => {
+  const { document } = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc({ cases: [{ name: 'gate' }], durationSeconds: 100 }) },
+    { ablation: 'none', document: harnessDoc({ cases: [{ name: 'step3' }] }) },
+  ]);
+  assert.ok(!('durationSeconds' in document));
+});
+
+test('`partial` stays three-valued — a part that cannot establish it leaves it absent', () => {
+  const both = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc({ partial: false }) },
+    { ablation: 'none', document: harnessDoc({ partial: true, partialReason: 'cost_ceiling' }) },
+  ]).document;
+  assert.equal(both.partial, true);
+  assert.equal(both.partialReason, 'cost_ceiling');
+
+  const unknown = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc({ partial: undefined }) },
+    { ablation: 'none', document: harnessDoc({ partial: false }) },
+  ]).document;
+  assert.ok(!('partial' in unknown), 'absence read as `false` is absence read as agreement');
+});
+
+test('a part with no document, a duplicated case or a disagreement refuses to combine', () => {
+  const missing = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc() },
+    { ablation: 'none', document: null },
+  ]);
+  assert.equal(missing.document, null);
+  assert.match(missing.notes.join('\n'), /none invocation\(s\) produced no document/);
+
+  const duplicated = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc({ cases: [{ name: 'gate' }] }) },
+    { ablation: 'none', document: harnessDoc({ cases: [{ name: 'gate' }] }) },
+  ]);
+  assert.equal(duplicated.document, null);
+  assert.match(duplicated.notes.join('\n'), /ran at two ablations/);
+
+  const disagreed = combineHarnessDocuments([
+    { ablation: 'with-without', document: harnessDoc() },
+    { ablation: 'none', document: harnessDoc({ claudeVersion: '2.1.251' }) },
+  ]);
+  assert.equal(disagreed.document, null);
+  assert.match(disagreed.notes.join('\n'), /disagree on claudeVersion/);
+});
+
+test('a single invocation is passed through untouched — the common command line', () => {
+  const only = harnessDoc({ cases: [{ name: 'gate' }] });
+  const { document, notes } = combineHarnessDocuments([{ ablation: 'with-without', document: only }]);
+  assert.equal(document, only);
+  assert.deepEqual(notes, []);
+});
+
+test('the sweep records which ablation each case actually ran at, and the worst exit', () => {
+  const part = (ablation, cases, exitCode, document) =>
+    ({ ablation, cases, result: { condition: 'treatment', exitCode, document, stderrTail: '' } });
+  const combined = combineSweepParts('treatment', [
+    part('with-without', ['gate', 'triage'], 1, harnessDoc({ cases: [{ name: 'gate' }, { name: 'triage' }] })),
+    part('none', ['step3'], 2, harnessDoc({ cases: [{ name: 'step3' }] })),
+  ]);
+  assert.deepEqual(combined.ablations,
+    { gate: 'with-without', triage: 'with-without', step3: 'none' });
+  assert.equal(combined.exitCode, 2, 'partial outranks below-threshold');
+  assert.equal(combineSweepParts('treatment', [
+    part('with-without', ['gate'], 0, harnessDoc()), part('none', ['step3'], 130, null),
+  ]).exitCode, 130, 'interrupted outranks everything');
+});
+
+/* ── The records, and the instrument digest that makes them comparable ─────── */
+
+const SHA = 'a'.repeat(64);
+
+test('every sweep record carries the instrument digest', () => {
+  const record = buildSweepRecord(
+    { condition: 'treatment', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations: { gate: 'with-without' } },
+    { argvs: [['plugin', 'eval', '.']], startedAt: '2026-09-02T10:00:00.000Z', instrumentSha: SHA }
+  );
+  assert.equal(record.instrumentSha, SHA);
+  assert.deepEqual(record.argvs, [['plugin', 'eval', '.']]);
+  assert.deepEqual(record.ablations, { gate: 'with-without' });
+});
+
+test('drift.json carries the same digest, so a control-only re-run cannot hide a stale arm', () => {
+  const record = buildDriftRecord({ drifted: false, reason: '' }, '2026-09-02T10:00:00.000Z', SHA);
+  assert.equal(record.instrumentSha, SHA);
+  assert.equal(record.drifted, false);
+});
+
+test('a record with no digest is refused rather than written unmergeable', () => {
+  const combined = { condition: 'treatment', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations: {} };
+  for (const sha of [undefined, '', 'not-a-digest', SHA.toUpperCase()]) {
+    assert.throws(() => buildSweepRecord(combined, { argvs: [], startedAt: '', instrumentSha: sha }), RunError);
+    assert.throws(() => buildDriftRecord({ drifted: false, reason: '' }, '', sha), RunError);
+  }
+});
+
+/* ── Signals — a killed child is interrupted, never "below threshold" ───────── */
+
+test('a signal maps to 128 + its number, so SIGKILL and SIGHUP are not exit 1', () => {
+  assert.equal(exitCodeForSignal('SIGINT'), 130);
+  assert.equal(exitCodeForSignal('SIGTERM'), 143);
+  assert.equal(exitCodeForSignal('SIGKILL'), 137);
+  assert.equal(exitCodeForSignal('SIGHUP'), 129);
+  assert.equal(exitCodeForSignal(null), 1, 'no signal is an ordinary exit');
+});
+
+test('every code at or above 128 stops the sweep; 1 and 2 are results', () => {
+  for (const code of [129, 130, 137, 143]) assert.ok(isInterrupted(code), `${code}`);
+  for (const code of [0, 1, 2, 127]) assert.ok(!isInterrupted(code), `${code}`);
+});
+
+/** A child that emits what a real one emits, and remembers the signal it was sent. */
+const fakeChild = () => {
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  child.signalled = null;
+  child.kill = (signal) => (child.signalled = signal);
+  return child;
+};
+
+test('a child killed by any signal reports 128 + the signal number, not 1', async () => {
+  // SIGKILL and SIGHUP used to arrive as 1 — "a case scored below threshold" — and the
+  // loop swept on to the next condition against a run that never finished.
+  for (const [signal, code] of [['SIGINT', 130], ['SIGTERM', 143], ['SIGKILL', 137], ['SIGHUP', 129]]) {
+    const child = fakeChild();
+    const pending = makeSpawnCapture(() => child)('claude', [], {});
+    child.emit('close', null, signal);
+    assert.equal((await pending).code, code, signal);
+  }
+});
+
+test('a signal to the runner is forwarded to the live child, so `close` still fires', async () => {
+  const child = fakeChild();
+  const capture = makeSpawnCapture(() => child);
+  assert.equal(capture.forwardSignal('SIGINT'), false, 'nothing is running yet');
+  const pending = capture('claude', [], {});
+  assert.equal(capture.forwardSignal('SIGINT'), true);
+  assert.equal(child.signalled, 'SIGINT');
+  child.emit('close', null, 'SIGINT');
+  assert.equal((await pending).code, 130);
+  assert.equal(capture.forwardSignal('SIGINT'), false, 'the child is gone once it has closed');
+});
+
+test('an ordinary exit and a spawn failure are unchanged by the signal handling', async () => {
+  const clean = fakeChild();
+  const pendingClean = makeSpawnCapture(() => clean)('claude', [], {});
+  clean.stdout.emit('data', '{"schemaVersion":1}');
+  clean.emit('close', 0, null);
+  assert.deepEqual(await pendingClean, { code: 0, stdout: '{"schemaVersion":1}', stderr: '' });
+
+  const broken = fakeChild();
+  const pendingBroken = makeSpawnCapture(() => broken)('nope', [], {});
+  broken.emit('error', new Error('ENOENT'));
+  assert.equal((await pendingBroken).code, 127);
+});
+
+/* ── The plan — the decisions that used to sit unreachable inside main() ───── */
+
+const planArgs = (over = {}) => ({ conditions: ['treatment'], runs: 5, smoke: false, ...over });
+
+test('the plan is the two per-ablation command lines, byte for byte, as main will spawn them', async () => {
+  // The byte-for-byte test above pins `invocationFor`; this one pins the CALL. main was
+  // free to pass `group.cases` instead of every case, or to drop `caseGlobs`, and every
+  // test still passed while a case registered `ablation: none` ran with-without again.
+  const cases = await discoverCases(readTextFile, listDirectory, paths);
+  const plan = planSweep(cases, planArgs());
+
+  assert.deepEqual(plan.groups.map((g) => g.ablation), ['with-without', 'none']);
+  assert.equal(plan.sweeps.length, 1);
+  const [delta, none] = plan.sweeps[0].invocations;
+  assert.deepEqual(delta.cases,
+    ['gate-stop-step0', 'looks-trivial-is-structural', 'triage-decompose-epic', 'triage-skip-oneliner']);
+  assert.deepEqual(none.cases, ['step3-markers-in-source']);
+
+  assert.deepEqual(delta.argv, [
+    'plugin', 'eval', '.',
+    '--eval-dir', 'evals/seven-steps-primer',
+    '--ablation', 'with-without',
+    '--runs', '5',
+    '--model', 'sonnet',
+    '--judge-model', 'opus',
+    '--threshold', '0.6',
+    '--scaffold',
+    '--no-publish',
+    '--case', 'gate-stop-step0',
+    '--case', 'looks-trivial-is-structural',
+    '--case', 'triage-decompose-epic',
+    '--case', 'triage-skip-oneliner',
+    '--allow-tools', 'Bash', 'Edit', 'Write',
+  ]);
+  assert.deepEqual(none.argv, [
+    'plugin', 'eval', '.',
+    '--eval-dir', 'evals/seven-steps-primer',
+    '--ablation', 'none',
+    '--runs', '5',
+    '--model', 'sonnet',
+    '--judge-model', 'opus',
+    '--threshold', '0.6',
+    '--scaffold',
+    '--no-publish',
+    '--case', 'step3-markers-in-source',
+    '--allow-tools', 'Bash', 'Edit', 'Write',
+  ]);
+  assert.deepEqual(plan.excluded, ['control-all-steps']);
+  for (const inv of plan.sweeps[0].invocations)
+    assert.ok(!inv.argv.includes('control-all-steps'), 'the diagnostic is named by nothing');
+});
+
+test('the plan covers every requested condition, in the declared order, with the same invocations', async () => {
+  const cases = await discoverCases(readTextFile, listDirectory, paths);
+  const plan = planSweep(cases, planArgs({ conditions: ['treatment', 'oneliner', 'placebo'] }));
+  assert.deepEqual(plan.sweeps.map((s) => s.condition), ['treatment', 'oneliner', 'placebo']);
+  for (const sweep of plan.sweeps) {
+    assert.deepEqual(sweep.invocations.map((i) => i.ablation), ['with-without', 'none']);
+    // The condition is NOT a flag — it is the directory copied into place — so the two
+    // command lines are identical across conditions and only the copy differs.
+    assert.deepEqual(sweep.invocations.map((i) => i.argv), plan.sweeps[0].invocations.map((i) => i.argv));
+  }
+  assert.deepEqual(plan.preChecks.map((c) => c.path), [
+    'evals/seven-steps-primer/conditions/treatment/SKILL.md',
+    'evals/seven-steps-primer/conditions/oneliner/SKILL.md',
+    'evals/seven-steps-primer/conditions/placebo/SKILL.md',
+  ], 'every condition is read before the first sweep spends anything');
+});
+
+test('one ablation group keeps the tag-filtered command line recon verified', () => {
+  // A single group must NOT be scoped by name: `--tag` is the shape recon actually ran,
+  // and a name-scoped invocation drops the tag filter that keeps the control case out.
+  const plan = planSweep([
+    spec('control-all-steps', ['control']),
+    spec('gate-stop-step0', ['gate', 'scored'], { allowedTools: ['Bash'] }),
+    spec('triage-skip-oneliner', ['triage', 'scored'], { allowedTools: ['Bash'] }),
+  ], planArgs());
+  assert.equal(plan.scopeByName, false);
+  const [only] = plan.sweeps[0].invocations;
+  assert.equal(plan.sweeps[0].invocations.length, 1);
+  assert.ok(!only.argv.includes('--case'), 'one group, one command line, selected by tag');
+  assert.deepEqual(only.argv.slice(only.argv.indexOf('--tag')),
+    ['--tag', 'gate', 'scored', 'triage', '--allow-tools', 'Bash']);
+  assert.deepEqual(only.cases, ['gate-stop-step0', 'triage-skip-oneliner']);
+});
+
+test('a case declaring an unknown ablation is refused by the plan, before anything is spent', () => {
+  assert.throws(() => planSweep([
+    spec('gate-stop-step0', ['gate', 'scored']),
+    spec('odd-one', ['scored'], { ablation: 'with-only' }),
+  ], planArgs()), RunError);
+  // And a selector that would readmit the control case is refused just as early.
+  assert.throws(() => planSweep([spec('control-all-steps', ['control'])], planArgs()), RunError);
+  assert.throws(() => planSweep([spec('gate', ['gate', 'scored'])], planArgs({ conditions: [] })), RunError);
+});
+
+test('--smoke plans exactly one case at one run, scoped by name', async () => {
+  const cases = await discoverCases(readTextFile, listDirectory, paths);
+  const plan = planSweep(cases, planArgs({ runs: 1, smoke: true }));
+  assert.equal(plan.sweeps[0].invocations.length, 1);
+  const [pilot] = plan.sweeps[0].invocations;
+  assert.equal(plan.scopeByName, true, 'a pilot names its one case rather than a whole tag');
+  assert.deepEqual(pilot.cases, ['gate-stop-step0']);
+  assert.deepEqual(pilot.argv.slice(pilot.argv.indexOf('--runs'), pilot.argv.indexOf('--runs') + 2),
+    ['--runs', '1']);
+  assert.ok(pilot.argv.includes('--case') && !pilot.argv.includes('--tag'));
+});
+
+/* ── Stopping — an invocation that stopped being evidence ends the run ─────── */
+
+const stopPart = (over = {}) => ({
+  ablation: 'with-without',
+  cases: ['gate', 'triage'],
+  result: {
+    condition: 'treatment', exitCode: 0, stderrTail: '',
+    document: { cases: [{ name: 'gate' }, { name: 'triage' }] },
+  },
+  ...over,
+});
+
+test('a NO DOCUMENT invocation stops the run — a null document is not zero missing cases', () => {
+  // This is the branch that used to read `result.document ? casesMissingFrom(…) : []`: a
+  // null document produced no missing cases, so the loop swept the next ablation and then
+  // both remaining conditions after the first invocation had already proved
+  // unattributable — up to six further harness invocations bought after the answer was in.
+  const stop = sweepStopReason(stopPart({ result: { condition: 'treatment', exitCode: 0, document: null, stderrTail: '' } }));
+  assert.ok(stop, 'no document, no evidence, no reason to buy the next invocation');
+  assert.match(stop.why, /produced no document/);
+  assert.match(stop.hint, /more than one/);
+});
+
+test('a document short of a case the invocation named stops the run, and says why', () => {
+  const stop = sweepStopReason(stopPart({
+    result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: { cases: [{ name: 'gate' }] } },
+  }));
+  assert.match(stop.why, /no result for triage/);
+  assert.match(stop.hint, /`--case` is probably not repeatable/);
+});
+
+test('any signalled death stops the run, whatever the document says', () => {
+  for (const exitCode of [129, 130, 137, 143]) {
+    const stop = sweepStopReason(stopPart({ result: { condition: 'treatment', exitCode, document: { cases: [{ name: 'gate' }, { name: 'triage' }] }, stderrTail: '' } }));
+    assert.match(stop.why, new RegExp(`killed by a signal \\(exit ${exitCode}\\)`));
+  }
+});
+
+test('a complete document at an ordinary exit carries on to the next invocation', () => {
+  assert.equal(sweepStopReason(stopPart()), null);
+  // Exit 1 is "a case scored below threshold" — a finding, and the sweep continues.
+  assert.equal(sweepStopReason(stopPart({
+    result: { condition: 'treatment', exitCode: 1, stderrTail: '', document: { cases: [{ name: 'gate' }, { name: 'triage' }] } },
+  })), null);
+});
+
+/* ── The ablations map is what the merger checks against the registration ──── */
+
+test('an ablations map the merger cannot read is refused rather than written', () => {
+  const record = (ablations) => buildSweepRecord(
+    { condition: 'treatment', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations },
+    { argvs: [], startedAt: '', instrumentSha: SHA }
+  );
+  assert.deepEqual(record({ gate: 'with-without', step3: 'none' }).ablations,
+    { gate: 'with-without', step3: 'none' });
+  for (const bad of [{ gate: 'with-only' }, { gate: undefined }, { gate: 'None' }, null, ['gate']])
+    assert.throws(() => record(bad), RunError, JSON.stringify(bad));
 });

@@ -55,6 +55,188 @@ test('I1b refuses a report whose noise floor was never measured', () => {
   caught(inv.i1bNoiseFloorMarked({ deltaRows: [rowWith(0.04, false)] }), 'never measured');
 });
 
+/* ── I1b — the tie, and the ulp that used to decide it ─────────────────────── */
+
+/** Mean of fifteen run scores, exactly as the merger takes it: sum, then divide. */
+const mean15 = (ones) => Array.from({ length: 15 }, (_, i) => (i < ones ? 1 : 0))
+  .reduce((a, b) => a + b, 0) / 15;
+
+test('I1b treats a contrast that ties the floor as inside it, not above it', () => {
+  // The published case. `triage-decompose-epic`/placebo: a treatment mean of 4/15 against
+  // a placebo mean of 2/15 is a delta of 2/15, and the worst per-case baseline spread was
+  // 2/15 as well — bit for bit. A strict `<` left it unmarked and it went out as a held
+  // +0.13 prediction. The floor is the smallest difference this instrument can resolve,
+  // so a difference equal to it resolves nothing.
+  const delta = mean15(4) - mean15(2);
+  const spread = mean15(4) - mean15(2);
+  assert.equal(delta, spread, 'fixture must reproduce the bit-exact tie');
+  caught(inv.i1bNoiseFloorMarked({ baselineSpread: spread, deltaRows: [rowWith(delta, undefined)] }),
+    'belowNoiseFloor');
+  assert.equal(inv.i1bNoiseFloorMarked({ baselineSpread: spread, deltaRows: [rowWith(delta, true)] }).ok, true);
+});
+
+test('I1b marks a contrast the floor loses to by one ulp — a different summation order', () => {
+  // Same two mathematical quantities, 2/15 each, reached by different sums: the delta
+  // from 4/15 − 2/15, the spread from 15/15 − 13/15. The second comes out one unit in the
+  // last place SMALLER, so `<` said "above the floor" about a difference of 1.4e-17.
+  const delta = mean15(4) - mean15(2);          // 0.13333333333333333
+  const spread = mean15(15) - mean15(13);       // 0.1333333333333333
+  assert.ok(delta > spread, 'fixture must reproduce the ulp gap');
+  assert.ok(delta - spread < inv.NOISE_EPSILON, 'the gap must be inside the tolerance');
+  caught(inv.i1bNoiseFloorMarked({ baselineSpread: spread, deltaRows: [rowWith(delta, undefined)] }),
+    'belowNoiseFloor');
+  assert.equal(inv.i1bNoiseFloorMarked({ baselineSpread: spread, deltaRows: [rowWith(delta, true)] }).ok, true);
+});
+
+test('I1b still lets a real contrast through — the epsilon is a tolerance, not an amnesty', () => {
+  assert.equal(inv.i1bNoiseFloorMarked({ baselineSpread: 0.13, deltaRows: [rowWith(0.9, false)] }).ok, true);
+});
+
+/* ── I2b — one instrument, or no report ────────────────────────────────────── */
+
+const SHA_A = 'a'.repeat(64);
+const SHA_B = 'b'.repeat(64);
+const stamped = (condition, sha = SHA_A) => ({ condition, instrumentSha: sha });
+
+test('I2b accepts sweeps, drift and the tree all naming one instrument', () => {
+  const r = inv.i2bInstrumentAgreement(
+    [stamped('treatment'), stamped('oneliner'), stamped('placebo')], { instrumentSha: SHA_A }, SHA_A);
+  assert.deepEqual(r.violations, []);
+  assert.equal(r.ok, true);
+});
+
+test('I2b refuses sweeps that predate the instrument digest, and names them', () => {
+  // The exact set in the worktree: three results files written before the digest existed.
+  const r = inv.i2bInstrumentAgreement(
+    [{ condition: 'treatment' }, { condition: 'oneliner' }, { condition: 'placebo' }],
+    { instrumentSha: SHA_A }, SHA_A);
+  caught(r, 'predate the instrument digest');
+  assert.ok(r.violations[0].includes('treatment'), r.violations[0]);
+  assert.ok(r.violations[0].includes('placebo'), r.violations[0]);
+});
+
+test('I2b refuses a partly stamped set rather than merging the two that agree', () => {
+  caught(inv.i2bInstrumentAgreement(
+    [stamped('treatment'), stamped('oneliner'), { condition: 'placebo' }], { instrumentSha: SHA_A }, SHA_A),
+  'placebo: sweep record carries no instrumentSha');
+});
+
+test('I2b refuses sweeps measured on different instruments and names both sides', () => {
+  const r = inv.i2bInstrumentAgreement(
+    [stamped('treatment', SHA_B), stamped('oneliner'), stamped('placebo')], { instrumentSha: SHA_A }, SHA_A);
+  caught(r, 'different instruments');
+  assert.ok(r.violations[0].includes('treatment=bbbbbbbbbbbb'), r.violations[0]);
+  assert.ok(r.violations[0].includes('oneliner=aaaaaaaaaaaa'), r.violations[0]);
+});
+
+test('I2b refuses a drift record taken against a different instrument, and says which is which', () => {
+  const r = inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_B }, SHA_A);
+  caught(r, 'drift.json names instrument bbbbbbbbbbbb, the sweeps name aaaaaaaaaaaa');
+});
+
+test('I2b refuses a drift record with no instrumentSha rather than reading it as agreement', () => {
+  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { drifted: false }, SHA_A),
+    'drift.json carries no instrumentSha');
+});
+
+test('I2b refuses results taken on an instrument the tree no longer holds', () => {
+  // A grader rewritten between the sweep and the merge: the numbers describe a suite that
+  // no longer exists. That is a changed instrument, which drift.json could never see —
+  // not elapsed time, which nothing here sees either.
+  const r = inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, SHA_B);
+  caught(r, 'the suite on disk is instrument bbbbbbbbbbbb, the sweeps measured aaaaaaaaaaaa');
+});
+
+test('I2b refuses a merge that never computed the current instrument', () => {
+  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, ''),
+    'no instrument digest was computed at merge time');
+});
+
+test('I2b refuses an empty sweep list rather than passing vacuously', () => {
+  caught(inv.i2bInstrumentAgreement([], { instrumentSha: SHA_A }, SHA_A), 'cannot be established');
+  caught(inv.i2bInstrumentAgreement(undefined, { instrumentSha: SHA_A }, SHA_A), 'cannot be established');
+});
+
+test('I2b compares instruments, not times — sweeps taken weeks apart on one instrument merge', () => {
+  // The narrower guarantee, pinned so nobody later reads I2b as a staleness guard, and so
+  // nobody adds the elapsed-time rule it is repeatedly mistaken for. `startedAt` is not an
+  // input to this check and is not compared anywhere else either.
+  const r = inv.i2bInstrumentAgreement(
+    [{ condition: 'treatment', instrumentSha: SHA_A, startedAt: '2026-08-01T00:00:00.000Z' },
+      { condition: 'oneliner', instrumentSha: SHA_A, startedAt: '2026-09-14T00:00:00.000Z' },
+      { condition: 'placebo', instrumentSha: SHA_A, startedAt: '2026-09-15T00:00:00.000Z' }],
+    { instrumentSha: SHA_A, checkedAt: '2019-01-01T00:00:00.000Z' }, SHA_A);
+  assert.deepEqual(r.violations, []);
+});
+
+test('I2b names why the digest is missing, because the remedies differ', () => {
+  // "No digest was computed" reads the same for a suite directory that is not there, a
+  // file this process may not read, and a bug in the digest — and those are three
+  // different next steps for whoever is running the merge.
+  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, '',
+    "ENOENT: no such file or directory, scandir '/x/suite'"), 'ENOENT: no such file or directory');
+  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, '',
+    "EACCES: permission denied, open '/x/suite/case.yaml'"), 'EACCES: permission denied');
+  // Still says the plain thing when nothing explained itself.
+  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, ''),
+    'no instrument digest was computed at merge time');
+});
+
+/* ── I4b — every registered case measured, where it was registered ─────────── */
+
+const spec = (name, over = {}) => ({
+  name, evidence: 'delta', ablation: 'with-without', tags: ['core'], scored: true, measures: '', ...over,
+});
+const sweptCase = (name, withRuns = [{ score: 1 }]) => ({ name, arms: { with: withRuns, without: [{ score: 0 }] } });
+const sweepOf = (condition, cases, ablations) => ({
+  condition, document: { cases }, ...(ablations ? { ablations } : {}),
+});
+
+test('I4b accepts three sweeps that measured every registered case where it was registered', () => {
+  const specs = [spec('gate'), spec('markers', { evidence: 'capability', ablation: 'none' })];
+  const ablations = { gate: 'with-without', markers: 'none' };
+  const sweeps = ['treatment', 'oneliner', 'placebo'].map((c) =>
+    sweepOf(c, [sweptCase('gate'), sweptCase('markers')], ablations));
+  assert.deepEqual(inv.i4bEveryScoredCaseMeasured(sweeps, specs).violations, []);
+});
+
+test('I4b catches a registered scored case that one sweep does not contain, and names both', () => {
+  const specs = [spec('gate'), spec('triage')];
+  const sweeps = [sweepOf('treatment', [sweptCase('gate'), sweptCase('triage')]),
+    sweepOf('placebo', [sweptCase('gate')])];
+  caught(inv.i4bEveryScoredCaseMeasured(sweeps, specs),
+    "triage: registered and scored, but the 'placebo' sweep does not contain it");
+});
+
+test('I4b catches a case present with an empty run list — an absent measurement, not a zero', () => {
+  const specs = [spec('gate')];
+  caught(inv.i4bEveryScoredCaseMeasured([sweepOf('oneliner', [sweptCase('gate', [])])], specs),
+    "gate: present in the 'oneliner' sweep with an empty run list");
+});
+
+test('I4b catches a case swept at an ablation nobody registered, and names both values', () => {
+  // step3: registered `none` because a replayed transcript carries the plugin into both
+  // arms, swept with-without anyway. `document.suite.ablation` can name only one ablation
+  // for the whole invocation, so the per-case map on the envelope is the only witness.
+  const specs = [spec('markers', { evidence: 'capability', ablation: 'none' })];
+  caught(inv.i4bEveryScoredCaseMeasured(
+    [sweepOf('treatment', [sweptCase('markers')], { markers: 'with-without' })], specs),
+  "markers: registered ablation 'none', but the 'treatment' sweep ran it at 'with-without'");
+});
+
+test('I4b leaves control-tagged and unscored cases alone — they never enter the comparison', () => {
+  const specs = [spec('gate'), spec('ctl', { evidence: 'capability', ablation: 'none', tags: ['control'], scored: false })];
+  assert.deepEqual(inv.i4bEveryScoredCaseMeasured(
+    [sweepOf('treatment', [sweptCase('gate')], { gate: 'with-without' })], specs).violations, []);
+});
+
+test('I4b refuses an empty sweep list and an empty registration rather than passing vacuously', () => {
+  caught(inv.i4bEveryScoredCaseMeasured([], [spec('gate')]), 'cannot be established');
+  caught(inv.i4bEveryScoredCaseMeasured([sweepOf('treatment', [sweptCase('gate')])], []), 'vacuous');
+  caught(inv.i4bEveryScoredCaseMeasured([sweepOf('treatment', [sweptCase('gate')])],
+    [spec('ctl', { tags: ['control'], scored: false })]), 'vacuous');
+});
+
 /* ── I1c — failed runs are not low scores ──────────────────────────────────── */
 
 const runOk = (score) => ({ score, error: null, graders: [{ name: 'g', passed: score > 0 }] });
