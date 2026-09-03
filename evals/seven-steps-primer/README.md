@@ -82,7 +82,7 @@ graders against granted tools at *load* time, which is how it caught a grader th
 checked a file no tool in the run could create — for $0.02, before any agent ran.
 
 ```bash
-cp -R evals/seven-steps-primer/conditions/treatment evals/seven-steps-primer/_condition
+cp -R evals/seven-steps-primer/conditions/treatment evals/_conditions/current
 CLAUDE_CODE_WALNUT_SPIRE=1 claude plugin eval . \
   --eval-dir evals/seven-steps-primer --max-cost-usd 0.0001 --no-publish \
   --allow-tools Bash Edit Write
@@ -101,13 +101,13 @@ node scripts/run-evals.mjs --smoke --condition treatment
 ```
 
 **Then the three sweeps**, sequential — concurrent sweeps would contend on the single
-`_condition/` path and silently evaluate whichever won the race:
+`_conditions/current` path and silently evaluate whichever won the race:
 
 ```bash
 node scripts/run-evals.mjs                   # treatment, oneliner, placebo, in that order
 ```
 
-Each sweep copies its condition to `_condition/` (a real copy — the harness's ownership
+Each sweep copies its condition to `_conditions/current` (a real copy — the harness's ownership
 check rejects a plugin path that is a symlink), spawns one harness invocation per scored
 case (the cases do not share an ablation, and `--case` takes one name), combines the
 documents, and writes `results/<condition>.json` alongside `results/drift.json`. The
@@ -116,8 +116,11 @@ commands it spawns are decided by a pure function and printed before they run:
 ```
 claude plugin eval . --eval-dir evals/seven-steps-primer --ablation with-without \
   --runs 5 --model sonnet --judge-model opus --threshold 0.6 --scaffold --no-publish \
-  --tag capability core gate guardrail scored triage --allow-tools Bash Edit Write --json
+  --case gate-stop-step0 --allow-tools Bash Edit Write
 ```
+
+One such line per scored case, `--ablation none` for `step3-markers-in-source`. The
+`--json` flag is not passed: the document is read from the results directory.
 
 Four of those flags are load-bearing in a way that fails *quietly* if you get them wrong.
 `--allow-tools` must grant what the cases ask for, because a case's `allowed_tools` is
@@ -157,7 +160,7 @@ at 5 × 3 ≈ **135 agent runs** plus three judge votes per `llm` grader. Under 
 auth no money moves and `costUsd` is an API-equivalent estimate; the real budget is
 rate-limit windows. Recon's five probe sweeps came to $0.28 of estimate.
 
-`_condition/` and `results/` are generated and gitignored.
+`_conditions/` and `results/` are generated and gitignored.
 
 ## What the numbers mean
 
@@ -296,7 +299,7 @@ concluding anything from the level.
 ```
 README.md              this
 PRE-REGISTRATION.md    conditions · cases · graders · thresholds · expected direction · the undertaking
-conditions/            treatment (generated) · oneliner · placebo — identical frontmatter, one copied to _condition/ per sweep
+conditions/            treatment (generated) · oneliner · placebo — identical frontmatter, one copied to evals/_conditions/current per sweep
 fixtures/notesvc/      zero-dep Node service with a global rate limiter and a planted typo; `node --test`, green on a clean checkout
 <case>/prompt.md       the request, plus tools, turns, runs and tags in frontmatter
 <case>/case.yaml       only what frontmatter cannot set: the scaffold, and case 5's transcript
