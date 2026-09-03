@@ -25,10 +25,17 @@ import { spawn } from 'node:child_process';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as inv from './invariants.mjs';
-import { instrumentDigest } from './instrument.mjs';
+import { instrumentDigest, conditionDigest } from './instrument.mjs';
 
-/** The three conditions we author. `none` arrives as the harness's own without-arm. */
-const CONDITION_IDS = ['treatment', 'oneliner', 'placebo'];
+/**
+ * What a condition id may look like. The conditions themselves are REGISTERED — the
+ * pre-registration's `conditions` list names them, and this file holds no list of its
+ * own — so an amendment can add a fourth without touching code. `treatment` is required
+ * and `none` is reserved: it is the harness's own without-arm, the column every
+ * contrast is also taken against, and a directory by that name would be two things.
+ */
+const CONDITION_ID = /^[a-z][a-z0-9-]*$/;
+const RESERVED_CONDITION = 'none';
 
 /** Raised by a pure function that refuses its input. Carries no stack the caller wants. */
 export class MergeError extends Error {
@@ -145,8 +152,14 @@ export function parsePreRegistration(markdown) {
   const at = (f) => `PRE-REGISTRATION.md .${f}`;
 
   if (!Array.isArray(pre.conditions) || pre.conditions.length === 0) bad(`${at('conditions')}: empty`);
-  for (const c of pre.conditions)
-    if (!CONDITION_IDS.includes(c)) bad(`${at('conditions')}: '${c}' is not a ConditionId`);
+  for (const c of pre.conditions) {
+    if (typeof c !== 'string' || !CONDITION_ID.test(c))
+      bad(`${at('conditions')}: ${JSON.stringify(c)} is not a condition id (lowercase letters, digits ` +
+        'and hyphens, starting with a letter — it names a directory under conditions/)');
+    if (c === RESERVED_CONDITION)
+      bad(`${at('conditions')}: '${RESERVED_CONDITION}' is the harness's own without-arm, not an ` +
+        'authored condition — it cannot be registered');
+  }
   if (new Set(pre.conditions).size !== pre.conditions.length) bad(`${at('conditions')}: duplicated`);
   if (!pre.conditions.includes('treatment'))
     bad(`${at('conditions')}: no treatment — a comparison with nothing to compare is not one`);
@@ -188,6 +201,20 @@ export function parsePreRegistration(markdown) {
     if (!names.has(caseName)) bad(`${at('expectedDirection')}: ${key} names no registered case`);
     if (!controls.includes(control)) bad(`${at('expectedDirection')}: ${key} names no registered control`);
   }
+  // Complete, not only well-formed: a condition added to the list without a direction for
+  // every delta case would be refused by ComputeContrasts at merge time — after the sweep
+  // was paid for. Refused here, where the registration is read, it costs nothing. The
+  // check is per delta case per control, which is exactly the set of contrasts the
+  // merger will try to build.
+  for (const s of pre.cases) {
+    if (s.evidence !== 'delta' || s.scored === false || (s.tags ?? []).includes('control')) continue;
+    for (const control of controls) {
+      const key = `${s.name}/${control}`;
+      if (!(key in pre.expectedDirection))
+        bad(`${at('expectedDirection')}: no direction registered for ${key} — every delta case needs one ` +
+          `per control, and '${control}' is a registered control`);
+    }
+  }
 
   if (typeof pre.threshold !== 'number' || !(pre.threshold > 0) || pre.threshold > 1)
     bad(`${at('threshold')}: ${JSON.stringify(pre.threshold)} is not a threshold in (0, 1]`);
@@ -216,7 +243,7 @@ export function parsePreRegistration(markdown) {
  * condition resets it for two conditions measured on an older instrument. What catches
  * that is `instrumentSha` and I2b — which is why this record now carries one too. I2b
  * compares instruments, not times: it certifies that the sweeps, this record and the tree
- * hash to the same cases, graders, fixture and conditions, and nothing anywhere compares
+ * hash to the same cases, graders, transcripts and fixture, and nothing anywhere compares
  * how long ago any of them ran.
  *
  * @param {string|null} json  null when the file is not there
@@ -586,11 +613,15 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
  * @param {MergedReport} report
  * @param {PreRegistration} preRegistration
  * @param {{sweeps?: SweepRecord[], drift: DriftRecord, committedPreRegistrationSha: string,
- *          preRegistrationDirty: boolean, instrumentSha?: string, instrumentShaError?: string}} ctx
- *   `instrumentSha` is `instrumentDigest(suiteDir)` taken at merge time — the suite as
- *   it stands now, which I2b compares against what the sweeps say they measured.
- *   `instrumentShaError` says why it is empty when it is empty; I2b prints it, because a
- *   missing directory, an unreadable file and a bug are three different remedies.
+ *          preRegistrationDirty: boolean, instrumentSha?: string, instrumentShaError?: string,
+ *          conditionShas?: Record<string,string>, conditionShaErrors?: Record<string,string>}} ctx
+ *   `instrumentSha` is `instrumentDigest(suiteDir)` taken at merge time — the shared
+ *   half of the suite as it stands now, which I2b compares against what the sweeps say
+ *   they measured. `instrumentShaError` says why it is empty when it is empty; I2b
+ *   prints it, because a missing directory, an unreadable file and a bug are three
+ *   different remedies. `conditionShas` is `conditionDigest(suiteDir, id)` per registered
+ *   condition, the other half, compared per sweep record; `conditionShaErrors` says why
+ *   one is missing.
  * @returns {{ ok: boolean, violations: string[] }}
  */
 export function checkReport(report, preRegistration, ctx) {
@@ -616,7 +647,8 @@ export function checkReport(report, preRegistration, ctx) {
     ['I2', inv.i2RunNotVoid(report, registered, ctx.drift, ctx.preRegistrationDirty)],
     // Per SWEEP RECORD, like I1c: the digest is something only the runner knows, so it
     // rides on the envelope rather than on the merged report. I2 cannot see any of it.
-    ['I2b', inv.i2bInstrumentAgreement(ctx.sweeps, ctx.drift, ctx.instrumentSha, ctx.instrumentShaError)],
+    ['I2b', inv.i2bInstrumentAgreement(ctx.sweeps, ctx.drift, ctx.instrumentSha, ctx.instrumentShaError,
+      ctx.conditionShas, ctx.conditionShaErrors)],
     ['I4', inv.i4EvidenceKindsNeverMixed(report, expectedDelta, expectedCapability)],
     // Also per SWEEP: whether a registered case was measured at all, and at the ablation
     // it was registered at, is a fact about the documents. The merged report cannot show
@@ -673,6 +705,11 @@ export function formatComparison(report) {
   out.push(`**Suite** \`${p.suiteSha}\` · **pre-registration** \`${p.preRegistrationSha}\` · ` +
     `**instrument** \`${String(p.instrumentSha ?? '').slice(0, 12) || 'unrecorded'}\` · ` +
     `**cost** ~$${(p.costUsdEstimate ?? 0).toFixed(2)} API-equivalent (subscription-metered; no money moved)`);
+  const own = Object.entries(p.conditionShas ?? {});
+  if (own.length > 0)
+    out.push('', '**Conditions** ' + own.map(([id, sha]) =>
+      `${id} \`${String(sha).slice(0, 12) || 'unrecorded'}\``).join(' · ') +
+      ' — each condition\'s own digest; the instrument above is everything the conditions share.');
   out.push('');
   out.push(`**Noise floor — ${typeof spread === 'number' ? f2(spread) : 'unmeasured'}.** The worst per-case ` +
     `spread between the stock-Claude columns the sweeps produced against identical cases. A contrast at ` +
@@ -776,7 +813,8 @@ export function formatComparison(report) {
  * versions are not one comparison.
  *
  * `instrumentSha` is recorded the same way and for the same reason — it says which
- * cases, graders, fixture and conditions produced these numbers — but a disagreement is
+ * cases, graders, transcripts and fixture produced these numbers; `conditionShas` says
+ * which condition text each sweep loaded — but a disagreement is
  * left to I2b rather than thrown here. See the comment at the assignment.
  *
  * @param {RevParse} revParse
@@ -806,6 +844,12 @@ export async function buildProvenance(revParse, digest, clock, sweeps, preRegist
   const shas = sweeps.map((s) => s.instrumentSha).filter((x) => typeof x === 'string' && x !== '');
   const instrumentSha =
     shas.length === sweeps.length && new Set(shas).size === 1 ? shas[0] : '';
+  // The per-condition half is never expected to agree across sweeps, so each is recorded
+  // under its own id, '' where a record predates it. I2b does the refusing.
+  /** @type {Record<string, string>} */
+  const conditionShas = {};
+  for (const s of sweeps)
+    conditionShas[s.condition] = typeof s.conditionSha === 'string' ? s.conditionSha : '';
 
   const starts = sweeps.map((s) => s.startedAt ?? s.document.startedAt).filter(Boolean).sort();
   const { digest: preRegistrationSha } = await digest(preRegistrationPath);
@@ -814,6 +858,7 @@ export async function buildProvenance(revParse, digest, clock, sweeps, preRegist
     suiteSha: (await revParse('HEAD')).trim(),
     preRegistrationSha,
     instrumentSha,
+    conditionShas,
     claudeVersion: claudeVersion ?? '',
     subjectModel: subjectModel ?? '',
     judgeModel: judgeModel ?? '',
@@ -876,10 +921,34 @@ export const resolveInstrumentSha = (digestSuite, suiteDir) =>
         ? { sha: d, error: '' }
         : { sha: '', error: `the digest of ${suiteDir} came back as ${JSON.stringify(d)}, not a sha` })
     // `code` first: ENOENT and EACCES are the two an operator can act on directly.
-    .catch((e) => ({
-      sha: '',
-      error: `${e?.code ? `${e.code}: ` : ''}${e?.message ?? String(e)}`,
-    }));
+    .catch((e) => {
+      const message = e?.message ?? String(e);
+      // Node already prefixes fs errors with their code; do not print "ENOENT: ENOENT: …".
+      const prefixed = e?.code && !message.startsWith(`${e.code}`) ? `${e.code}: ${message}` : message;
+      return { sha: '', error: prefixed };
+    });
+
+/**
+ * ResolveConditionShas — the per-condition half of {@link resolveInstrumentSha}, one
+ * digest per registered condition. A failure is recorded against ITS condition and the
+ * others are still computed: a merge missing one condition's directory should say so
+ * for that condition, and say nothing false about the rest.
+ *
+ * @param {(suiteDir: string, id: string) => Promise<string>} digestCondition
+ * @param {string} suiteDir
+ * @param {string[]} conditions  the registered ids
+ * @returns {Promise<{shas: Record<string,string>, errors: Record<string,string>}>}
+ */
+export async function resolveConditionShas(digestCondition, suiteDir, conditions) {
+  const shas = {};
+  const errors = {};
+  for (const id of conditions) {
+    const r = await resolveInstrumentSha((dir) => digestCondition(dir, id), suiteDir);
+    if (r.sha) shas[id] = r.sha;
+    else errors[id] = r.error;
+  }
+  return { shas, errors };
+}
 
 async function committedDigest(git, absPath) {
   const root = await git(['rev-parse', '--show-toplevel']);
@@ -958,6 +1027,7 @@ async function main(argv) {
   // Taken now, over the tree being merged from — so a grader, fixture or condition edited
   // between the sweeps and this merge is caught by I2b rather than published.
   const instrument = await resolveInstrumentSha(instrumentDigest, suiteDir);
+  const conditions = await resolveConditionShas(conditionDigest, suiteDir, preRegistration.conditions);
 
   const check = checkReport(report, preRegistration, {
     sweeps,
@@ -966,6 +1036,8 @@ async function main(argv) {
     preRegistrationDirty: dirty,
     instrumentSha: instrument.sha,
     instrumentShaError: instrument.error,
+    conditionShas: conditions.shas,
+    conditionShaErrors: conditions.errors,
   });
   if (!check.ok) {
     process.stderr.write('refusing to emit a report — invariants violated:\n');

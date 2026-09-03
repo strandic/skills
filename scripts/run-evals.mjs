@@ -38,7 +38,8 @@ import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { check as checkDrift, paths as mirrorPaths } from './build-conditions.mjs';
-import { instrumentDigest } from './instrument.mjs';
+import { instrumentDigest, conditionDigest } from './instrument.mjs';
+import { parsePreRegistration } from './merge-results.mjs';
 
 /** Raised by a pure function that refuses its input, or by the loop before it spends. */
 export class RunError extends Error {
@@ -56,9 +57,15 @@ const bad = (message) => {
  * Constants — every one of them sourced.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** The three conditions we author. `none` is not one: it arrives as each sweep's own
- *  `without` arm, which is why the list has three entries and the report has four columns. */
+/** The three conditions the suite shipped with — the DEFAULT list for a caller that has
+ *  not read the pre-registration, which is the registry (`main` passes its `conditions`).
+ *  `none` is never one: it arrives as each sweep's own `without` arm, one column more than
+ *  there are conditions. */
 const CONDITION_IDS = /** @type {ConditionId[]} */ (['treatment', 'oneliner', 'placebo']);
+
+/** What a condition id looks like; whether it is REGISTERED is `parseArgv`'s and
+ *  `selectCondition`'s business, and both are handed the registered list. */
+const CONDITION_ID = /^[a-z][a-z0-9-]*$/;
 
 /** Marks the diagnostic case. It must never reach a scored run (I7), and it sorts
  *  FIRST lexicographically — which is how it consumed a whole cost ceiling in recon. */
@@ -140,8 +147,9 @@ export const paths = suitePathsFor('evals/seven-steps-primer');
  */
 export function buildEvalArgv(inv) {
   if (!inv || typeof inv !== 'object') bad('buildEvalArgv: no invocation');
-  if (!CONDITION_IDS.includes(inv.condition))
-    bad(`buildEvalArgv: '${inv.condition}' is not a ConditionId`);
+  if (typeof inv.condition !== 'string' || !CONDITION_ID.test(inv.condition) || inv.condition === 'none')
+    bad(`buildEvalArgv: ${JSON.stringify(inv.condition)} is not a condition id` +
+      (inv.condition === 'none' ? " — 'none' is the harness's own without-arm, never a sweep" : ''));
   if (typeof inv.suiteDir !== 'string' || inv.suiteDir === '') bad('buildEvalArgv: no suiteDir');
   if (inv.ablation !== 'none' && inv.ablation !== 'with-without')
     bad(`buildEvalArgv: ablation '${inv.ablation}' is neither 'none' nor 'with-without'`);
@@ -450,8 +458,12 @@ const TIMESTAMP_DIR = /^\d{4}-\d{2}-\d{2}T[0-9-]+Z$/;
  * @param {ConditionId} condition
  * @returns {Promise<void>}
  */
-export async function selectCondition(copyDirectory, paths, condition) {
-  if (!CONDITION_IDS.includes(condition)) bad(`selectCondition: '${condition}' is not a ConditionId`);
+export async function selectCondition(copyDirectory, paths, condition, known = CONDITION_IDS) {
+  // `known` is the REGISTERED list, not a code constant: the pre-registration names the
+  // conditions, and a directory under conditions/ that it does not name is not one. The
+  // default is the three the suite shipped with, for callers that have not read it.
+  if (!known.includes(condition))
+    bad(`selectCondition: '${condition}' is not a registered condition (${known.join(', ')})`);
   await copyDirectory(join(paths.conditionsDir, condition), paths.conditionUnderTest);
 }
 
@@ -918,7 +930,7 @@ const requireAblations = (map) => {
 /**
  * @param {{condition: ConditionId, exitCode: number, document: any, stderrTail: string,
  *          ablations: Record<string,'none'|'with-without'>}} combined
- * @param {{argvs: string[][], startedAt: string, instrumentSha: string}} run
+ * @param {{argvs: string[][], startedAt: string, instrumentSha: string, conditionSha: string}} run
  * @returns {SweepRecord}
  */
 export function buildSweepRecord(combined, run) {
@@ -931,7 +943,10 @@ export function buildSweepRecord(combined, run) {
     // One entry per harness invocation, so a reader can re-run each of them exactly.
     argvs: run.argvs,
     startedAt: run.startedAt,
+    // Two halves, both required: the shared instrument every sweep must agree on, and
+    // this condition's own directory, which only this sweep is measured against.
     instrumentSha: requireDigest('buildSweepRecord', run.instrumentSha),
+    conditionSha: requireDigest('buildSweepRecord conditionSha', run.conditionSha),
   };
 }
 
@@ -941,14 +956,21 @@ export function buildSweepRecord(combined, run) {
 
 const USAGE = `usage: node scripts/run-evals.mjs [--condition <id>]... [--runs <n>] [--smoke]
 
-  --condition <id>  treatment | oneliner | placebo. Repeatable, or comma-separated.
-                    Default: all three, swept in that order.
+  --condition <id>  A condition the pre-registration names (treatment | oneliner |
+                    placebo, plus any added by amendment). Repeatable, or
+                    comma-separated. Default: every registered one, in registered
+                    order.
   --runs <n>        Runs per case. Default ${DEFAULTS.runs} — the pre-registered count.
   --smoke           The cheap pilot: one scored case, one run. Do this before a sweep.
                     Cannot be combined with --runs: it fixes the count at 1.`;
 
-/** @param {string[]} argv */
-export function parseArgv(argv) {
+/**
+ * @param {string[]} argv
+ * @param {ConditionId[]} [known]  the registered conditions, in registered order. The
+ *   default is the three the suite shipped with; `main` passes the pre-registration's
+ *   list, so a condition added by amendment is sweepable without touching this file.
+ */
+export function parseArgv(argv, known = CONDITION_IDS) {
   const args = { conditions: /** @type {ConditionId[]} */ ([]), runs: DEFAULTS.runs, smoke: false, help: false };
   // Both flags write `runs`, so whichever came last used to win silently — `--smoke
   // --runs 5` spent a full sweep believing it was a pilot. Remembered, then refused
@@ -967,8 +989,8 @@ export function parseArgv(argv) {
       // to the default: all three conditions, a full sweep nobody asked for.
       if (ids.length === 0) bad(`--condition needs at least one condition id\n${USAGE}`);
       for (const id of ids) {
-        if (!CONDITION_IDS.includes(/** @type {any} */ (id)))
-          bad(`--condition ${id}: not one of ${CONDITION_IDS.join(', ')}`);
+        if (!known.includes(/** @type {any} */ (id)))
+          bad(`--condition ${id}: not one of ${known.join(', ')}`);
         if (!args.conditions.includes(/** @type {any} */ (id))) args.conditions.push(/** @type {any} */ (id));
       }
     } else if (a === '--runs') {
@@ -981,8 +1003,8 @@ export function parseArgv(argv) {
   if (args.smoke && sawRuns) bad(`--smoke fixes runs to 1; drop one of the flags\n${USAGE}`);
   // Sweep order is the declared order, not the order they were typed: the treatment
   // first means a broken condition costs one sweep rather than three.
-  if (args.conditions.length === 0) args.conditions = [...CONDITION_IDS];
-  else args.conditions = CONDITION_IDS.filter((c) => args.conditions.includes(c));
+  if (args.conditions.length === 0) args.conditions = [...known];
+  else args.conditions = known.filter((c) => args.conditions.includes(c));
   return args;
 }
 
@@ -1343,8 +1365,11 @@ export async function preflightAuth(spawnCapture, evalCommand) {
 }
 
 export async function main(argv) {
-  const args = parseArgv(argv);
-  if (args.help) {
+  // Help is answered before the registration is read, so it works in a tree with no
+  // pre-registration. Only a `--help` in flag position counts: `--runs --help` is a
+  // bad run count, and parseArgv says so below.
+  const inFlagPosition = (i) => i === 0 || !['--condition', '--runs'].includes(argv[i - 1]);
+  if (argv.some((a, i) => (a === '--help' || a === '-h') && inFlagPosition(i))) {
     console.log(USAGE);
     return 0;
   }
@@ -1352,6 +1377,20 @@ export async function main(argv) {
   // Relative suite paths and the harness's own `./<eval dir>/results/<timestamp>/`
   // both mean "from the repo root", so make that true rather than hope it is.
   process.chdir(paths.repoRoot);
+
+  // The conditions are the REGISTERED ones, read from the same json block the merger
+  // reads, so the runner and the merger cannot disagree about what a condition is. A
+  // condition added by amendment is sweepable the moment the registration names it.
+  const preRegistrationText = await readTextFile(join(paths.suiteDir, 'PRE-REGISTRATION.md'))
+    .catch(() => bad(`no ${paths.suiteDir}/PRE-REGISTRATION.md — the runner sweeps registered conditions only`));
+  let preRegistration;
+  try {
+    preRegistration = parsePreRegistration(preRegistrationText);
+  } catch (e) {
+    // The merger's refusal, in the runner's voice: a message, not a stack.
+    bad(`refusing to sweep: ${e.message}`);
+  }
+  const args = parseArgv(argv, preRegistration.conditions);
 
   const pre = await preflightCli(spawnCapture, () => evalCommandFrom(process.env), homedir());
   if (!pre.ok) {
@@ -1395,7 +1434,8 @@ export async function main(argv) {
   console.error(`suite ${paths.suiteDir} — ${plan.scored.length} scored case(s)` +
     (plan.excluded.length > 0 ? `, excluding ${plan.excluded.join(', ')}` : ''));
   console.error(`drift: none — ${mirrorPaths.treatmentMirror.replace(`${repoRoot}/`, '')} is current`);
-  console.error(`instrument: ${instrumentSha.slice(0, 12)}… (every case, grader, fixture and condition)`);
+  console.error(`instrument: ${instrumentSha.slice(0, 12)}… (every case, grader, transcript and fixture; ` +
+    'each condition is digested on its own)');
   for (const g of plan.groups)
     console.error(`  --ablation ${g.ablation}: ${g.cases.join(', ')}`);
 
@@ -1406,8 +1446,11 @@ export async function main(argv) {
     console.error(`\nsweep ${index + 1}/${plan.sweeps.length} · ${condition} · ` +
       `${args.runs} run(s) · ${DEFAULTS.subjectModel}/${DEFAULTS.judgeModel} · ` +
       `${invocations.length} invocation(s)`);
-    await selectCondition(copyDirectory, paths, condition);
-    console.error(`  ${paths.conditionUnderTest} ← conditions/${condition}`);
+    await selectCondition(copyDirectory, paths, condition, preRegistration.conditions);
+    // Taken from the source directory, which is what was just copied — the half of the
+    // instrument only this sweep measures against.
+    const conditionSha = await conditionDigest(paths.suiteDir, condition);
+    console.error(`  ${paths.conditionUnderTest} ← conditions/${condition} (${conditionSha.slice(0, 12)}…)`);
 
     const evalCommand = () => evalCommandFrom(process.env);
     /** @type {{ablation: 'with-without'|'none', cases: string[], argv: string[], result: SweepResult}[]} */
@@ -1433,6 +1476,7 @@ export async function main(argv) {
       argvs: parts.map((p) => p.argv),
       startedAt,
       instrumentSha,
+      conditionSha,
     });
     const out = join(paths.resultsDir, `${condition}.json`);
     await writeTextFile(out, `${JSON.stringify(record, null, 2)}\n`);

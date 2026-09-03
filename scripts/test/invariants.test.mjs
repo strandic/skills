@@ -96,10 +96,15 @@ test('I1b still lets a real contrast through — the epsilon is a tolerance, not
 
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
-const stamped = (condition, sha = SHA_A) => ({ condition, instrumentSha: sha });
+const SHA_C = 'c'.repeat(64);
+const stamped = (condition, sha = SHA_A, own = SHA_C) => ({ condition, instrumentSha: sha, conditionSha: own });
+/** The tree's per-condition digests at merge time — every fixture condition, unchanged. */
+const OWN = { treatment: SHA_C, oneliner: SHA_C, placebo: SHA_C };
+const i2b = (sweeps, drift, sha, err, own = OWN, ownErr = undefined) =>
+  inv.i2bInstrumentAgreement(sweeps, drift, sha, err, own, ownErr);
 
 test('I2b accepts sweeps, drift and the tree all naming one instrument', () => {
-  const r = inv.i2bInstrumentAgreement(
+  const r = i2b(
     [stamped('treatment'), stamped('oneliner'), stamped('placebo')], { instrumentSha: SHA_A }, SHA_A);
   assert.deepEqual(r.violations, []);
   assert.equal(r.ok, true);
@@ -107,7 +112,7 @@ test('I2b accepts sweeps, drift and the tree all naming one instrument', () => {
 
 test('I2b refuses sweeps that predate the instrument digest, and names them', () => {
   // The exact set in the worktree: three results files written before the digest existed.
-  const r = inv.i2bInstrumentAgreement(
+  const r = i2b(
     [{ condition: 'treatment' }, { condition: 'oneliner' }, { condition: 'placebo' }],
     { instrumentSha: SHA_A }, SHA_A);
   caught(r, 'predate the instrument digest');
@@ -116,13 +121,13 @@ test('I2b refuses sweeps that predate the instrument digest, and names them', ()
 });
 
 test('I2b refuses a partly stamped set rather than merging the two that agree', () => {
-  caught(inv.i2bInstrumentAgreement(
+  caught(i2b(
     [stamped('treatment'), stamped('oneliner'), { condition: 'placebo' }], { instrumentSha: SHA_A }, SHA_A),
   'placebo: sweep record carries no instrumentSha');
 });
 
 test('I2b refuses sweeps measured on different instruments and names both sides', () => {
-  const r = inv.i2bInstrumentAgreement(
+  const r = i2b(
     [stamped('treatment', SHA_B), stamped('oneliner'), stamped('placebo')], { instrumentSha: SHA_A }, SHA_A);
   caught(r, 'different instruments');
   assert.ok(r.violations[0].includes('treatment=bbbbbbbbbbbb'), r.violations[0]);
@@ -130,12 +135,12 @@ test('I2b refuses sweeps measured on different instruments and names both sides'
 });
 
 test('I2b refuses a drift record taken against a different instrument, and says which is which', () => {
-  const r = inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_B }, SHA_A);
+  const r = i2b([stamped('treatment')], { instrumentSha: SHA_B }, SHA_A);
   caught(r, 'drift.json names instrument bbbbbbbbbbbb, the sweeps name aaaaaaaaaaaa');
 });
 
 test('I2b refuses a drift record with no instrumentSha rather than reading it as agreement', () => {
-  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { drifted: false }, SHA_A),
+  caught(i2b([stamped('treatment')], { drifted: false }, SHA_A),
     'drift.json carries no instrumentSha');
 });
 
@@ -143,28 +148,68 @@ test('I2b refuses results taken on an instrument the tree no longer holds', () =
   // A grader rewritten between the sweep and the merge: the numbers describe a suite that
   // no longer exists. That is a changed instrument, which drift.json could never see —
   // not elapsed time, which nothing here sees either.
-  const r = inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, SHA_B);
+  const r = i2b([stamped('treatment')], { instrumentSha: SHA_A }, SHA_B);
   caught(r, 'the suite on disk is instrument bbbbbbbbbbbb, the sweeps measured aaaaaaaaaaaa');
 });
 
 test('I2b refuses a merge that never computed the current instrument', () => {
-  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, ''),
+  caught(i2b([stamped('treatment')], { instrumentSha: SHA_A }, ''),
     'no instrument digest was computed at merge time');
 });
 
 test('I2b refuses an empty sweep list rather than passing vacuously', () => {
-  caught(inv.i2bInstrumentAgreement([], { instrumentSha: SHA_A }, SHA_A), 'cannot be established');
-  caught(inv.i2bInstrumentAgreement(undefined, { instrumentSha: SHA_A }, SHA_A), 'cannot be established');
+  caught(i2b([], { instrumentSha: SHA_A }, SHA_A), 'cannot be established');
+  caught(i2b(undefined, { instrumentSha: SHA_A }, SHA_A), 'cannot be established');
+});
+
+test('I2b — the per-condition half: an edited condition voids its own sweep and no other', () => {
+  // The point of the split. placebo's SKILL.md was edited after its sweep; treatment and
+  // oneliner stand, and the message says to re-run placebo alone.
+  const r = i2b([stamped('treatment'), stamped('oneliner'), stamped('placebo', SHA_A, SHA_B)],
+    { instrumentSha: SHA_A }, SHA_A);
+  caught(r, "conditions/placebo on disk is cccccccccccc, the 'placebo' sweep measured bbbbbbbbbbbb");
+  assert.equal(r.violations.length, 1, r.violations.join('\n'));
+  assert.ok(r.violations[0].includes("re-run 'placebo' alone"), r.violations[0]);
+  assert.ok(!r.violations[0].includes('treatment'), r.violations[0]);
+});
+
+test('I2b — a fourth condition merges against the three without re-running them', () => {
+  const own = { ...OWN, 'treatment-no-triage': SHA_B };
+  const r = i2b([stamped('treatment'), stamped('oneliner'), stamped('placebo'), stamped('treatment-no-triage', SHA_A, SHA_B)],
+    { instrumentSha: SHA_A }, SHA_A, undefined, own);
+  assert.deepEqual(r.violations, []);
+});
+
+test('I2b — a record with no conditionSha predates the split and is refused by name', () => {
+  const r = i2b([stamped('treatment'), { condition: 'oneliner', instrumentSha: SHA_A }, stamped('placebo')],
+    { instrumentSha: SHA_A }, SHA_A);
+  caught(r, 'oneliner: sweep record carries no conditionSha');
+});
+
+test('I2b — a merge that computed no per-condition digests refuses rather than vouching', () => {
+  // `null`, not `undefined`: the helper's default would fill in the fixture map.
+  caught(i2b([stamped('treatment')], { instrumentSha: SHA_A }, SHA_A, undefined, null),
+    'no per-condition digests were computed at merge time');
+  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, SHA_A),
+    'no per-condition digests were computed at merge time');
+});
+
+test('I2b — a condition whose directory is gone is refused for that sweep, with the reason', () => {
+  const r = i2b([stamped('treatment'), stamped('placebo')], { instrumentSha: SHA_A }, SHA_A, undefined,
+    { treatment: SHA_C }, { placebo: 'ENOENT: no such file or directory' });
+  caught(r, 'placebo: no digest of conditions/placebo was computed at merge time');
+  assert.ok(r.violations[0].includes('ENOENT'), r.violations[0]);
+  assert.equal(r.violations.length, 1, r.violations.join('\n'));
 });
 
 test('I2b compares instruments, not times — sweeps taken weeks apart on one instrument merge', () => {
   // The narrower guarantee, pinned so nobody later reads I2b as a staleness guard, and so
   // nobody adds the elapsed-time rule it is repeatedly mistaken for. `startedAt` is not an
   // input to this check and is not compared anywhere else either.
-  const r = inv.i2bInstrumentAgreement(
-    [{ condition: 'treatment', instrumentSha: SHA_A, startedAt: '2026-08-01T00:00:00.000Z' },
-      { condition: 'oneliner', instrumentSha: SHA_A, startedAt: '2026-09-14T00:00:00.000Z' },
-      { condition: 'placebo', instrumentSha: SHA_A, startedAt: '2026-09-15T00:00:00.000Z' }],
+  const r = i2b(
+    [{ condition: 'treatment', instrumentSha: SHA_A, conditionSha: SHA_C, startedAt: '2026-08-01T00:00:00.000Z' },
+      { condition: 'oneliner', instrumentSha: SHA_A, conditionSha: SHA_C, startedAt: '2026-09-14T00:00:00.000Z' },
+      { condition: 'placebo', instrumentSha: SHA_A, conditionSha: SHA_C, startedAt: '2026-09-15T00:00:00.000Z' }],
     { instrumentSha: SHA_A, checkedAt: '2019-01-01T00:00:00.000Z' }, SHA_A);
   assert.deepEqual(r.violations, []);
 });
@@ -173,12 +218,12 @@ test('I2b names why the digest is missing, because the remedies differ', () => {
   // "No digest was computed" reads the same for a suite directory that is not there, a
   // file this process may not read, and a bug in the digest — and those are three
   // different next steps for whoever is running the merge.
-  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, '',
+  caught(i2b([stamped('treatment')], { instrumentSha: SHA_A }, '',
     "ENOENT: no such file or directory, scandir '/x/suite'"), 'ENOENT: no such file or directory');
-  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, '',
+  caught(i2b([stamped('treatment')], { instrumentSha: SHA_A }, '',
     "EACCES: permission denied, open '/x/suite/case.yaml'"), 'EACCES: permission denied');
   // Still says the plain thing when nothing explained itself.
-  caught(inv.i2bInstrumentAgreement([stamped('treatment')], { instrumentSha: SHA_A }, ''),
+  caught(i2b([stamped('treatment')], { instrumentSha: SHA_A }, ''),
     'no instrument digest was computed at merge time');
 });
 

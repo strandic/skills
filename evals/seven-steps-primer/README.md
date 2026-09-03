@@ -162,6 +162,24 @@ rate-limit windows. Recon's five probe sweeps came to $0.28 of estimate.
 
 `_conditions/` and `results/` are generated and gitignored.
 
+**Adding a condition.** The pre-registration's `conditions` list is the registry; the
+runner and the merger read it; the only list in code is the default for a caller that
+has not read the registration. To add one: create
+`conditions/<id>/SKILL.md` with the same frontmatter as the others, add `<id>` to the
+list, add an `expectedDirection` entry for every delta case against it (the parser
+refuses a list without them), and record the amendment. Then sweep it alone:
+
+```bash
+node scripts/run-evals.mjs --condition <id>
+```
+
+The existing records stand. Each sweep record carries two digests: `instrumentSha` over
+what every condition shares (cases, graders, transcripts, fixture) and `conditionSha`
+over its own `conditions/<id>/`. A new condition changes neither for the others, so the
+merge accepts three old records and one new. Editing a grader changes the shared digest
+and voids them all; editing one condition's SKILL.md voids that condition's record only.
+`none` cannot be a condition id: it is the harness's own without-arm.
+
 ## What the numbers mean
 
 *This is the claims section. It is bounded by the sentence below, which is quoted verbatim

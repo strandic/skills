@@ -66,8 +66,11 @@ Each ablation is a new condition: the treatment with one section deleted. Three 
 - the failure-modes list at the end
 - the setup section (artifact home, worktree, checkpoints)
 
-Each condition is one Tier 1 sweep, about $10 and 35 minutes. The existing invariants,
-graders and merge all apply unchanged. If removing a section does not move any Tier 1
+Each condition is one Tier 1 sweep, about $10 and 35 minutes, and it merges against the
+existing treatment and control records without re-running them: since Amendment 5 the
+instrument digest is split into a shared half and a per-condition half, and the
+registration's `conditions` list is where a condition is added (see the suite README,
+"Adding a condition"). The existing invariants, graders and merge all apply unchanged. If removing a section does not move any Tier 1
 score outside the noise floor (0.12), that section is not earning its length on the
 behaviours Tier 1 measures.
 

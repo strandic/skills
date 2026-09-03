@@ -267,7 +267,8 @@
  * stands on disk, or `''` and the reason it could not be taken
  *
  * The merger's own view of `instrumentDigest(suiteDir)` — the cases, their graders, the
- * transcripts they replay, the fixture and every condition's SKILL.md. `digestSuite` is
+ * transcripts they replay and the fixture: the SHARED half of the instrument. The other
+ * half, one digest per registered condition, is {@link ResolveConditionShas}. `digestSuite` is
  * injected rather than called directly so a test can drive the disagreement without a
  * suite on disk: I2b refuses a merge whose sweep records disagree with each other, or
  * with the tree the merger can see, because a treatment measured against last week's
@@ -278,6 +279,19 @@
  * file the process may not read, and a bug in the digest — three different things for
  * the operator to do next. It is returned, not thrown: the other invariants still have
  * things to say about the report.
+ */
+
+/**
+ * @callback ResolveConditionShas
+ * @param {(suiteDir: string, id: string) => Promise<string>} digestCondition
+ * @param {string} suiteDir
+ * @param {string[]} conditions  the registered condition ids
+ * @returns {Promise<{shas: Record<string,string>, errors: Record<string,string>}>}
+ *
+ * The per-condition half of the instrument at merge time: `conditionDigest(suiteDir, id)`
+ * for every registered id. One failure does not empty the map — it lands in `errors`
+ * under its id and the other digests are still taken, so I2b can refuse the one sweep
+ * whose condition is gone and say nothing false about the rest.
  */
 
 /**

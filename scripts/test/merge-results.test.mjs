@@ -62,9 +62,14 @@ const doc = ({ cases, partial = false, claudeVersion = '2.1.245', model = 'sonne
  */
 const ABLATIONS = { gate: 'with-without', triage: 'with-without', markers: 'none' };
 
+/** Each condition's own half of the instrument — distinct per id, like the real digest. */
+const OWN = (condition) => `${condition}-`.padEnd(64, '0').slice(0, 64).replace(/[^0-9a-f]/g, '0');
+const OWN_SHAS = (conditions = PRE_CONDITIONS) => Object.fromEntries(conditions.map((c) => [c, OWN(c)]));
+const PRE_CONDITIONS = ['treatment', 'oneliner', 'placebo'];
+
 const sweep = (condition, document, exitCode = 0, ablations) => ({
   condition, exitCode, document, stderrTail: '', argvs: [['plugin', 'eval']],
-  startedAt: document.startedAt, instrumentSha: INSTRUMENT,
+  startedAt: document.startedAt, instrumentSha: INSTRUMENT, conditionSha: OWN(condition),
   ablations: ablations ?? Object.fromEntries(
     document.cases.map((c) => [c.name, ABLATIONS[c.name] ?? 'with-without'])),
 });
@@ -135,6 +140,7 @@ const ctx = (over = {}) => ({
   committedPreRegistrationSha: 'aaa',
   preRegistrationDirty: false,
   instrumentSha: INSTRUMENT,
+  conditionShas: OWN_SHAS(),
   ...over,
 });
 
@@ -846,6 +852,93 @@ test('resolveInstrumentSha carries the underlying failure, and I2b prints it', a
 
 test('formatComparison prints the instrument the numbers were taken on', () => {
   assert.ok(m.formatComparison(merged()).includes(`**instrument** \`${INSTRUMENT.slice(0, 12)}\``));
+});
+
+test('formatComparison prints each condition\'s own digest beside the shared instrument', () => {
+  const prov = { ...PROV, conditionShas: OWN_SHAS() };
+  const text = m.formatComparison(m.mergeSweeps(sweeps(), pre(), structuredClone(prov)));
+  assert.ok(text.includes(`**Conditions** treatment \`${OWN('treatment').slice(0, 12)}\``), text);
+  assert.ok(text.includes(`placebo \`${OWN('placebo').slice(0, 12)}\``), text);
+});
+
+/* ── The split digest and the registered condition list ─────────────────────── */
+
+test('I2b — editing one condition after its sweep refuses that sweep alone, by name', () => {
+  const edited = { ...OWN_SHAS(), placebo: 'e'.repeat(64) };
+  const check = m.checkReport(merged(), pre(), ctx({ conditionShas: edited }));
+  assert.equal(check.ok, false);
+  assert.equal(check.violations.length, 1, check.violations.join('\n'));
+  assert.ok(check.violations[0].includes("re-run 'placebo' alone"), check.violations[0]);
+});
+
+test('I2b — records that predate the per-condition digest are refused', () => {
+  const old = sweeps().map(({ conditionSha, ...s }) => s);
+  refuses(merged(), pre(), ctx({ sweeps: old }), 'carries no conditionSha');
+});
+
+test('I2b — a merge with no per-condition digests refuses rather than vouching', () => {
+  refuses(merged(), pre(), ctx({ conditionShas: undefined }), 'no per-condition digests were computed');
+});
+
+test('buildProvenance records each condition\'s own digest under its id', async () => {
+  const p = await m.buildProvenance(revParse, digest, clock, sweeps(), pre(), '/x/P.md');
+  assert.deepEqual(p.conditionShas, OWN_SHAS());
+  const old = sweeps();
+  delete old[1].conditionSha;
+  assert.equal((await m.buildProvenance(revParse, digest, clock, old, pre(), '/x/P.md')).conditionShas.oneliner, '');
+});
+
+test('resolveConditionShas records a failure against its condition and still digests the rest', async () => {
+  const gone = Object.assign(new Error("ENOENT: no such file or directory, scandir '/x/conditions/placebo'"), { code: 'ENOENT' });
+  const r = await m.resolveConditionShas(
+    async (dir, id) => { if (id === 'placebo') throw gone; return `${id}:${dir}`; },
+    '/x', ['treatment', 'oneliner', 'placebo']);
+  assert.deepEqual(r.shas, { treatment: 'treatment:/x', oneliner: 'oneliner:/x' });
+  assert.match(r.errors.placebo, /^ENOENT: /);
+  const check = m.checkReport(merged(), pre(), ctx({ conditionShas: r.shas, conditionShaErrors: r.errors }));
+  assert.ok(check.violations.some((v) => v.includes('placebo: no digest of conditions/placebo') && v.includes('ENOENT')),
+    JSON.stringify(check.violations));
+});
+
+test('parsePreRegistration accepts a fourth condition once every delta case has a direction against it', () => {
+  const p = pre({
+    conditions: [...PRE_CONDITIONS, 'treatment-no-triage'],
+    expectedDirection: { ...PRE.expectedDirection, 'gate/treatment-no-triage': 0, 'triage/treatment-no-triage': 1 },
+  });
+  const md = PREREG_MD.replace(JSON.stringify(PRE, null, 2), JSON.stringify(p, null, 2));
+  assert.deepEqual(m.parsePreRegistration(md).conditions, [...PRE_CONDITIONS, 'treatment-no-triage']);
+});
+
+test('parsePreRegistration refuses a condition added without a direction for every delta case', () => {
+  const p = pre({
+    conditions: [...PRE_CONDITIONS, 'treatment-no-triage'],
+    expectedDirection: { ...PRE.expectedDirection, 'gate/treatment-no-triage': 0 },
+  });
+  const md = PREREG_MD.replace(JSON.stringify(PRE, null, 2), JSON.stringify(p, null, 2));
+  throws(() => m.parsePreRegistration(md), 'no direction registered for triage/treatment-no-triage');
+});
+
+test('parsePreRegistration refuses `none` and malformed ids as conditions', () => {
+  for (const id of ['none', 'Treatment', 'no_triage', '-x', '', 7]) {
+    const p = pre({ conditions: [...PRE_CONDITIONS, id] });
+    const md = PREREG_MD.replace(JSON.stringify(PRE, null, 2), JSON.stringify(p, null, 2));
+    assert.throws(() => m.parsePreRegistration(md), m.MergeError, JSON.stringify(id));
+  }
+});
+
+test('a fourth condition merges against the three with its own digest and no re-run', () => {
+  const extra = 'treatment-no-triage';
+  const p = pre({
+    conditions: [...PRE_CONDITIONS, extra],
+    expectedDirection: { ...PRE.expectedDirection, [`gate/${extra}`]: 0, [`triage/${extra}`]: 1 },
+  });
+  const s = [...sweeps(), sweep(extra, sweeps()[0].document)];
+  const report = m.mergeSweeps(s, p, structuredClone(PROV));
+  const check = m.checkReport(report, p, ctx({ sweeps: s, conditionShas: OWN_SHAS([...PRE_CONDITIONS, extra]) }));
+  assert.deepEqual(check.violations, []);
+  const gate = report.deltaRows.find((r) => r.case === 'gate');
+  assert.ok(gate.contrasts.some((c) => c.control === extra), JSON.stringify(gate.contrasts));
+  assert.ok(m.formatComparison(report).includes(`| ${extra} |`) || m.formatComparison(report).includes(extra));
 });
 
 test('buildProvenance falls back to the clock when no sweep recorded a start', async () => {

@@ -470,6 +470,60 @@ same instrument: all three sweeps agreed on the original digest, and no git-trac
 under the suite directory other than the two root prose files changed between the sweep
 start and the re-stamp (`git diff f2c04fc..aa81788 -- evals/seven-steps-primer`).
 
+## Amendment 5 — the instrument digest is split, and conditions are registered here
+
+Recorded 2026-09-03, after the re-sweep and before any further sweep. No number changes.
+No direction changes (I8). The three conditions and their twelve directions stand.
+
+### 5.1 One digest over every condition made every experiment cost four sweeps
+
+Amendment 4.5 stamped each sweep with one digest over the whole suite directory,
+`conditions/` included. So adding a fourth condition (a treatment with one section
+removed, for the section-ablation experiment) changed the digest and voided the three
+records already taken: a one-sweep experiment cost four sweeps. That was the wrong
+unit. A sweep copies one condition into `_conditions/current`; the other conditions'
+files are not part of what it measured.
+
+The digest is now two. **`instrumentSha`** covers what every condition shares: the
+cases, their graders, the transcripts they replay, the fixture. It is stamped on every
+sweep record and on `drift.json`, and every one of them must agree with each other and
+with the tree, as before. **`conditionSha`** covers `conditions/<id>/` and nothing else,
+is stamped on that condition's record only, and is compared against the tree's digest of
+that condition alone. I2b refuses either half when it is absent.
+
+In practice: editing a grader, a fixture, a case or a transcript voids every record, as
+before. Editing one condition's `SKILL.md` voids that condition's record and no other.
+Adding a condition voids nothing.
+
+### 5.2 The conditions are registered in this file, not in code
+
+The runner and the merger held a list of three condition ids. The list is now the
+`conditions` array in the registered record above, and both read it from there. Adding
+a condition is an amendment to this file: the id, a directory `conditions/<id>/`, and an
+`expectedDirection` for every delta case against it. The parser refuses a list with a
+direction missing, so an incomplete registration costs nothing rather than a sweep.
+`none` is reserved: it names the harness's without-arm, the column every contrast is also
+taken against.
+
+Ids are lowercase letters, digits and hyphens. A registered condition with no directory
+is refused at sweep time; a directory with no registration is not a condition.
+
+### 5.3 What this costs
+
+The re-sweep's three records were stamped under the old rule and carried no
+`conditionSha`; they are also no longer on disk (the raw `results/*.json` were deleted
+with the feature worktree on 2026-09-03, before this amendment). The published numbers in
+`docs/plans/primer-evals/RESULTS-2026-09-03.md` stand as published; nothing here
+reinterprets them. But no new condition can be merged against them, because there is
+nothing to merge against. **One full sweep of the three registered conditions is
+required** before the first added condition can be swept alone. That sweep should follow
+the grader corrections in bean skills-ie78 (the step3 judge criteria, its turn cap and its
+`skill-fired` grader), since those change the shared digest and would otherwise force a
+second full sweep.
+
+**Unchanged.** The three conditions, the five scored cases, the threshold, the subject
+and judge models, five runs per case, and all twelve registered directions.
+
 ---
 
 # Results — first full sweep, 2026-09-01
