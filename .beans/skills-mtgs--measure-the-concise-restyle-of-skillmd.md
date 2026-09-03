@@ -3,9 +3,11 @@
 title: Measure the Concise restyle of SKILL.md
 status: todo
 type: task
-priority: normal
+priority: deferred
 created_at: 2026-09-01T11:04:48Z
-updated_at: 2026-09-01T11:04:48Z
+updated_at: 2026-09-03T09:32:25Z
+blocked_by:
+    - skills-fqdf
 ---
 
 SKILL.md was written under Claude Code's default output style; the repo has since moved to Concise. A restyle changes the text while keeping the structure.

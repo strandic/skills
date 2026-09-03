@@ -5,7 +5,9 @@ status: todo
 type: task
 priority: low
 created_at: 2026-09-01T11:05:09Z
-updated_at: 2026-09-03T09:11:06Z
+updated_at: 2026-09-03T09:32:25Z
+blocked_by:
+    - skills-fqdf
 ---
 
 Queued change to the triage section: urgency is a reason not to run the method at all (decision D5 in `docs/plans/primer-evals/0-plan.md`). A hurried reviewer still says "proceed", so the gates appear to clear while the consideration behind them is gone; that is the rubber-stamp failure SKILL.md names first.

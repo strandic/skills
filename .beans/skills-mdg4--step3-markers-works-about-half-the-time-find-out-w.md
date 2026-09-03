@@ -3,9 +3,9 @@
 title: step3-markers works about half the time — find out why
 status: todo
 type: task
-priority: normal
+priority: high
 created_at: 2026-09-01T11:05:18Z
-updated_at: 2026-09-01T11:05:18Z
+updated_at: 2026-09-03T09:32:25Z
 ---
 
 `step3-markers-in-source` is the one behaviour no control produces. In the 2026-09-03 sweep (`docs/plans/primer-evals/RESULTS-2026-09-03.md`) the treatment scores 0.85 and both controls score 0.25 on every run. It is capability evidence (single arm, replayed transcript), and it is the strongest evidence in the suite that the method's specific content does something.
