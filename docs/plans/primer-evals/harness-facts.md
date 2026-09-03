@@ -89,6 +89,7 @@ need.
 | 41 | `criteria` is interpolated **straight into the judge prompt** — `Criterion:\n${criteria}` — with nothing between the file and the judge. Fencing a design note in `<!-- -->` therefore hides it from nobody | CODE | `You are grading the output of a coding agent against a criterion.` |
 | 42 | `input_match` is a **regex over the JSON-encoded tool input**, not a substring test | DOC | ``optional `input_match` (regex over the JSON-encoded tool input)`` |
 | 43 | A `regex` grader's `pattern` is a **JavaScript RegExp source in every `match` mode**; `match` (`contains` default, `not_contains`, `count:N`) only chooses how many hits it must produce | DOC | ``The pattern is (or is not) found in the target; `count:N` requires exactly N.`` |
+| 44 | `--case <glob>` is **one glob, not variadic**: `*` → `.*`, `?` → `.`, every other character literal (braces are escaped, so no `{a,b}`), anchored at both ends. A repeated flag keeps only the **last** value. Paid for on 2026-09-03: four `--case` flags ran one case (`2 arms × 1 case`) and the record reported "no result" for the other three | CODE | `function ys(e,t){if(t.caseGlob&&!bs(t.caseGlob,e.name))return!1` |
 
 Claim 15 was re-run directly: without the variable the command prints the
 early-access line; with it, the same invocation reports `No eval cases found`.
