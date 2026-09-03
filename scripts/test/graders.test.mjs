@@ -52,7 +52,10 @@ const listDirectory = async (p) => {
  * ──────────────────────────────────────────────────────────────────────────── */
 
 /** Every grader file the suite ships, patterned or not. */
-const EXPECTED_GRADERS = 27;
+// 26 since 2026-09-03: step3-markers-in-source's `skill-fired` was removed (Amendment 6) —
+// the replayed seed turn names the skill, so it fired under every condition and scored the
+// transcript, not the behaviour. The pre-registration's grader table never counted it.
+const EXPECTED_GRADERS = 26;
 
 /**
  * Of those, the ones carrying an authored pattern — the only ones a probe can test.

@@ -524,6 +524,49 @@ second full sweep.
 **Unchanged.** The three conditions, the five scored cases, the threshold, the subject
 and judge models, five runs per case, and all twelve registered directions.
 
+## Amendment 6 — `step3-markers-in-source`: the judge criteria, the turn cap, and a grader that scored the transcript
+
+Recorded 2026-09-03, after a treatment-only read of the case
+(`docs/plans/primer-evals/step3-read-2026-09-03.md`, $1.40, not mergeable and not in any
+table). No direction changes; the case is capability evidence and has none. The published
+0.85 / 0.25 / 0.25 stands as published under the instrument it was measured with.
+
+### 6.1 What the read showed
+
+Both file graders passed 5 of 5 treatment runs: the markers were in the code every time.
+The quarter lost on three of five re-sweep runs, and four of five in the read, was always
+`not-a-doc-list`, for two reasons. Two runs hit the 14-turn cap after placing every
+marker and the judge saw a fragment. Two runs finished and reported the placed markers as
+a per-file list with line numbers, and three judges failed each of them unanimously,
+because the criteria told the judge that enumerated sites score 0 and the judge cannot see
+the workspace. The controls' flat 0.25 was `skill-fired`: the replayed seed turn names
+the skill, so the Skill tool fires under every condition.
+
+### 6.2 What changed
+
+- **`graders/not-a-doc-list.md`.** The criteria now give the 1 to any reply that says the
+  markers are in the source files and names a file that was edited, whatever its shape
+  (list, table, count, sentence), and keep the 0 for a plan, a proposal, a document in
+  place of the code, or a fragment that reports nothing. The file graders remain the check
+  on the claim; the judge grades the report.
+- **`case.yaml` `max_turns`: 14 → 20.** The cap bounds cost; it was deciding the score.
+- **`graders/skill-fired.md` removed.** A grader every condition passes by construction
+  measures nothing about the condition. Under `--ablation none` there is no with-only
+  demotion to hide it behind, so it is gone. The grader table in this file listed three
+  graders for the case from the start and never counted it; the directory now matches.
+  The case is scored on three graders, so a control that places no marker and reports
+  none scores 0.00, not 0.25.
+
+### 6.3 What this costs
+
+All three change the shared instrument digest (Amendment 5), so this case's records, and
+with them every record from the same sweep, are unmergeable with any record taken after
+it. That is the same full sweep Amendment 5.3 already requires. Nothing is re-run for
+this amendment alone.
+
+**Unchanged.** The three conditions, the five scored cases, the threshold, the subject
+and judge models, five runs per case, and all twelve registered directions.
+
 ---
 
 # Results — first full sweep, 2026-09-01

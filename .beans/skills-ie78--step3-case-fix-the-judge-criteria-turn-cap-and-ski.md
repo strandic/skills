@@ -1,11 +1,11 @@
 ---
 # skills-ie78
 title: 'step3 case: fix the judge criteria, turn cap and skill-fired grader'
-status: todo
+status: completed
 type: task
 priority: high
 created_at: 2026-09-03T09:53:49Z
-updated_at: 2026-09-03T12:45:28Z
+updated_at: 2026-09-03T13:51:37Z
 ---
 
 Follows from docs/plans/primer-evals/step3-read-2026-09-03.md (skills-mdg4).
@@ -20,3 +20,12 @@ Three instrument changes to evals/seven-steps-primer/step3-markers-in-source, to
 
 
 Order note, 2026-09-03: no longer blocked by skills-ccsx. Do these grader changes FIRST, then the one full sweep that re-establishes the three records (Amendment 5.3), so the ablation conditions can merge against records taken on the corrected instrument.
+
+
+
+Done 2026-09-03 as Amendment 6: criteria rewritten (shape-agnostic, 1 for 'markers are in the files' + a file name; 0 for plan/proposal/document/fragment), max_turns 14→20, graders/skill-fired.md deleted (the registration's grader table never listed it; the case is now three graders, controls score 0.00). Test grader count 27→26. The re-sweep is the one full sweep Amendment 5.3 already requires; not run here.
+
+- [x] not-a-doc-list criteria
+- [x] max_turns 20
+- [x] skill-fired removed (deleted rather than weight 0: the registered table lists three graders)
+- [x] amendment (6); full sweep pending, see skills-fqdf order note

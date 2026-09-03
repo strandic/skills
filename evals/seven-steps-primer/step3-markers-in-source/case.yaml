@@ -31,14 +31,22 @@ context:
   scaffold_script: scaffold.sh
 execution:
   prompt: "proceed"
-  max_turns: 14
+  # 20, not 14: in the 2026-09-03 read (docs/plans/primer-evals/step3-read-2026-09-03.md) two
+  # of five treatment runs spent 8 or 9 turns re-reading the service before the first edit,
+  # placed every marker, and were cut off at 14 while confirming them. The judge then saw a
+  # fragment. The cap exists to bound cost, not to decide the score.
+  max_turns: 20
   timeout_seconds: 600
   allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
 runs: 5
-# Graders live in graders/*.md beside this file — four of them: markers-in-middleware,
-# markers-in-source, not-a-doc-list, skill-fired. An empty list here is valid and is not a
-# defect anyone should "fix": the merge with the directory precedes the minimum-one check,
-# so the case loads with the four the directory supplies.
+# Graders live in graders/*.md beside this file — three of them: markers-in-middleware,
+# markers-in-source, not-a-doc-list, which is what the pre-registration's grader table
+# lists. A fourth, `skill-fired` (tool_used Skill), was removed on 2026-09-03: the replayed
+# seed turn names the skill, so it fired under every condition and floored the case at 0.25
+# for controls that placed no marker; it measured the transcript, not the behaviour. An
+# empty list here is valid and is not a defect anyone should "fix": the merge with the
+# directory precedes the minimum-one check, so the case loads with the three the directory
+# supplies.
 #
 # `not-a-doc-list.notes.md` beside this file is NOT a grader. Design notes for an `llm`
 # grader live outside graders/ on purpose: that grader's markdown body is handed to the
