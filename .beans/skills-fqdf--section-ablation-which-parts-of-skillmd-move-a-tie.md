@@ -5,10 +5,11 @@ status: todo
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-03T09:32:25Z
+updated_at: 2026-09-03T09:53:49Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
+    - skills-ie78
 ---
 
 Tier 2's first experiment (`docs/plans/primer-evals/tier-2-backlog.md`, experiment 1). The 2026-09-03 sweep found a same-shape placebo ties the primer on every delta case and beats it on one, so Tier 1 cannot yet attribute any behaviour to the primer's content. This experiment removes one section at a time and re-runs the existing suite to see which sections, if any, move a Tier 1 score outside the noise floor (0.12). The placebo result says to bet on "none".

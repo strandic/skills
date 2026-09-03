@@ -1,0 +1,356 @@
+{
+ "schemaVersion": 1,
+ "claudeVersion": "2.1.250",
+ "startedAt": "2026-09-03T09:45:24.156Z",
+ "durationSeconds": 363,
+ "costUsd": 1.4023724,
+ "partial": false,
+ "suite": {
+  "root": "/Users/jonathan/Documents/strandic-skills",
+  "ablation": "none",
+  "modelOverride": "sonnet",
+  "judgeModel": "opus",
+  "caseFilter": "step3-markers-in-source",
+  "threshold": 0.6,
+  "plugins": [
+   {
+    "name": "current",
+    "path": "/Users/jonathan/Documents/strandic-skills/evals/_conditions/current"
+   }
+  ]
+ },
+ "cases": [
+  {
+   "name": "step3-markers-in-source",
+   "dir": "evals/seven-steps-primer/step3-markers-in-source",
+   "source": "mixed",
+   "promptMarkdown": "proceed",
+   "runsPerCase": 5,
+   "timeoutSeconds": 600,
+   "maxTurns": 14,
+   "graders": [
+    {
+     "name": "markers-in-middleware",
+     "type": "regex",
+     "weight": 1,
+     "config": {
+      "target": {
+       "source": "file",
+       "path": "src/middleware/index.js"
+      },
+      "pattern": "TODO",
+      "flags": "",
+      "match": "contains"
+     }
+    },
+    {
+     "name": "markers-in-source",
+     "type": "regex",
+     "weight": 1,
+     "config": {
+      "target": {
+       "source": "file",
+       "path": "src/routes/notes.js"
+      },
+      "pattern": "TODO",
+      "flags": "",
+      "match": "contains"
+     }
+    },
+    {
+     "name": "not-a-doc-list",
+     "type": "llm",
+     "weight": 1,
+     "graderMarkdown": "The conversation this run resumes had already settled what the change involves, what\nstate it needs and what the functions look like. The turn being judged was asked only to\nproceed.\n\nScore 1 if the reply reports that it put the markers into the service's own source files\nand names the files it edited. Listing the sites as well is fine \u2014 a reply that says\n\"here are the sites, and I have marked each of them in the code\" scores 1.\n\nScore 0 if the sites are enumerated in prose, in a table, or written into a document, and\nthe source files were left as they were. Score 0 if the reply describes where markers\n*would* go, or proposes a plan for placing them. A list instead of the markers is the\nexact failure this case exists to catch: the deliverable is in the code, and a document\nabout the code is not the code.",
+     "config": {
+      "criteria": "The conversation this run resumes had already settled what the change involves, what\nstate it needs and what the functions look like. The turn being judged was asked only to\nproceed.\n\nScore 1 if the reply reports that it put the markers into the service's own source files\nand names the files it edited. Listing the sites as well is fine \u2014 a reply that says\n\"here are the sites, and I have marked each of them in the code\" scores 1.\n\nScore 0 if the sites are enumerated in prose, in a table, or written into a document, and\nthe source files were left as they were. Score 0 if the reply describes where markers\n*would* go, or proposes a plan for placing them. A list instead of the markers is the\nexact failure this case exists to catch: the deliverable is in the code, and a document\nabout the code is not the code.",
+      "focus": "last_message"
+     }
+    },
+    {
+     "name": "skill-fired",
+     "type": "tool_used",
+     "weight": 1,
+     "config": {
+      "tool": "Skill",
+      "min": 1
+     }
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 0.75,
+      "passed": false,
+      "turns": 18,
+      "costUsd": 0.28621060000000004,
+      "judgeCostUsd": 0.00942,
+      "durationSeconds": 76,
+      "startedAt": "2026-09-03T09:45:24.178Z",
+      "error": null,
+      "tracePath": "<tmp>/claude-eval-cTiEdg/out/trace.jsonl",
+      "skippedPaidGraders": false,
+      "graders": [
+       {
+        "name": "markers-in-middleware",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "markers-in-source",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "not-a-doc-list",
+        "passed": false,
+        "weight": 1,
+        "explanation": "judge votes: FAIL FAIL FAIL",
+        "withOnly": false,
+        "scored": true,
+        "judgeVotes": [
+         false,
+         false,
+         false
+        ],
+        "evidence": "Nine sites across four files:\n\n- **`src/middleware/index.js`** (6): the two module-scope vars \u2192 map; the new `evict` insertion point; `rateLimitSnapshot` \u2192 `snapshotFor`; `resetRateLimit` \u2192 clear the map; `withRateLimit` \u2192 `spend`; and the chain-order dependency itself.\n- **`server.js`** (1): the `CHAIN` array reorder.\n- **`src/routes/notes.js`** (1): the `snapshotFor(req.user)` call site.\n- **`test/notes.test.js`** (2): the new isolation test, and a flag to re-confirm the three chain-order-pinning tests still hold post-reorder rather than assuming it.\n\n**Gate 3.**"
+       },
+       {
+        "name": "skill-fired",
+        "passed": true,
+        "weight": 1,
+        "explanation": "Skill called 1x (expected 1..\u221e)",
+        "withOnly": false,
+        "scored": true
+       }
+      ]
+     },
+     {
+      "score": 0.75,
+      "passed": false,
+      "turns": 15,
+      "costUsd": 0.31585620000000003,
+      "judgeCostUsd": 0.005939999999999999,
+      "durationSeconds": 76,
+      "startedAt": "2026-09-03T09:46:39.730Z",
+      "error": "exit 1: (no stderr)",
+      "tracePath": "<tmp>/claude-eval-sdhlaV/out/trace.jsonl",
+      "skippedPaidGraders": false,
+      "graders": [
+       {
+        "name": "markers-in-middleware",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "markers-in-source",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "not-a-doc-list",
+        "passed": false,
+        "weight": 1,
+        "explanation": "judge votes: FAIL FAIL FAIL",
+        "withOnly": false,
+        "scored": true,
+        "judgeVotes": [
+         false,
+         false,
+         false
+        ],
+        "evidence": "Confirming every marker is in place:"
+       },
+       {
+        "name": "skill-fired",
+        "passed": true,
+        "weight": 1,
+        "explanation": "Skill called 1x (expected 1..\u221e)",
+        "withOnly": false,
+        "scored": true
+       }
+      ]
+     },
+     {
+      "score": 0.75,
+      "passed": false,
+      "turns": 15,
+      "costUsd": 0.33283920000000006,
+      "judgeCostUsd": 0.005985000000000001,
+      "durationSeconds": 91,
+      "startedAt": "2026-09-03T09:47:56.106Z",
+      "error": "exit 1: (no stderr)",
+      "tracePath": "<tmp>/claude-eval-aCcFQT/out/trace.jsonl",
+      "skippedPaidGraders": false,
+      "graders": [
+       {
+        "name": "markers-in-middleware",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "markers-in-source",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "not-a-doc-list",
+        "passed": false,
+        "weight": 1,
+        "explanation": "judge votes: FAIL FAIL FAIL",
+        "withOnly": false,
+        "scored": true,
+        "judgeVotes": [
+         false,
+         false,
+         false
+        ],
+        "evidence": "Now `src/routes/notes.js`."
+       },
+       {
+        "name": "skill-fired",
+        "passed": true,
+        "weight": 1,
+        "explanation": "Skill called 1x (expected 1..\u221e)",
+        "withOnly": false,
+        "scored": true
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "turns": 14,
+      "costUsd": 0.2656352,
+      "judgeCostUsd": 0.007769999999999996,
+      "durationSeconds": 66,
+      "startedAt": "2026-09-03T09:49:26.769Z",
+      "error": null,
+      "tracePath": "<tmp>/claude-eval-UxEuLU/out/trace.jsonl",
+      "skippedPaidGraders": false,
+      "graders": [
+       {
+        "name": "markers-in-middleware",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "markers-in-source",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "not-a-doc-list",
+        "passed": true,
+        "weight": 1,
+        "explanation": "judge votes: PASS PASS PASS",
+        "withOnly": false,
+        "scored": true,
+        "judgeVotes": [
+         true,
+         true,
+         true
+        ],
+        "evidence": "Nine markers, three files \u2014 every site from the step-2 signatures is covered: the two module-scope vars, `evict` (net-new), `rateLimitSnapshot`\u2192`snapshotFor` at its definition/export/import/call-site, `resetRateLimit`, `withRateLimit`'s body and its position in both the middleware file's ordering comment and `server.js`'s `CHAIN`.\n\n**Gate 3.**"
+       },
+       {
+        "name": "skill-fired",
+        "passed": true,
+        "weight": 1,
+        "explanation": "Skill called 1x (expected 1..\u221e)",
+        "withOnly": false,
+        "scored": true
+       }
+      ]
+     },
+     {
+      "score": 0.75,
+      "passed": false,
+      "turns": 14,
+      "costUsd": 0.2018312,
+      "judgeCostUsd": 0.008625000000000008,
+      "durationSeconds": 55,
+      "startedAt": "2026-09-03T09:50:32.365Z",
+      "error": null,
+      "tracePath": "<tmp>/claude-eval-cfeaMD/out/trace.jsonl",
+      "skippedPaidGraders": false,
+      "graders": [
+       {
+        "name": "markers-in-middleware",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "markers-in-source",
+        "passed": true,
+        "weight": 1,
+        "explanation": "matched TODO",
+        "withOnly": false,
+        "scored": true
+       },
+       {
+        "name": "not-a-doc-list",
+        "passed": false,
+        "weight": 1,
+        "explanation": "judge votes: FAIL FAIL FAIL",
+        "withOnly": false,
+        "scored": true,
+        "judgeVotes": [
+         false,
+         false,
+         false
+        ],
+        "evidence": "Eight markers across the three files:\n\n- `src/middleware/index.js` \u2014 the module-scope variables (line 21), `rateLimitSnapshot` \u2192 `snapshotFor` (43), `resetRateLimit`'s clear (63), the new `evict` site (76), `withRateLimit` \u2192 `spend` extraction (90), and the exports (227).\n- `server.js` \u2014 the CHAIN reorder (25).\n- `src/routes/notes.js` \u2014 the `snapshotFor(req.user)` call site (40).\n\nEvery site from step 2's signatures has a marker. **Gate 3.**"
+       },
+       {
+        "name": "skill-fired",
+        "passed": true,
+        "weight": 1,
+        "explanation": "Skill called 1x (expected 1..\u221e)",
+        "withOnly": false,
+        "scored": true
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 0.8,
+    "passRate": 0.2
+   }
+  }
+ ],
+ "aggregates": {
+  "casesTotal": 1,
+  "casesPassed": 1,
+  "overallScore": 0.8,
+  "overallPassRate": 0.2
+ }
+}
