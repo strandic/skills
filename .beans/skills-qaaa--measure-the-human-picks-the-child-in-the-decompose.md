@@ -5,7 +5,9 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-01T11:04:58Z
-updated_at: 2026-09-01T11:04:58Z
+updated_at: 2026-09-03T09:32:25Z
+blocked_by:
+    - skills-fqdf
 ---
 
 SKILL.md's Decompose band says "Split it, then run the method on a single child". It prescribes the sequence but not who chooses. An agent that splits an epic and starts on the child it picked has made the run's most consequential scoping decision while appearing to comply.

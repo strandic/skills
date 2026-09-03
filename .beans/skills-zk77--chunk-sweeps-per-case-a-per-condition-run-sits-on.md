@@ -3,9 +3,9 @@
 title: Chunk sweeps per case — a per-condition run sits on the ~35min kill boundary
 status: todo
 type: task
-priority: high
+priority: normal
 created_at: 2026-09-01T11:01:44Z
-updated_at: 2026-09-01T11:01:44Z
+updated_at: 2026-09-03T09:32:25Z
 ---
 
 Backgrounded tasks in this environment die near a 35-minute wall clock: four attempts went 41m killed, 34m killed, 34m completed, 33m killed, the last emitting output right up to the kill. A whole-condition sweep sits on that boundary.

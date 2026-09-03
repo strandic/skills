@@ -3,9 +3,9 @@
 title: Docker cli-plugins symlinks block Bash-granting evals from 2.1.251
 status: todo
 type: task
-priority: high
+priority: normal
 created_at: 2026-09-01T11:01:44Z
-updated_at: 2026-09-01T11:01:44Z
+updated_at: 2026-09-03T09:32:25Z
 ---
 
 From CLI 2.1.251 the harness refuses any Bash-granting evaluation while `~/.docker` holds a symlink anywhere inside it. It seals credential stores by path, a symlink defeats the seal, and it fails closed. Correct in general, wrong here: the symlinks are `~/.docker/cli-plugins/*`, which Docker Desktop installs pointing into its app bundle. They are CLI plugin binaries, not credentials. `DOCKER_CONFIG` does not redirect the check.
