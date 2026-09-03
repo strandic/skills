@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-03T12:45:29Z
+updated_at: 2026-09-03T14:58:22Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
@@ -29,3 +29,7 @@ Each is one sweep of that condition alone, about $9 and 45 minutes from a termin
 
 
 Order note, 2026-09-03: needs the three base records re-established (one full sweep, ~$27) after skills-ie78 lands; then each ablation condition is one sweep (~$9) merged against them (Amendment 5).
+
+
+
+2026-09-03 16:57: the full sweep was aborted — Opus judge 529 on most calls, records void under I1c, $11.37 spent. See docs/plans/primer-evals/sweep-log.md. Still pending: one full sweep when the judge is healthy.
