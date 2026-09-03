@@ -1312,6 +1312,36 @@ async function preflightCli(spawnCapture, evalCommand, home) {
   return { ok: true, version };
 }
 
+/**
+ * PreflightAuth — is the binary the sweep will spawn logged in, in the config directory
+ * the sweep will run under?
+ *
+ * Credentials are per config directory (`CLAUDE_CONFIG_DIR`, default `~/.claude`), and a
+ * `/login` in one session does nothing for a terminal pointed elsewhere. On 2026-09-03
+ * the smoke pass spent an invocation to learn that; `auth status` learns it in a second
+ * and names the directory the operator has to log in.
+ *
+ * @param {SpawnCapture} spawnCapture
+ * @param {EvalCommand} evalCommand
+ * @returns {Promise<{ok: true} | {ok: false, why: string}>}
+ */
+export async function preflightAuth(spawnCapture, evalCommand) {
+  const { command, env } = evalCommand();
+  const configDir = env.CLAUDE_CONFIG_DIR || '~/.claude (CLAUDE_CONFIG_DIR unset)';
+  const probe = await spawnCapture(command, ['auth', 'status'], env).catch(() => null);
+  let status = null;
+  try { status = JSON.parse(probe?.stdout || ''); } catch { /* not JSON: handled below */ }
+  if (!status || typeof status.loggedIn !== 'boolean')
+    return { ok: false, why: `could not read \`${command} auth status\` (config dir ${configDir})` };
+  if (!status.loggedIn)
+    return { ok: false, why:
+      `${command} is not logged in under ${configDir} — every run and every judge call ` +
+      `would fail with "OAuth session expired". Log in THERE (\`${command}\` then /login, ` +
+      `with the same CLAUDE_CONFIG_DIR), or point CLAUDE_CONFIG_DIR at the directory you ` +
+      `did log in` };
+  return { ok: true };
+}
+
 export async function main(argv) {
   const args = parseArgv(argv);
   if (args.help) {
@@ -1326,6 +1356,11 @@ export async function main(argv) {
   const pre = await preflightCli(spawnCapture, () => evalCommandFrom(process.env), homedir());
   if (!pre.ok) {
     console.error(`refusing to sweep: ${pre.why}`);
+    return 1;
+  }
+  const auth = await preflightAuth(spawnCapture, () => evalCommandFrom(process.env));
+  if (!auth.ok) {
+    console.error(`refusing to sweep: ${auth.why}`);
     return 1;
   }
 

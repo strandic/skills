@@ -2,7 +2,10 @@
 
 ## Before you run it: the CLI version is pinned
 
-Sweeps need `EVAL_CLAUDE_BIN` pointed at **2.1.250**:
+Sweeps need `EVAL_CLAUDE_BIN` pointed at **2.1.250**, and that binary logged in under the
+config directory the terminal uses (`CLAUDE_CONFIG_DIR`, default `~/.claude`). A `/login`
+in another session's directory does not count; the runner checks with `auth status`
+before spending anything and names the directory to log in.
 
 ```bash
 EVAL_CLAUDE_BIN=~/.local/share/claude/versions/2.1.250 node scripts/run-evals.mjs --smoke
