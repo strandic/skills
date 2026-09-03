@@ -24,6 +24,7 @@ import {
   groupCasesByAblation, combineHarnessDocuments, combineSweepParts, buildSweepRecord,
   buildDriftRecord, makeSpawnCapture, exitCodeForSignal, isInterrupted, RunError,
   planSweep, sweepStopReason,
+  preflightAuth,
 } from '../run-evals.mjs';
 
 /** The real handles, read-only, so the suite's own case files are what gets asserted. */
@@ -1049,4 +1050,28 @@ test('an ablations map the merger cannot read is refused rather than written', (
     { gate: 'with-without', step3: 'none' });
   for (const bad of [{ gate: 'with-only' }, { gate: undefined }, { gate: 'None' }, null, ['gate']])
     assert.throws(() => record(bad), RunError, JSON.stringify(bad));
+});
+
+/* ── Auth preflight — the login lives in a config directory, not on the machine ── */
+
+test('preflightAuth refuses a binary that is logged out under the sweep\'s config dir, and names it', async () => {
+  // 2026-09-03: `/login` in one session (~/.claude-personal), sweep in a terminal pointed
+  // at ~/.claude, one invocation spent to learn "OAuth session expired". `auth status`
+  // costs nothing and knows.
+  const cmd = (env) => () => ({ command: '/bin/claude-2.1.250', env });
+  const spawn = (stdout) => async (command, argv) => {
+    assert.deepEqual(argv, ['auth', 'status']);
+    return { code: 0, stdout, stderr: '' };
+  };
+  const out = await preflightAuth(spawn('{"loggedIn": false}'), cmd({}));
+  assert.equal(out.ok, false);
+  assert.match(out.why, /not logged in under ~\/\.claude \(CLAUDE_CONFIG_DIR unset\)/);
+  const named = await preflightAuth(spawn('{"loggedIn": false}'), cmd({ CLAUDE_CONFIG_DIR: '/h/.claude-work' }));
+  assert.match(named.why, /under \/h\/\.claude-work/);
+  assert.deepEqual(await preflightAuth(spawn('{"loggedIn": true, "email": "x"}'), cmd({})), { ok: true });
+  const garbage = await preflightAuth(spawn('not json'), cmd({}));
+  assert.equal(garbage.ok, false);
+  assert.match(garbage.why, /could not read/);
+  const dead = await preflightAuth(async () => { throw new Error('ENOENT'); }, cmd({}));
+  assert.equal(dead.ok, false);
 });
