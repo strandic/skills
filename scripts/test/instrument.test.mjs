@@ -50,6 +50,18 @@ test('suite-root README.md and PRE-REGISTRATION.md are prose, not instrument; ne
   await rm(a, { recursive: true });
 });
 
+test('a harness-written <uuid>.jsonl beside history.jsonl is output, not instrument', async () => {
+  // Every replay run rewrites the same <sessionId>.jsonl (harness-facts #30). The
+  // 2026-09-03 sweep was refused by I2b for exactly this file.
+  const a = await suite({ 'step3/case.yaml': 'x', 'step3/history.jsonl': '{"planted":1}' });
+  const before = await instrumentDigest(a);
+  await suiteInto(a, { 'step3/00000000-0000-4000-8000-000000000001.jsonl': '{"resumed":1}' });
+  assert.equal(await instrumentDigest(a), before);
+  await writeFile(join(a, 'step3/history.jsonl'), '{"planted":2}');
+  assert.notEqual(await instrumentDigest(a), before, 'the authored transcript is instrument');
+  await rm(a, { recursive: true });
+});
+
 test('renaming a file changes the digest even with identical bytes', async () => {
   const a = await suite({ 'c/graders/one.md': 'same' });
   const b = await suite({ 'c/graders/two.md': 'same' });

@@ -49,22 +49,27 @@ and a placebo carrying the same eight gates with arbitrary contents. The one-lin
 whether 11KB beats one sentence; the placebo asks whether it is *this* method or any
 method of that shape.
 
-**What the first sweep found** (2026-09-01, 150 runs, ~$28 API-equivalent, `sonnet`
-subject / `opus` judge, noise floor 0.13):
+**What the sweep found** (2026-09-03, 150 runs, ~$27 API-equivalent, `sonnet`
+subject / `opus` judge, noise floor 0.12; a first sweep on 2026-09-01 was withdrawn after
+review found defects in the placebo and four graders):
 
-| Behaviour | vs no skill | vs one sentence |
-|---|---|---|
-| Produces step 0 and stops | +0.49 | **+0.29** |
-| Adds no ceremony to a typo fix | 0.00 | **+0.67** |
-| Recognises a structural change | +0.31 | +0.04 — noise |
-| Decomposes an epic | +0.42 | −0.00 — noise |
-| Places markers in source | — | **0.47 vs 0.00** |
+| Behaviour | vs no skill | vs one sentence | vs same-shape placebo |
+|---|---|---|---|
+| Produces step 0 and stops | +0.69 | **+0.23** | +0.03 — noise |
+| Adds no ceremony to a typo fix | +0.02 — noise | **+0.67** | 0.00 — noise |
+| Recognises a structural change | +0.43 | −0.04 — noise | **−0.24** |
+| Decomposes an epic | +0.24 | 0.00 — noise | 0.00 — noise |
+| Places markers in source | — | **0.85 vs 0.25** | **0.85 vs 0.25** |
 
 Read honestly: against no instruction the primer clearly changes behaviour. Against one
-good sentence it wins on gate-stopping and on *not* over-planning a triviality, ties on
-both structural-triage cases, and is alone in placing to-do markers in the source. The
-tie is the finding the extra controls exist to expose — an eval running only the built-in
-with/without ablation would have reported +0.31 and +0.42 and called the method validated.
+good sentence it wins on gate-stopping and on *not* over-planning a triviality, and ties
+on both structural-triage cases. Against a placebo with the same gates and none of the
+method's content, it ties everywhere and loses on one case. So the stop-and-plan
+behaviour comes from the shape of the document, not from what the primer says. The one
+behaviour no control produces is placing to-do markers in the source. That is the
+finding the extra controls exist to expose: an eval running only the built-in
+with/without ablation would have reported +0.43 and +0.24 and called the method
+validated.
 
 **What it does not show.** Nothing about whether the software comes out better. These
 measure what the agent *does*, not what it produces — a compliance measure, not an
