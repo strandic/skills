@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: high
 created_at: 2026-09-03T09:53:49Z
-updated_at: 2026-09-03T13:51:37Z
+updated_at: 2026-09-03T13:54:23Z
 ---
 
 Follows from docs/plans/primer-evals/step3-read-2026-09-03.md (skills-mdg4).
@@ -29,3 +29,7 @@ Done 2026-09-03 as Amendment 6: criteria rewritten (shape-agnostic, 1 for 'marke
 - [x] max_turns 20
 - [x] skill-fired removed (deleted rather than weight 0: the registered table lists three graders)
 - [x] amendment (6); full sweep pending, see skills-fqdf order note
+
+
+
+Smoke 2026-09-03 (1 treatment run, $0.38): case loads with the three graders and maxTurns 20; both file graders passed; the judge call failed with API 529 Overloaded, so the rewritten criteria are unverified by a real vote until the full sweep.
