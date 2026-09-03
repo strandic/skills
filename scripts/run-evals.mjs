@@ -189,11 +189,18 @@ export function buildEvalArgv(inv) {
     // Keep the HTML report local. Publishing on every sweep is a side effect the suite
     // never asked for, and recon's verified invocation carried this.
     '--no-publish',
-    ...(inv.caseGlobs ?? []).flatMap((glob) => {
-      if (typeof glob !== 'string' || glob === '' || glob.startsWith('-'))
-        bad(`--case: ${JSON.stringify(glob)} is not a case glob`);
-      return ['--case', glob];
-    }),
+    // `--case <glob>` is ONE glob (harness-facts #44): the option is not variadic and a
+    // repeated flag keeps only the last value. Four flags ran one case on 2026-09-03 and
+    // the other three came back as "no result". So more than one is refused here, where
+    // the command line is built, not discovered after the budget is spent.
+    ...((inv.caseGlobs ?? []).length > 1
+      ? bad(`--case takes one glob and the harness keeps only the last; ${inv.caseGlobs.length} were ` +
+        'given — plan one invocation per case instead')
+      : (inv.caseGlobs ?? []).flatMap((glob) => {
+        if (typeof glob !== 'string' || glob === '' || glob.startsWith('-'))
+          bad(`--case: ${JSON.stringify(glob)} is not a case glob`);
+        return ['--case', glob];
+      })),
     // An INCLUDE filter — there is no exclude form, so the scored tags are named
     // explicitly and the control case is kept out by not being named.
     ...variadic('--tag', inv.tagFilters ?? []),
@@ -281,11 +288,12 @@ const globMatches = (glob, name) =>
  *
  *   - no `caseGlobs` — the recon-verified shape: `--tag` names every scored tag and the
  *     control case is kept out by not being named.
- *   - `caseGlobs` — the per-ablation split. `--tag` is DROPPED, because an OR between the
- *     two would readmit the cases the split exists to separate. The tag filter's job
- *     (keep the control out) is then done by the names themselves, so the names are
- *     checked here: one that selects a control case, or that selects no discovered case
- *     at all, is refused rather than swept.
+ *   - `caseGlobs` — a name-scoped invocation, ONE name (the harness takes one glob and
+ *     keeps the last of several; `buildEvalArgv` refuses more). `--tag` is DROPPED,
+ *     because an OR between the two would readmit the cases the split exists to
+ *     separate. The tag filter's job (keep the control out) is then done by the name
+ *     itself, so it is checked here: one that selects a control case, or that selects no
+ *     discovered case at all, is refused rather than swept.
  *
  * @param {ConditionId} condition
  * @param {SuitePaths} paths
@@ -1002,7 +1010,8 @@ export function parseArgv(argv) {
  * @property {string[]} scored     scored case names, in discovery order
  * @property {string[]} excluded   the control cases, which no invocation names
  * @property {{ablation: 'with-without'|'none', cases: string[]}[]} groups
- * @property {boolean} scopeByName whether the invocations select by `--case` or by `--tag`
+ * @property {boolean} scopeByName whether the invocations select by `--case` (one case per
+ *                                 invocation) or by `--tag` (one invocation for the group)
  * @property {{path: string, why: string}[]} preChecks  files that must exist before spending
  * @property {{condition: ConditionId, invocations: PlannedInvocation[]}[]} sweeps
  */
@@ -1040,7 +1049,14 @@ export function planSweep(cases, args, suitePaths = paths) {
   // case). A single group keeps the tag-filter-only command line recon verified — and a
   // name-scoped invocation drops `--tag` entirely (invocationFor), because how the
   // harness combines the two flags is undetermined and an OR would undo the split.
+  //
+  // Name-scoped means ONE CASE PER INVOCATION. `--case` is a single glob and a repeated
+  // flag keeps the last (harness-facts #44); no wildcard separates the four delta cases
+  // from step3 by name, and the tags do not partition them either. So a split sweep is
+  // five invocations per condition, each the exact shape recon verified: one `--case`.
   const scopeByName = groups.length > 1 || args.smoke;
+  const invocationsOf = (group) => (scopeByName ? group.cases.map((c) => [c]) : [group.cases])
+    .map((cs) => ({ ablation: group.ablation, cases: cs.map((c) => c.name), scoped: scopeByName }));
 
   return {
     scored: scored.map((c) => c.name),
@@ -1057,14 +1073,13 @@ export function planSweep(cases, args, suitePaths = paths) {
     })),
     sweeps: args.conditions.map((condition) => ({
       condition,
-      invocations: groups.map((group) => {
-        const names = group.cases.map((c) => c.name);
+      invocations: groups.flatMap(invocationsOf).map(({ ablation, cases: names, scoped }) => {
         const inv = invocationFor(condition, suitePaths, all, {
           runs: args.runs,
-          ablation: group.ablation,
-          ...(scopeByName ? { caseGlobs: names } : {}),
+          ablation,
+          ...(scoped ? { caseGlobs: names } : {}),
         });
-        return { ablation: group.ablation, cases: names, inv, argv: buildEvalArgv(inv) };
+        return { ablation, cases: names, inv, argv: buildEvalArgv(inv) };
       }),
     })),
   };
@@ -1084,6 +1099,10 @@ export function planSweep(cases, args, suitePaths = paths) {
  *     loop swept the next ablation and then both remaining conditions after the first
  *     invocation had already proved unattributable.
  *   - short — the document reports fewer cases than the invocation named.
+ *   - partial (exit 2) — the harness stopped itself: authentication failed or a cost
+ *     ceiling tripped. Every later invocation fails the same way, and on 2026-09-03 the
+ *     smoke pass swept all three conditions against an expired login before this branch
+ *     existed.
  *
  * @param {{ablation: 'with-without'|'none', cases: string[], result: SweepResult}} part
  * @returns {{why: string, hint: string|null}|null}
@@ -1092,6 +1111,12 @@ export function sweepStopReason({ ablation, cases, result }) {
   const named = `the --ablation ${ablation} invocation named ${(cases ?? []).join(', ')}`;
   if (isInterrupted(result.exitCode))
     return { why: `${named} and was killed by a signal (exit ${result.exitCode})`, hint: null };
+  if (result.exitCode === 2)
+    return {
+      why: `${named} and the harness reported a partial run (exit 2)`,
+      hint: 'exit 2 is authentication or a cost ceiling, and the next invocation would fail the ' +
+        'same way — the record\'s stderrTail says which; `claude /login` if it is the login',
+    };
   if (result.document === null)
     return {
       why: `${named} but produced no document this sweep can claim as its own`,
@@ -1103,12 +1128,11 @@ export function sweepStopReason({ ablation, cases, result }) {
   if (absent.length > 0)
     return {
       why: `${named} but its document reports no result for ${absent.join(', ')}`,
-      // Almost certainly the one thing about this command line nobody has verified: recon
-      // passed exactly one `--case` and never alongside `--tag`, so whether the flag is
-      // repeatable is an assumption (6-cold-fork-register.md). If it is last-one-wins, a
-      // multi-case invocation runs one case and this is where that shows up.
-      hint: 'if the invocation named several cases, `--case` is probably not repeatable ' +
-        '(recon verified exactly one selector) — run one case per invocation and re-check',
+      // The runner passes exactly one `--case` per invocation (harness-facts #44), so a
+      // short document is not a selector problem any more: the harness loaded fewer cases
+      // than it was asked for, and its stderr says which one failed to load and why.
+      hint: 'the harness ran fewer cases than named — a case failed to load (bad frontmatter, ' +
+        'missing prompt.md, a grader that did not parse); the record\'s stderrTail has the reason',
     };
   return null;
 }

@@ -224,7 +224,9 @@
  *            sweeps: {condition: ConditionId, invocations: {ablation: 'with-without'|'none',
  *                     cases: string[], inv: EvalInvocation, argv: string[]}[]}[]}}
  *
- * Pure. The WHOLE run — one invocation per distinct case ablation per condition, their
+ * Pure. The WHOLE run — per condition, one tag-filtered invocation when every scored case
+ * shares an ablation, else one `--case` invocation PER CASE (the flag takes one glob and
+ * keeps the last of several), their
  * argv already built, plus the files that must exist before the first one spends
  * anything. These decisions used to live in the entry point, where `BuildEvalArgv` could
  * be pinned byte for byte while the caller passed it the wrong arguments unobserved.
