@@ -616,53 +616,53 @@ test('the real suite runs step3-markers-in-source at ablation none and nothing e
   assert.deepEqual(none.cases.map((c) => c.name), ['step3-markers-in-source']);
   assert.ok(!delta.cases.some((c) => c.name === 'step3-markers-in-source'));
   for (const group of groups)
-    assert.deepEqual(buildEvalArgv(invocationFor('treatment', paths, group.cases, {
-      ablation: group.ablation, caseGlobs: group.cases.map((c) => c.name),
-    })).slice(5, 7), ['--ablation', group.ablation]);
+    for (const c of group.cases)
+      assert.deepEqual(buildEvalArgv(invocationFor('treatment', paths, group.cases, {
+        ablation: group.ablation, caseGlobs: [c.name],
+      })).slice(5, 7), ['--ablation', group.ablation]);
 });
 
-test('the two per-ablation command lines the re-sweep will actually run, byte for byte', async () => {
-  // The split introduces a command line nobody has run: several `--case` flags at once.
-  // Whatever `--case` turns out to mean, it must not be combined with `--tag` — recon
-  // never ran the two together, and an OR between them would put every tagged case back
-  // into the `none` invocation. So the names carry the whole selection here.
+test('--case is one glob: more than one is refused where the argv is built', () => {
+  // The harness option is `--case <glob>`, not variadic; a repeated flag keeps the last
+  // (harness-facts #44). Four flags ran one case on 2026-09-03. Refused here so no
+  // command line with two of them can be assembled, let alone spent.
+  const cases = [spec('gate-stop-step0', ['gate', 'scored']), spec('triage-skip-oneliner', ['triage', 'scored'])];
+  assert.throws(() => buildEvalArgv(invocationFor('treatment', paths, cases, {
+    caseGlobs: ['gate-stop-step0', 'triage-skip-oneliner'],
+  })), /one glob/);
+  assert.doesNotThrow(() => buildEvalArgv(invocationFor('treatment', paths, cases, { caseGlobs: ['gate-stop-step0'] })));
+});
+
+test('the per-case command lines the re-sweep will actually run, byte for byte', async () => {
+  // One `--case` per invocation — the shape recon verified. Several at once ran one case
+  // (harness-facts #44). Never combined with `--tag`: recon never ran the two together,
+  // and an OR between them would put every tagged case back into the `none` invocation.
   const cases = await discoverCases(readTextFile, listDirectory, paths);
   const groups = groupCasesByAblation(cases);
-  const argvFor = (group) => buildEvalArgv(invocationFor('treatment', paths, cases, {
-    ablation: group.ablation, caseGlobs: group.cases.map((c) => c.name),
+  const argvFor = (group, name) => buildEvalArgv(invocationFor('treatment', paths, cases, {
+    ablation: group.ablation, caseGlobs: [name],
   }));
+  const expected = (ablation, name) => [
+    'plugin', 'eval', '.',
+    '--eval-dir', 'evals/seven-steps-primer',
+    '--ablation', ablation,
+    '--runs', '5',
+    '--model', 'sonnet',
+    '--judge-model', 'opus',
+    '--threshold', '0.6',
+    '--scaffold',
+    '--no-publish',
+    '--case', name,
+    '--allow-tools', 'Bash', 'Edit', 'Write',
+  ];
 
-  assert.deepEqual(argvFor(groups[0]), [
-    'plugin', 'eval', '.',
-    '--eval-dir', 'evals/seven-steps-primer',
-    '--ablation', 'with-without',
-    '--runs', '5',
-    '--model', 'sonnet',
-    '--judge-model', 'opus',
-    '--threshold', '0.6',
-    '--scaffold',
-    '--no-publish',
-    '--case', 'gate-stop-step0',
-    '--case', 'looks-trivial-is-structural',
-    '--case', 'triage-decompose-epic',
-    '--case', 'triage-skip-oneliner',
-    '--allow-tools', 'Bash', 'Edit', 'Write',
-  ]);
-  assert.deepEqual(argvFor(groups[1]), [
-    'plugin', 'eval', '.',
-    '--eval-dir', 'evals/seven-steps-primer',
-    '--ablation', 'none',
-    '--runs', '5',
-    '--model', 'sonnet',
-    '--judge-model', 'opus',
-    '--threshold', '0.6',
-    '--scaffold',
-    '--no-publish',
-    '--case', 'step3-markers-in-source',
-    '--allow-tools', 'Bash', 'Edit', 'Write',
-  ]);
+  const [delta, none] = groups;
+  for (const c of delta.cases) assert.deepEqual(argvFor(delta, c.name), expected('with-without', c.name));
+  assert.deepEqual(none.cases.map((c) => c.name), ['step3-markers-in-source']);
+  assert.deepEqual(argvFor(none, 'step3-markers-in-source'), expected('none', 'step3-markers-in-source'));
   for (const group of groups)
-    assert.ok(!argvFor(group).includes('--tag'), 'a name-scoped invocation carries no tag filter');
+    for (const c of group.cases)
+      assert.ok(!argvFor(group, c.name).includes('--tag'), 'a name-scoped invocation carries no tag filter');
 });
 
 test('a name-scoped invocation refuses a selector that would readmit the control case', () => {
@@ -883,52 +883,43 @@ test('an ordinary exit and a spawn failure are unchanged by the signal handling'
 
 const planArgs = (over = {}) => ({ conditions: ['treatment'], runs: 5, smoke: false, ...over });
 
-test('the plan is the two per-ablation command lines, byte for byte, as main will spawn them', async () => {
+test('the plan is five per-case command lines, byte for byte, as main will spawn them', async () => {
   // The byte-for-byte test above pins `invocationFor`; this one pins the CALL. main was
-  // free to pass `group.cases` instead of every case, or to drop `caseGlobs`, and every
-  // test still passed while a case registered `ablation: none` ran with-without again.
+  // free to pass `group.cases` instead of every case, to drop `caseGlobs`, or to put all
+  // four delta names on one command line (which ran one case, 2026-09-03).
   const cases = await discoverCases(readTextFile, listDirectory, paths);
   const plan = planSweep(cases, planArgs());
 
   assert.deepEqual(plan.groups.map((g) => g.ablation), ['with-without', 'none']);
   assert.equal(plan.sweeps.length, 1);
-  const [delta, none] = plan.sweeps[0].invocations;
-  assert.deepEqual(delta.cases,
-    ['gate-stop-step0', 'looks-trivial-is-structural', 'triage-decompose-epic', 'triage-skip-oneliner']);
-  assert.deepEqual(none.cases, ['step3-markers-in-source']);
+  const invocations = plan.sweeps[0].invocations;
+  assert.deepEqual(invocations.map((i) => [i.ablation, ...i.cases]), [
+    ['with-without', 'gate-stop-step0'],
+    ['with-without', 'looks-trivial-is-structural'],
+    ['with-without', 'triage-decompose-epic'],
+    ['with-without', 'triage-skip-oneliner'],
+    ['none', 'step3-markers-in-source'],
+  ], 'one case per invocation, with-without first so an interrupted sweep keeps the delta arm');
 
-  assert.deepEqual(delta.argv, [
+  for (const inv of invocations)
+    assert.deepEqual(inv.argv, [
     'plugin', 'eval', '.',
     '--eval-dir', 'evals/seven-steps-primer',
-    '--ablation', 'with-without',
+    '--ablation', inv.ablation,
     '--runs', '5',
     '--model', 'sonnet',
     '--judge-model', 'opus',
     '--threshold', '0.6',
     '--scaffold',
     '--no-publish',
-    '--case', 'gate-stop-step0',
-    '--case', 'looks-trivial-is-structural',
-    '--case', 'triage-decompose-epic',
-    '--case', 'triage-skip-oneliner',
-    '--allow-tools', 'Bash', 'Edit', 'Write',
-  ]);
-  assert.deepEqual(none.argv, [
-    'plugin', 'eval', '.',
-    '--eval-dir', 'evals/seven-steps-primer',
-    '--ablation', 'none',
-    '--runs', '5',
-    '--model', 'sonnet',
-    '--judge-model', 'opus',
-    '--threshold', '0.6',
-    '--scaffold',
-    '--no-publish',
-    '--case', 'step3-markers-in-source',
+    '--case', inv.cases[0],
     '--allow-tools', 'Bash', 'Edit', 'Write',
   ]);
   assert.deepEqual(plan.excluded, ['control-all-steps']);
-  for (const inv of plan.sweeps[0].invocations)
+  for (const inv of invocations) {
     assert.ok(!inv.argv.includes('control-all-steps'), 'the diagnostic is named by nothing');
+    assert.equal(inv.argv.filter((a) => a === '--case').length, 1, 'exactly one --case per invocation');
+  }
 });
 
 test('the plan covers every requested condition, in the declared order, with the same invocations', async () => {
@@ -936,7 +927,8 @@ test('the plan covers every requested condition, in the declared order, with the
   const plan = planSweep(cases, planArgs({ conditions: ['treatment', 'oneliner', 'placebo'] }));
   assert.deepEqual(plan.sweeps.map((s) => s.condition), ['treatment', 'oneliner', 'placebo']);
   for (const sweep of plan.sweeps) {
-    assert.deepEqual(sweep.invocations.map((i) => i.ablation), ['with-without', 'none']);
+    assert.deepEqual(sweep.invocations.map((i) => i.ablation),
+      ['with-without', 'with-without', 'with-without', 'with-without', 'none']);
     // The condition is NOT a flag — it is the directory copied into place — so the two
     // command lines are identical across conditions and only the copy differs.
     assert.deepEqual(sweep.invocations.map((i) => i.argv), plan.sweeps[0].invocations.map((i) => i.argv));
@@ -1015,7 +1007,20 @@ test('a document short of a case the invocation named stops the run, and says wh
     result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: { cases: [{ name: 'gate' }] } },
   }));
   assert.match(stop.why, /no result for triage/);
-  assert.match(stop.hint, /`--case` is probably not repeatable/);
+  assert.match(stop.hint, /failed to load/);
+});
+
+test('a partial run (exit 2: auth or cost ceiling) stops the run — the next invocation fails the same way', () => {
+  // The 2026-09-03 smoke pass swept all three conditions against an expired login: each
+  // harness stopped itself with exit 2, and the runner moved on to the next condition.
+  const stop = sweepStopReason(stopPart({
+    result: { condition: 'treatment', exitCode: 2, stderrTail: 'OAuth session expired', document: { cases: [{ name: 'gate' }, { name: 'triage' }] } },
+  }));
+  assert.ok(stop);
+  assert.match(stop.why, /partial run \(exit 2\)/);
+  assert.match(stop.hint, /login/);
+  assert.equal(sweepStopReason(stopPart({ result: { condition: 'treatment', exitCode: 1, stderrTail: '', document: { cases: [{ name: 'gate' }, { name: 'triage' }] } } })), null,
+    'exit 1 is a score below threshold, which is a finding, not a stop');
 });
 
 test('any signalled death stops the run, whatever the document says', () => {

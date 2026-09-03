@@ -105,9 +105,10 @@ node scripts/run-evals.mjs                   # treatment, oneliner, placebo, in 
 ```
 
 Each sweep copies its condition to `_condition/` (a real copy — the harness's ownership
-check rejects a plugin path that is a symlink), spawns one invocation, and writes
-`results/<condition>.json` alongside `results/drift.json`. The command it spawns is
-decided by a pure function and printed before it runs:
+check rejects a plugin path that is a symlink), spawns one harness invocation per scored
+case (the cases do not share an ablation, and `--case` takes one name), combines the
+documents, and writes `results/<condition>.json` alongside `results/drift.json`. The
+commands it spawns are decided by a pure function and printed before they run:
 
 ```
 claude plugin eval . --eval-dir evals/seven-steps-primer --ablation with-without \

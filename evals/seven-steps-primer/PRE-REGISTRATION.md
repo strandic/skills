@@ -432,12 +432,13 @@ changes no registered direction. Section "The undertaking" above is restated to 
 
 It is registered `ablation: none`. The runner swept it `with-without` with every other
 case, and its skill-fired grader was demoted to unscored. The runner now groups scored
-cases by ablation and runs one harness invocation per group per condition: one
-`--ablation with-without` over the four delta cases and one `--ablation none` over
-step3. The documents are combined into one record per condition. Each record carries a
-per-case `ablations` map, and a new invariant **I4b** voids the merge if any scored case
-was swept at an ablation other than its registered one, is missing from any condition, or
-has an empty run list.
+cases by ablation and, because the ablations differ, runs one harness invocation per
+case per condition (five per condition), each with its own `--ablation` and exactly one
+`--case`; the harness accepts one case glob and keeps only the last of several, which
+the first attempt at this re-sweep paid for. The documents are combined into one record
+per condition. Each record carries a per-case `ablations` map, and a new invariant
+**I4b** voids the merge if any scored case was swept at an ablation other than its
+registered one, is missing from any condition, or has an empty run list.
 
 ### 4.5 A sweep now records the instrument it was measured with
 
