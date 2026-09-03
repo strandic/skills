@@ -14,6 +14,8 @@ The treatment's runs are 0.75, 1.00, 0.75, 1.00, 0.75. Three of five runs lose t
 
 The first sweep (withdrawn, see Amendment 4 in `evals/seven-steps-primer/PRE-REGISTRATION.md`) had this case at 0.47 with two zero runs. Under the corrected `ablation: none` and judge prompts, the instability is smaller and the zeros are gone.
 
-- [ ] read the three 0.75 runs in `results/treatment.json`: which grader fails, and is it the skill, the replay transcript, or a grader too strict about `not-a-doc-list`
+Note, 2026-09-03: the raw records (`results/*.json`, gitignored) were deleted with the feature worktree after the merge. The committed report keeps per-run scores but not per-grader verdicts. The harness's per-run trace directories may survive under the system temp dir (`claude-eval-*`); otherwise the first item needs a treatment-only sweep of this case (`--condition treatment`, about $2), which is not mergeable on its own but is enough to read the verdicts.
+
+- [ ] read the three 0.75 runs: which grader fails, and is it the skill, the replay transcript, or a grader too strict about `not-a-doc-list`
 - [ ] identify the grader the controls pass at 0.25 and decide whether it should be a with-only indicator
 - [ ] if it is the skill, record it as a finding about step 3 and open a bean for the change
