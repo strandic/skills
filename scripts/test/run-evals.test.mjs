@@ -1069,6 +1069,20 @@ test('a NO DOCUMENT invocation stops the run — a null document is not zero mis
   assert.match(stop.hint, /more than one/);
 });
 
+test('a grader that threw stops the sweep — the record is void under I1c, so nothing after it is worth buying', () => {
+  const doc = { cases: [{ name: 'gate', arms: { with: [
+    { graders: [{ name: 'step0-only', passed: false, explanation: 'grader threw: judge call failed: API Error: 529 Overloaded.' }] },
+  ], without: [] } }, { name: 'triage', arms: { with: [{ graders: [{ name: 'x', passed: true, explanation: 'judge votes: PASS' }] }] } }] };
+  const stop = sweepStopReason(stopPart({ result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: doc } }));
+  assert.ok(stop, 'a thrown grader must stop the sweep');
+  assert.match(stop.why, /1 grader call\(s\) threw/);
+  assert.match(stop.why, /gate\/with run 1 grader step0-only: judge call failed: API Error: 529/);
+  assert.match(stop.hint, /I1c/);
+  const clean = { cases: [{ name: 'gate', arms: { with: [{ graders: [{ name: 'x', passed: true, explanation: 'judge votes: PASS' }] }] } },
+    { name: 'triage', arms: { with: [{ graders: [{ name: 'y', passed: false, explanation: 'no match' }] }] } }] };
+  assert.equal(sweepStopReason(stopPart({ result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: clean } })), null);
+});
+
 test('a document short of a case the invocation named stops the run, and says why', () => {
   const stop = sweepStopReason(stopPart({
     result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: { cases: [{ name: 'gate' }] } },

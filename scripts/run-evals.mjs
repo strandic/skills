@@ -1133,6 +1133,16 @@ export function planSweep(cases, args, suitePaths = paths) {
  * @param {{ablation: 'with-without'|'none', cases: string[], result: SweepResult}} part
  * @returns {{why: string, hint: string|null}|null}
  */
+/** `<case>/<arm> run N grader <name>: <explanation head>` for every grader that threw. */
+const gradersThrownIn = (document) =>
+  (document?.cases ?? []).flatMap((c) =>
+    Object.entries(c.arms ?? {}).flatMap(([arm, runs]) =>
+      (Array.isArray(runs) ? runs : []).flatMap((r, i) =>
+        (r?.graders ?? [])
+          .filter((g) => /grader threw|judge call failed/i.test(String(g?.explanation ?? '')))
+          .map((g) => `${c.name}/${arm} run ${i + 1} grader ${g.name}: ` +
+            `${String(g.explanation).replace(/^grader threw:\s*/i, '').slice(0, 60)}`))));
+
 export function sweepStopReason({ ablation, cases, result }) {
   const named = `the --ablation ${ablation} invocation named ${(cases ?? []).join(', ')}`;
   if (isInterrupted(result.exitCode))
@@ -1149,6 +1159,17 @@ export function sweepStopReason({ ablation, cases, result }) {
       hint: 'the record\'s stderrTail says which: no results directory, more than one (another ' +
         'harness run wrote into this suite), unreadable JSON, or a document reporting a case ' +
         'this invocation never asked for — none of them is attributable evidence',
+    };
+  // A grader that threw — the judge model returning 529, most often — makes the record
+  // unpublishable under I1c whatever the other runs did, so every invocation after this
+  // one is money spent on a record the merger will refuse. Paid for on 2026-09-03: the
+  // Opus judge failed 35 of 45 calls across a $9 treatment sweep that ran to completion.
+  const threw = gradersThrownIn(result.document);
+  if (threw.length > 0)
+    return {
+      why: `${named} and ${threw.length} grader call(s) threw instead of judging (first: ${threw[0]})`,
+      hint: 'a thrown grader voids the record under I1c, so the rest of this sweep would buy nothing; ' +
+        'if it is the judge model (API Error 529), wait for it to recover and re-run this condition',
     };
   const absent = casesMissingFrom(result.document, cases);
   if (absent.length > 0)
