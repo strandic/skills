@@ -53,10 +53,12 @@ because Tier 1 changed which one is most useful.
 
 ### 1. Ablate the parts of the skill that Tier 1 can already see
 
-Tier 1 found that the primer ties a thirteen-word instruction ("Present a plan and wait
-for my explicit approval before editing any code") on both structural-triage cases. That
-means two sections of the skill may not be doing anything. This experiment finds out
-which sections matter by removing them one at a time and re-running the existing suite.
+Tier 1 found that a placebo with the primer's gates and shape but none of its content
+ties the primer on every delta case and beats it on one, and that a thirteen-word
+instruction ("Present a plan and wait for my explicit approval before editing any code")
+ties it on both structural-triage cases. That means most of the skill's sections may not
+be doing anything Tier 1 can see. This experiment finds out which sections matter by
+removing them one at a time and re-running the existing suite.
 
 Each ablation is a new condition: the treatment with one section deleted. Three to start:
 
@@ -66,7 +68,7 @@ Each ablation is a new condition: the treatment with one section deleted. Three 
 
 Each condition is one Tier 1 sweep, about $10 and 35 minutes. The existing invariants,
 graders and merge all apply unchanged. If removing a section does not move any Tier 1
-score outside the noise floor (0.13), that section is not earning its length on the
+score outside the noise floor (0.12), that section is not earning its length on the
 behaviours Tier 1 measures.
 
 This does not test the recon section (step 4), because no Tier 1 case reaches step 4.
@@ -165,16 +167,18 @@ Tier 1 tested these rules in practice. Three of them turned out to matter more t
 expected, one is new, and one has not been followed yet.
 
 1. **Register the predictions before running.** Write down the expected direction of
-   every comparison and commit it. Tier 1 registered twelve directions; five were wrong,
-   including the placebo prediction, which came out backwards. Without the registration
-   those would have looked like results rather than surprises.
+   every comparison and commit it. Tier 1 registered twelve directions; four were wrong,
+   including one that came out with the opposite sign. Without the registration those
+   would have looked like results rather than surprises.
 
-2. **Show every run, not just the mean.** Tier 1's `step3` case scored 0.47. The five
-   runs behind that were 0.67, 0.00, 1.00, 0.67 and 0.00. The method worked half the
-   time, and the mean hides that.
+2. **Show every run, not just the mean.** Tier 1's treatment scored 0.76 on
+   `looks-trivial-is-structural`. The five runs behind that were 1.00, 0.40, 0.80, 0.60
+   and 1.00. The placebo scored 1.00 five times. The means are 0.24 apart; the runs say
+   one of them is reliable and the other is not.
 
-3. **Publish the placebo.** It produced the most surprising Tier 1 result. A report that
-   left it out would have overstated the method.
+3. **Publish the placebo.** It produced the most important Tier 1 result: the primer's
+   behaviour comes from its shape, not its content. A report that left it out would have
+   validated the method.
 
 4. **Refuse a broken instrument, not just a bad score.** This rule is new. A Tier 1 sweep
    lost its login partway through, 28 of 43 runs failed to authenticate, every one scored
