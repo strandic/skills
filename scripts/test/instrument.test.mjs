@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { instrumentDigest, instrumentFiles } from '../instrument.mjs';
+import { instrumentDigest, instrumentFiles, conditionDigest, conditionFiles } from '../instrument.mjs';
 
 async function suite(files) {
   const root = await mkdtemp(join(tmpdir(), 'instrument-'));
@@ -75,3 +75,53 @@ async function suiteInto(root, files) {
     await writeFile(join(root, p), body);
   }
 }
+
+/* ── The split: shared instrument apart from each condition ─────────────────── */
+
+test('conditions/ is not part of the shared instrument, and each condition digests on its own', async () => {
+  // The reason for the split: a fourth condition used to change the one digest and void
+  // the three records already taken. Adding one must leave the shared digest alone.
+  const a = await suite({ 'c/graders/g.md': 'pass', 'conditions/treatment/SKILL.md': 't', 'conditions/placebo/SKILL.md': 'p' });
+  const shared = await instrumentDigest(a);
+  const treatment = await conditionDigest(a, 'treatment');
+  const placebo = await conditionDigest(a, 'placebo');
+  assert.notEqual(treatment, placebo);
+  assert.deepEqual((await instrumentFiles(a)).map((p) => p.slice(a.length + 1)), ['c/graders/g.md']);
+  assert.deepEqual((await conditionFiles(a, 'placebo')).map((p) => p.slice(a.length + 1)), ['conditions/placebo/SKILL.md']);
+
+  await suiteInto(a, { 'conditions/treatment-no-triage/SKILL.md': 'tn' });
+  assert.equal(await instrumentDigest(a), shared, 'a new condition leaves the shared digest alone');
+  assert.equal(await conditionDigest(a, 'treatment'), treatment, 'and every other condition\'s digest');
+  assert.match(await conditionDigest(a, 'treatment-no-triage'), /^[0-9a-f]{64}$/);
+  await rm(a, { recursive: true });
+});
+
+test('editing one condition changes its digest and no other; editing a grader changes the shared one', async () => {
+  const a = await suite({ 'c/graders/g.md': 'pass', 'conditions/treatment/SKILL.md': 't', 'conditions/placebo/SKILL.md': 'p' });
+  const shared = await instrumentDigest(a);
+  const treatment = await conditionDigest(a, 'treatment');
+  const placebo = await conditionDigest(a, 'placebo');
+
+  await writeFile(join(a, 'conditions/placebo/SKILL.md'), 'p2');
+  assert.equal(await instrumentDigest(a), shared);
+  assert.equal(await conditionDigest(a, 'treatment'), treatment);
+  assert.notEqual(await conditionDigest(a, 'placebo'), placebo);
+
+  await writeFile(join(a, 'c/graders/g.md'), 'pass!');
+  assert.notEqual(await instrumentDigest(a), shared, 'a grader edit voids every condition');
+  await rm(a, { recursive: true });
+});
+
+test('two conditions with identical bytes still digest differently — they load under different ids', async () => {
+  const a = await suite({ 'conditions/treatment/SKILL.md': 'same', 'conditions/placebo/SKILL.md': 'same' });
+  assert.notEqual(await conditionDigest(a, 'treatment'), await conditionDigest(a, 'placebo'));
+  await rm(a, { recursive: true });
+});
+
+test('a condition with no directory, or an empty one, rejects rather than digesting nothing', async () => {
+  const a = await suite({ 'conditions/treatment/SKILL.md': 't' });
+  await assert.rejects(() => conditionDigest(a, 'ghost'), (e) => e.code === 'ENOENT');
+  await mkdir(join(a, 'conditions/empty'));
+  await assert.rejects(() => conditionDigest(a, 'empty'), (e) => e.code === 'ENOENT' && /no files/.test(e.message));
+  await rm(a, { recursive: true });
+});

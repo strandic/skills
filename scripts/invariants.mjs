@@ -213,14 +213,15 @@ export function i2RunNotVoid(report, registered, drift, preRegistrationDirty, sw
  * I2b — every merged sweep, the drift record and the suite on disk must name the SAME
  * instrument.
  *
- * The instrument is everything a score depends on that is not the condition text: the
- * cases, their graders, the transcripts they replay, the fixture they scaffold, and the
- * conditions themselves. `instrumentDigest(suiteDir)` hashes all of it.
+ * The instrument is everything a score depends on: the cases, their graders, the
+ * transcripts they replay, the fixture they scaffold, and the condition that was loaded.
+ * `instrumentDigest(suiteDir)` hashes the shared part; `conditionDigest(suiteDir, id)`
+ * hashes each condition on its own (the split is explained below).
  *
  * **What this check compares, exactly: instruments, not times.** It compares digests.
  * Three sweeps taken weeks apart merge cleanly here as long as the cases, graders,
- * fixture, transcripts and conditions did not change in between — and that is the whole
- * of what it certifies. `startedAt` is not read by this check or by any other, so an
+ * fixture, transcripts and each sweep's own condition did not change in between — and
+ * that is the whole of what it certifies. `startedAt` is not read by this check or by any other, so an
  * elapsed-time rule is not enforced anywhere in this suite.
  *
  * Nothing else here can see the instrument. I2 compares the pre-registration digest, the
@@ -237,20 +238,37 @@ export function i2RunNotVoid(report, registered, drift, preRegistrationDirty, sw
  * disagreement between sweeps means re-run the odd one out, a disagreement with the tree
  * means re-run everything or check out the instrument the numbers were taken on.
  *
- * @param {{condition?: string, instrumentSha?: string}[]} sweeps  the merged SweepRecords
+ * The instrument has two halves (instrument.mjs). The SHARED half — cases, graders,
+ * transcripts, fixture — is stamped on every record and on drift.json, and every one of
+ * them must name the same digest as the tree. The PER-CONDITION half — that condition's
+ * own `conditions/<id>/` — is stamped on its own record only, and is compared against the
+ * tree's digest for that condition alone. So editing one condition's SKILL.md voids that
+ * condition's sweep and no other, and adding a condition voids nothing; editing a grader
+ * voids them all. Both halves are refused when absent, for the same reason as above.
+ *
+ * @param {{condition?: string, instrumentSha?: string, conditionSha?: string}[]} sweeps
+ *   the merged SweepRecords
  * @param {{instrumentSha?: string}} drift  results/drift.json as parsed
  * @param {string} currentSha  instrumentDigest(suiteDir), taken at merge time
  * @param {string} [currentShaError]  why it could not be taken, when it could not.
  *   Carried into the message rather than swallowed: a missing suite directory, an
  *   unreadable file and a bug in the digest are three different operator actions, and
  *   "no digest was computed" alone tells an operator which of them to take.
+ * @param {Record<string, string>} [currentConditionShas]  conditionDigest(suiteDir, id) at
+ *   merge time, per registered condition. A condition missing from the map had no digest
+ *   computed — its directory is gone, or unreadable — and that is a violation for that
+ *   condition's sweep, never a pass.
+ * @param {Record<string, string>} [currentConditionShaErrors]  why, per condition, when one
+ *   is missing from the map.
  */
-export function i2bInstrumentAgreement(sweeps, drift, currentSha, currentShaError) {
+export function i2bInstrumentAgreement(sweeps, drift, currentSha, currentShaError,
+  currentConditionShas, currentConditionShaErrors) {
   const v = [];
   if (!Array.isArray(sweeps) || sweeps.length === 0)
     return fail(['no sweeps supplied — instrument agreement cannot be established']);
   const short = (s) => String(s).slice(0, 12);
   const has = (s) => typeof s?.instrumentSha === 'string' && s.instrumentSha !== '';
+  const hasOwn = (s) => typeof s?.conditionSha === 'string' && s.conditionSha !== '';
 
   const missing = sweeps.filter((s) => !has(s));
   if (missing.length > 0)
@@ -282,8 +300,34 @@ export function i2bInstrumentAgreement(sweeps, drift, currentSha, currentShaErro
         'the drift check ran against a different instrument than the sweeps did');
     if (haveCurrent && currentSha !== swept)
       v.push(`the suite on disk is instrument ${short(currentSha)}, the sweeps measured ` +
-        `${short(swept)} — the cases, graders, fixture or conditions changed after these results ` +
-        'were taken');
+        `${short(swept)} — the cases, graders, transcripts or fixture changed after these results ` +
+        'were taken; every condition must be swept again');
+  }
+
+  // The per-condition half. Each record against the tree's digest of ITS condition, and
+  // nothing across records: two conditions never share this half, so there is no
+  // agreement between them to establish. The remedy is always "re-run that one".
+  const unstampedOwn = sweeps.filter((s) => !hasOwn(s));
+  if (unstampedOwn.length > 0)
+    v.push(`${unstampedOwn.map((s) => s?.condition ?? '?').join(', ')}: sweep record carries no ` +
+      'conditionSha — these sweeps predate the per-condition digest and must be re-run before they ' +
+      'can be merged');
+  const current = currentConditionShas && typeof currentConditionShas === 'object' ? currentConditionShas : null;
+  if (!current)
+    v.push('no per-condition digests were computed at merge time — the conditions on disk cannot be ' +
+      'compared against the ones the sweeps measured');
+  for (const s of sweeps.filter(hasOwn)) {
+    const id = s.condition ?? '?';
+    const onDisk = current?.[id];
+    if (!current) continue;
+    if (typeof onDisk !== 'string' || onDisk === '') {
+      const why = currentConditionShaErrors?.[id];
+      v.push(`${id}: no digest of conditions/${id} was computed at merge time — the condition this ` +
+        `sweep measured is not in the tree${why ? ` (${why})` : ''}`);
+    } else if (onDisk !== s.conditionSha)
+      v.push(`conditions/${id} on disk is ${short(onDisk)}, the '${id}' sweep measured ` +
+        `${short(s.conditionSha)} — that condition changed after its results were taken; re-run ` +
+        `'${id}' alone, the other sweeps stand`);
   }
   return fail(v);
 }

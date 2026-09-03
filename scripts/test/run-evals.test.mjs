@@ -538,6 +538,38 @@ test('all three conditions sweep by default, treatment first', () => {
   assert.deepEqual(parseArgv([]).conditions, ['treatment', 'oneliner', 'placebo']);
 });
 
+test('the registered list, not a constant, decides which conditions exist and in what order', () => {
+  const known = ['treatment', 'oneliner', 'placebo', 'treatment-no-triage'];
+  assert.deepEqual(parseArgv([], known).conditions, known);
+  assert.deepEqual(parseArgv(['--condition', 'treatment-no-triage'], known).conditions, ['treatment-no-triage']);
+  assert.deepEqual(parseArgv(['--condition', 'treatment-no-triage,treatment'], known).conditions,
+    ['treatment', 'treatment-no-triage']);
+  assert.throws(() => parseArgv(['--condition', 'treatment-no-triage']), RunError, 'unregistered by default');
+});
+
+test('planSweep builds a sweep for a registered fourth condition end to end', async () => {
+  // The review of the split found parseArgv and selectCondition widened but buildEvalArgv
+  // still holding the old three-id list, so `--condition <new-id>` died at plan time.
+  const extra = 'treatment-no-triage';
+  const discovered = async () => discoverCases(readTextFile, listDirectory, paths);
+  const cases = await discovered();
+  const plan = planSweep(cases, { conditions: ['treatment', extra], runs: 5, smoke: false });
+  assert.deepEqual(plan.sweeps.map((s) => s.condition), ['treatment', extra]);
+  assert.ok(plan.preChecks.some((c) => c.path.endsWith(`conditions/${extra}/SKILL.md`)));
+  assert.ok(plan.sweeps[1].invocations.every((i) => i.argv.includes('--eval-dir')));
+  assert.throws(() => planSweep(cases, { conditions: ['Bad Id'], runs: 5, smoke: false }), RunError);
+});
+
+test('selectCondition copies a registered fourth condition and refuses an unregistered directory', async () => {
+  const known = ['treatment', 'oneliner', 'placebo', 'treatment-no-triage'];
+  let copied = null;
+  await selectCondition(async (from, to) => (copied = { from, to }), paths, 'treatment-no-triage', known);
+  assert.equal(copied.from, 'evals/seven-steps-primer/conditions/treatment-no-triage');
+  await assert.rejects(
+    () => selectCondition(async () => assert.fail('nothing should be copied'), paths, 'treatment-no-triage'),
+    RunError);
+});
+
 test('--condition takes a subset, repeated or comma-separated, in declared order', () => {
   assert.deepEqual(parseArgv(['--condition', 'placebo,treatment']).conditions, ['treatment', 'placebo']);
   assert.deepEqual(
@@ -798,7 +830,7 @@ const SHA = 'a'.repeat(64);
 test('every sweep record carries the instrument digest', () => {
   const record = buildSweepRecord(
     { condition: 'treatment', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations: { gate: 'with-without' } },
-    { argvs: [['plugin', 'eval', '.']], startedAt: '2026-09-02T10:00:00.000Z', instrumentSha: SHA }
+    { argvs: [['plugin', 'eval', '.']], startedAt: '2026-09-02T10:00:00.000Z', instrumentSha: SHA, conditionSha: SHA }
   );
   assert.equal(record.instrumentSha, SHA);
   assert.deepEqual(record.argvs, [['plugin', 'eval', '.']]);
@@ -814,9 +846,18 @@ test('drift.json carries the same digest, so a control-only re-run cannot hide a
 test('a record with no digest is refused rather than written unmergeable', () => {
   const combined = { condition: 'treatment', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations: {} };
   for (const sha of [undefined, '', 'not-a-digest', SHA.toUpperCase()]) {
-    assert.throws(() => buildSweepRecord(combined, { argvs: [], startedAt: '', instrumentSha: sha }), RunError);
+    assert.throws(() => buildSweepRecord(combined, { argvs: [], startedAt: '', instrumentSha: sha, conditionSha: SHA }), RunError);
+    assert.throws(() => buildSweepRecord(combined, { argvs: [], startedAt: '', instrumentSha: SHA, conditionSha: sha }), RunError);
     assert.throws(() => buildDriftRecord({ drifted: false, reason: '' }, '', sha), RunError);
   }
+});
+
+test('the record carries the condition\'s own digest beside the shared one', () => {
+  const combined = { condition: 'placebo', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations: {} };
+  const own = 'c'.repeat(64);
+  const record = buildSweepRecord(combined, { argvs: [], startedAt: '', instrumentSha: SHA, conditionSha: own });
+  assert.equal(record.instrumentSha, SHA);
+  assert.equal(record.conditionSha, own);
 });
 
 /* ── Signals — a killed child is interrupted, never "below threshold" ───────── */
@@ -1044,7 +1085,7 @@ test('a complete document at an ordinary exit carries on to the next invocation'
 test('an ablations map the merger cannot read is refused rather than written', () => {
   const record = (ablations) => buildSweepRecord(
     { condition: 'treatment', exitCode: 0, document: harnessDoc(), stderrTail: '', ablations },
-    { argvs: [], startedAt: '', instrumentSha: SHA }
+    { argvs: [], startedAt: '', instrumentSha: SHA, conditionSha: SHA }
   );
   assert.deepEqual(record({ gate: 'with-without', step3: 'none' }).ablations,
     { gate: 'with-without', step3: 'none' });

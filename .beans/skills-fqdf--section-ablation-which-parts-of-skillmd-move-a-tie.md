@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-03T09:53:49Z
+updated_at: 2026-09-03T12:45:29Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
@@ -25,3 +25,7 @@ Each is one sweep of that condition alone, about $9 and 45 minutes from a termin
 - [ ] generate the three ablated conditions from SKILL.md (a script, so they track the source like the treatment mirror does)
 - [ ] register them, with directions, in an amendment
 - [ ] sweep each, merge, write up
+
+
+
+Order note, 2026-09-03: needs the three base records re-established (one full sweep, ~$27) after skills-ie78 lands; then each ablation condition is one sweep (~$9) merged against them (Amendment 5).

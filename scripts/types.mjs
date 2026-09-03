@@ -87,7 +87,12 @@
  * {@link MergedCaseRow.baselineScores} rather than a fourth entry in
  * `conditionScores`.
  *
- * @typedef {'treatment'|'oneliner'|'placebo'} ConditionId
+ * A registered condition's id: the name of its directory under `conditions/`. The
+ * pre-registration's `conditions` list is the registry — `treatment`, `oneliner` and
+ * `placebo` are the three the suite shipped with, and an amendment may add more.
+ * `none` is reserved for the harness's without-arm and can never be one.
+ *
+ * @typedef {string} ConditionId
  */
 
 /**
@@ -234,10 +239,15 @@
  *                                        into something a merge can refuse
  * @property {string}          startedAt
  * @property {string}          instrumentSha  `instrumentDigest(suiteDir)` at sweep time — the
- *                                        cases, graders, transcripts, fixture and every
- *                                        condition's SKILL.md. Sweeps that disagree were
+ *                                        SHARED instrument: cases, graders, transcripts and
+ *                                        fixture, no condition. Sweeps that disagree were
  *                                        measured with different instruments and are
  *                                        unmergeable (I2b)
+ * @property {string}          conditionSha   `conditionDigest(suiteDir, condition)` at sweep
+ *                                        time — this condition's own directory, the half of
+ *                                        the instrument only this sweep measured against.
+ *                                        Compared against the tree for this condition alone,
+ *                                        so editing one condition voids one sweep (I2b)
  */
 
 /**
@@ -249,11 +259,12 @@
  * @property {boolean} drifted
  * @property {string}  reason
  * @property {string}  checkedAt
- * @property {string}  instrumentSha  `instrumentDigest(suiteDir)` at check time, the same value
- *                                    every sweep record of this invocation carries. Without it
- *                                    a control-only re-run resets `drifted:false` for a
- *                                    treatment measured on an older instrument and I2 cannot
- *                                    see it (I2b)
+ * @property {string}  instrumentSha  `instrumentDigest(suiteDir)` at check time — the shared
+ *                                    half, the same value every sweep record of this
+ *                                    invocation carries. It ties the drift verdict to the
+ *                                    cases and graders it was taken beside; a stale treatment
+ *                                    mirror itself is caught by that record's `conditionSha`
+ *                                    (I2b)
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -296,8 +307,9 @@
  * @property {string} preRegistrationSha  sha of the suite's PRE-REGISTRATION.md; a mismatch
  *                                        against the committed file voids the run
  * @property {string} instrumentSha       `instrumentDigest(suiteDir)` — every case, grader,
- *                                        transcript, fixture and condition that produced
- *                                        these numbers, as one sha256. Taken from the sweep
+ *                                        transcript and fixture that produced these numbers,
+ *                                        as one sha256 (the conditions are digested apart,
+ *                                        see `conditionShas`). Taken from the sweep
  *                                        records once they agree; '' when they do not, or
  *                                        when any of them predates the digest. I2b refuses
  *                                        a report whose sweeps, drift record and suite on
@@ -305,6 +317,10 @@
  *                                        instrument-agreement guard, not a staleness guard:
  *                                        it compares digests, never `startedAt`, so sweeps
  *                                        taken weeks apart on an unchanged instrument merge
+ * @property {Record<ConditionId, string>} [conditionShas]  each sweep's `conditionSha`
+ *                                        under its condition id, '' where the record
+ *                                        predates it. Never expected to agree across
+ *                                        conditions; I2b checks each against the tree
  * @property {string} claudeVersion
  * @property {string} subjectModel
  * @property {string} judgeModel
