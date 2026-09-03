@@ -601,6 +601,6 @@ and the result could not run. Round 2's are design questions inside a working sy
 and the result runs: 201 script tests, 10 fixture tests, no drift, zero `TODO(seam)`,
 invariants holding.
 
-The finding is recorded as pending change #5 against the skill itself: "buildable from
+The finding is tracked as bean skills-jbu1 against the skill itself: "buildable from
 the artifacts alone" is asymptotic, and a stopping rule nobody can satisfy is not a
 stopping rule.

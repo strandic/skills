@@ -8,12 +8,12 @@ created_at: 2026-09-01T11:05:18Z
 updated_at: 2026-09-01T11:05:18Z
 ---
 
-`step3-markers-in-source` is the one behaviour no control produced at all — 0.47 treatment against 0.00 for both the one-liner and the placebo, all ten control runs at zero. It is the strongest evidence in the suite that the method's specific content does something.
+`step3-markers-in-source` is the one behaviour no control produces. In the 2026-09-03 sweep (`docs/plans/primer-evals/RESULTS-2026-09-03.md`) the treatment scores 0.85 and both controls score 0.25 on every run. It is capability evidence (single arm, replayed transcript), and it is the strongest evidence in the suite that the method's specific content does something.
 
-But the treatment's own scatter is `0.67 · 0.00 · 1.00 · 0.67 · 0.00` — it works about half the time, and two runs scored zero outright.
+The treatment's runs are 0.75, 1.00, 0.75, 1.00, 0.75. Three of five runs lose the same quarter. Before it is quoted as a headline it is worth knowing which grader fails on those runs and why. The controls' flat 0.25 also says one of the four graders passes without the skill; that grader is measuring the transcript, not the behaviour.
 
-Worth understanding before it is quoted as a headline. The mean is real; so is the instability, and reporting 0.47 without the spread would be the mean hiding the instrument.
+The first sweep (withdrawn, see Amendment 4 in `evals/seven-steps-primer/PRE-REGISTRATION.md`) had this case at 0.47 with two zero runs. Under the corrected `ablation: none` and judge prompts, the instability is smaller and the zeros are gone.
 
-- [ ] read the transcripts of the two zero-scoring runs — did the agent implement instead of placing markers, as it did before the transcript was fixed?
-- [ ] decide whether this is skill instability, replay-transcript fragility, or a grader that is too strict about `not-a-doc-list`
-- [ ] if it is the skill, that is a finding about step 3 and belongs in the ledger
+- [ ] read the three 0.75 runs in `results/treatment.json`: which grader fails, and is it the skill, the replay transcript, or a grader too strict about `not-a-doc-list`
+- [ ] identify the grader the controls pass at 0.25 and decide whether it should be a with-only indicator
+- [ ] if it is the skill, record it as a finding about step 3 and open a bean for the change
