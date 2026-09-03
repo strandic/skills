@@ -907,7 +907,7 @@ test('I3 — a README that drops or paraphrases the sentence is refused', async 
  * result, which is why it is asserted from here as well as from there.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-test('BuildEvalArgv — the exact argv the suite will run, target first', () => {
+test('BuildEvalArgv — the exact argv of one per-case invocation, target first', () => {
   assert.deepEqual(buildEvalArgv(invocationFor('treatment', paths, specs)), [
     'plugin', 'eval', '.',
     '--eval-dir', 'evals/seven-steps-primer',

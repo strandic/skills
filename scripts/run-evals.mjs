@@ -328,6 +328,10 @@ export function invocationFor(condition, paths, cases, overrides = {}) {
     runs: DEFAULTS.runs,
     subjectModel: DEFAULTS.subjectModel,
     judgeModel: DEFAULTS.judgeModel,
+    // Over the FULL case set, even for a one-case invocation. The grant is an operator
+    // decision made once per sweep, not per case: every invocation of a sweep carries the
+    // same grant, so the only thing that differs between their argv is `--case`, and a
+    // case's own `allowed_tools` is intersected with it by the harness. Pinned by test.
     allowTools: selectAllowTools(cases),
     threshold: DEFAULTS.threshold,
     caseGlobs: [],
@@ -1159,6 +1163,26 @@ export function sweepStopReason({ ablation, cases, result }) {
   return null;
 }
 
+/**
+ * ProcessExitCode — what the runner process exits with, from the records it wrote.
+ *
+ * Used to be 1 for everything that was not a clean sweep, so a Ctrl-C and a case below
+ * threshold were indistinguishable to the shell — the record carried 128+N, the process
+ * did not. Now the worst record decides, in the order the shell would want: a signal
+ * (128+N, so `$?` says which), then the harness's own partial (2), then 1 for a sweep
+ * that produced no comparable result or a case below threshold, then 0.
+ *
+ * @param {{exitCode: number, document: any}[]} records
+ * @returns {number}
+ */
+export function processExitCode(records) {
+  const interrupted = records.map((r) => r.exitCode).filter(isInterrupted);
+  if (interrupted.length > 0) return Math.max(...interrupted);
+  if (records.some((r) => r.exitCode === 2)) return 2;
+  if (records.some((r) => r.document === null || r.exitCode !== 0)) return 1;
+  return 0;
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * Entry point — the only place that reads, writes or spawns.
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -1440,6 +1464,8 @@ export async function main(argv) {
     console.error(`  --ablation ${g.ablation}: ${g.cases.join(', ')}`);
 
   let failed = 0;
+  /** @type {SweepRecord[]} */
+  const records = [];
   for (const [index, sweep] of plan.sweeps.entries()) {
     const { condition, invocations } = sweep;
     const startedAt = clock();
@@ -1481,6 +1507,14 @@ export async function main(argv) {
     const out = join(paths.resultsDir, `${condition}.json`);
     await writeTextFile(out, `${JSON.stringify(record, null, 2)}\n`);
     console.error(`  exit ${record.exitCode} · ${record.document ? 'document kept' : 'NO DOCUMENT'} → ${out}`);
+    // A document lost at COMBINE time (a missing part, a schema mismatch, invocations that
+    // disagree on the suite, a case in two parts) is not a stop reason — every invocation
+    // ran — but it is a record the merger will refuse, and the reason is only in the
+    // record's stderrTail. Print the runner's own notes so the terminal says why.
+    if (record.document === null && stop === null)
+      for (const line of record.stderrTail.split('\n').filter((l) => l.startsWith('runner: ')))
+        console.error(`  ${line}`);
+    records.push(record);
 
     if (record.document === null || record.exitCode > 1) failed++;
     if (stop !== null) {
@@ -1492,13 +1526,14 @@ export async function main(argv) {
         'has already stopped being evidence');
       await removeDirectory(paths.conditionUnderTest);
       console.error(`  removed ${paths.conditionUnderTest}`);
-      return 1;
+      // 128+N for a signal, 2 for a partial: the shell sees what the record says.
+      return processExitCode(records);
     }
   }
 
   if (failed > 0) {
     console.error(`\n${failed} sweep(s) produced no comparable result; merge-results will refuse them`);
-    return 1;
+    return processExitCode(records);
   }
   console.error(`\nmerge with: node scripts/merge-results.mjs ${paths.resultsDir}`);
   return 0;

@@ -23,7 +23,7 @@ import {
   readCaseSpec, yamlish, frontmatter, inlineList, parseArgv, tail, paths, suitePathsFor,
   groupCasesByAblation, combineHarnessDocuments, combineSweepParts, buildSweepRecord,
   buildDriftRecord, makeSpawnCapture, exitCodeForSignal, isInterrupted, RunError,
-  planSweep, sweepStopReason,
+  planSweep, sweepStopReason, processExitCode,
   preflightAuth,
 } from '../run-evals.mjs';
 
@@ -861,6 +861,31 @@ test('the record carries the condition\'s own digest beside the shared one', () 
 });
 
 /* ── Signals — a killed child is interrupted, never "below threshold" ───────── */
+
+test('a one-case invocation grants the tools of the whole sweep, not of its one case', async () => {
+  // The grant is per sweep: every invocation carries the same --allow-tools, so argv
+  // differs only by --case. Correct today because every case wants the same tools; pinned
+  // so a case that wants fewer does not silently narrow the grant of its own invocation.
+  const cases = await discoverCases(readTextFile, listDirectory, paths);
+  const whole = invocationFor('treatment', paths, cases).allowTools;
+  const one = invocationFor('treatment', paths, cases, { caseGlobs: ['triage-skip-oneliner'] }).allowTools;
+  assert.deepEqual(one, whole);
+  assert.deepEqual(whole, ['Bash', 'Edit', 'Write']);
+});
+
+test('the process exits with the worst record: a signal beats a partial beats a refusal', () => {
+  const ok = { exitCode: 0, document: {} };
+  const below = { exitCode: 1, document: {} };
+  const partial = { exitCode: 2, document: {} };
+  const killed = { exitCode: 130, document: null };
+  const none = { exitCode: 0, document: null };
+  assert.equal(processExitCode([ok, ok]), 0);
+  assert.equal(processExitCode([ok, below]), 1);
+  assert.equal(processExitCode([none]), 1);
+  assert.equal(processExitCode([below, partial]), 2);
+  assert.equal(processExitCode([partial, killed, below]), 130);
+  assert.equal(processExitCode([{ exitCode: 143, document: null }, killed]), 143);
+});
 
 test('a signal maps to 128 + its number, so SIGKILL and SIGHUP are not exit 1', () => {
   assert.equal(exitCodeForSignal('SIGINT'), 130);
