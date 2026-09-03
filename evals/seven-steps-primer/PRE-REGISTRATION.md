@@ -456,6 +456,20 @@ and judge models, five runs per case, and all twelve registered directions.
 
 **Re-sweep required.** All three conditions, from a committed tree, then a merge.
 
+### 4.6 Addendum, after the re-sweep: harness transcripts are not instrument
+
+The re-sweep's merge was refused by I2b. The harness rewrites `<sessionId>.jsonl` inside
+a replay case's directory on every run (harness-facts #30), and the digest had hashed
+that file, so the tree stopped matching the digest the sweeps carried the moment step3
+ran. The digest rule now skips those files; the authored `history.jsonl` stays in.
+
+The three sweep records and `drift.json` were re-stamped from `71073d155e3a…` to
+`f156813ba17e…`, the digest under the corrected rule. Each record keeps the original
+digest and this reason under `instrumentShaRestamped`. The evidence that this is the
+same instrument: all three sweeps agreed on the original digest, and no git-tracked file
+under the suite directory other than the two root prose files changed between the sweep
+start and the re-stamp (`git diff f2c04fc..aa81788 -- evals/seven-steps-primer`).
+
 ---
 
 # Results — first full sweep, 2026-09-01
@@ -564,6 +578,81 @@ That sentence survives, with two qualifications the numbers require:
 
 And what these numbers still cannot say, unchanged: nothing about whether the software
 comes out better. That is Tier 2, and it is not purchasable at this budget.
+
+---
+
+# Results — re-sweep, 2026-09-03
+
+Three sweeps, five cases, five runs per arm, 150 runs, **$27.07** API-equivalent
+(subscription-metered; no money moved). Subject `sonnet`, judge `opus`, CLI `2.1.250`.
+Suite `aa81788`, instrument `f156813ba17e`. Full report:
+`docs/plans/primer-evals/RESULTS-2026-09-03.md`. This replaces the withdrawn section
+above.
+
+Every sweep passed I1c, all three ran on the same CLI and the same instrument (I2b),
+every registered case ran in every condition at its registered ablation (I4b), and the
+merge emitted no combined score.
+
+**Noise floor: 0.12.** Contrasts at or below it are marked and are not findings.
+
+## The registered predictions against what happened
+
+| Case | vs `none` | vs `oneliner` | vs `placebo` |
+|---|---|---|---|
+| `gate-stop-step0` | +1 → **+0.69 ✓** | +1 → **+0.23 ✓** | 0 → **~0 ✓** |
+| `looks-trivial-is-structural` | +1 → **+0.43 ✓** | +1 → **~0 ✗** | +1 → **−0.24 ✗** |
+| `triage-skip-oneliner` | 0 → **~0 ✓** | 0 → **+0.67 ✗** | 0 → **~0 ✓** |
+| `triage-decompose-epic` | +1 → **+0.24 ✓** | +1 → **~0 ✗** | +1 → **~0 ✗** |
+
+**Eight of twelve predictions held. Four did not.**
+
+### The placebo ties or beats the treatment on every delta case
+
+This is the result of the re-sweep, and it is the opposite of what the withdrawn sweep
+said. With the placebo re-matched to the current treatment (Amendment 4.1), the +0.20
+on `gate-stop-step0` became +0.03, inside the floor, exactly as the amendment said it
+would. On `triage-skip-oneliner` and `triage-decompose-epic` the two tie. On
+`looks-trivial-is-structural` the placebo scores 1.00 on all five runs and the treatment
+0.76, a contrast of −0.24 against a registered +1. That is the one prediction that came
+out with the wrong sign, and the registration flagged this pair as the one held against
+our own interest.
+
+What that means, stated plainly: on every behaviour Tier 1 measures, a document with the
+primer's gates and shape but none of its method content does as well as the primer. The
+stop-and-plan behaviour comes from the gate scaffolding. The primer's specific content,
+triage rules, recon-as-a-run, the failure-modes list, has no measurable effect on these
+five cases at this sample size.
+
+### The one-liner result is unchanged
+
+The thirteen-word instruction still loses on gate-stopping (+0.23 to the treatment) and
+still adds ceremony to a typo fix (+0.67), and still ties the treatment on both
+structural-triage cases. Those are the same three findings as the withdrawn sweep.
+
+### The one case the method has to itself, still
+
+`step3-markers-in-source` is capability evidence, not a contrast. The treatment scores
+0.85 (runs 0.75 · 1.00 · 0.75 · 1.00 · 0.75); both controls score 0.25 on every run.
+Placing to-do markers in the source is the one behaviour no control produces, and under
+the corrected `ablation: none` it is now measured as registered.
+
+## What this supports, at the claim ceiling
+
+> With the primer loaded, the agent produces one step's artifact and stops, holds that
+> under task pressure, and does not add ceremony to work that does not need it — measured
+> against no skill, a one-line equivalent, and a same-shape placebo.
+
+The sentence survives as a description of what the agent does with the primer loaded.
+What the re-sweep adds is what it does not support:
+
+1. **It does not support attributing any of that to the primer's content.** The
+   same-shape placebo produces the same behaviour, and on one case more of it.
+2. **Against one sentence, the advantage is where it was.** Gate-stopping and not
+   over-ceremonialising a typo; nothing on structural triage.
+3. **The unique capability is still step 3**, and it is still inconsistent.
+
+Tier 2's first experiment, ablating the primer's sections one at a time, is now the
+obvious next measurement, and the placebo result says which way to bet.
 
 ---
 
