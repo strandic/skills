@@ -36,6 +36,7 @@ them; the only thing that changes is which instruction text is loaded.
 | `placebo` | eight gates, the same stop-and-wait scaffolding, different substance | this method vs any method of this shape |
 | `none` | stock Claude Code — the harness's own `without` arm, measured once per sweep | the skill existing at all |
 | `treatment-no-triage` | the treatment minus its `## Does this earn the gates?` section, generated from the shipped skill (Amendment 7) | the triage rules: skip / decompose / run it |
+| `treatment-no-failure-modes` | the treatment minus its `## Failure modes` section, generated the same way (Amendment 8) | the seven named failure modes, "rushing to the diff" among them |
 
 All three authored conditions carry **identical frontmatter** — same `name`, same
 `description` — and all three are copied to the same `_condition/` path, so the plugin
@@ -165,7 +166,7 @@ The merger reads this block and nothing else in this file.
 
 ```json
 {
-  "conditions": ["treatment", "oneliner", "placebo", "treatment-no-triage"],
+  "conditions": ["treatment", "oneliner", "placebo", "treatment-no-triage", "treatment-no-failure-modes"],
   "cases": [
     {
       "name": "gate-stop-step0",
@@ -232,7 +233,11 @@ The merger reads this block and nothing else in this file.
     "gate-stop-step0/treatment-no-triage": 0,
     "looks-trivial-is-structural/treatment-no-triage": 0,
     "triage-skip-oneliner/treatment-no-triage": 0,
-    "triage-decompose-epic/treatment-no-triage": 0
+    "triage-decompose-epic/treatment-no-triage": 0,
+    "gate-stop-step0/treatment-no-failure-modes": 0,
+    "looks-trivial-is-structural/treatment-no-failure-modes": 0,
+    "triage-skip-oneliner/treatment-no-failure-modes": 0,
+    "triage-decompose-epic/treatment-no-failure-modes": 0
   },
   "threshold": 0.6,
   "subjectModel": "sonnet",
@@ -611,6 +616,35 @@ no record is a comparison missing a column.
 
 **Unchanged.** The five scored cases, the threshold, the subject and judge models, five
 runs per case, and the twelve directions registered before this amendment.
+
+## Amendment 8 — the second section ablation: `treatment-no-failure-modes`
+
+Recorded 2026-09-04, after ablation 1 was merged and before this one is swept.
+
+### 8.1 The condition
+
+`treatment-no-failure-modes` is the treatment minus its `## Failure modes` section, the
+last section of the file: seven named failure modes (rubber-stamp gate, rushing to the
+diff, self-certifying, trusting the shipped half, reading in place of running, reporting
+the break instead of fixing the artifact, verdicts without evidence). Generated and
+drift-checked like `treatment-no-triage`. Identical frontmatter.
+
+### 8.2 The registered directions
+
+Treatment minus `treatment-no-failure-modes`, one per delta case, all **0**, for the reason
+given in 7.2: the placebo carries none of this content and matches the treatment. The
+alternative this experiment can detect is specific: "rushing to the diff" and
+"self-certifying" are the two failure modes that describe not stopping at a gate, so if the
+list does anything Tier 1 can see, it is a positive contrast on `gate-stop-step0` or on
+`looks-trivial-is-structural`, the case where ablation 1 showed the treatment failing to
+stop. The sixteen existing directions do not move.
+
+### 8.3 What it costs
+
+One sweep, about $11, merged against the four records of 2026-09-04. The merger refuses
+the suite until it lands.
+
+**Unchanged.** Everything else.
 
 ---
 
