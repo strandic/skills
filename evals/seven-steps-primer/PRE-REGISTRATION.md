@@ -753,6 +753,77 @@ obvious next measurement, and the placebo result says which way to bet.
 
 ---
 
+# Results — sweep after Amendments 5 and 6, 2026-09-04
+
+Three sweeps, five cases, five runs per arm, 150 runs, **$26.76** API-equivalent
+(subscription-metered; no money moved). Subject `sonnet`, judge `opus`, CLI `2.1.250`.
+Suite `510488a`, instrument `a21420ccf879`, conditions `0c71babfdd66` / `69937f816b3e` /
+`591352963d83`. Full report: `docs/plans/primer-evals/RESULTS-2026-09-04.md`; the records
+are committed under `docs/plans/primer-evals/records/2026-09-04/`. This is the current
+result; the 2026-09-03 section above stands under its own instrument.
+
+Every sweep passed I1c, all three ran on the same CLI and the same shared instrument, each
+against its own condition digest (I2b), every registered case ran in every condition at its
+registered ablation (I4b), and the merge emitted no combined score. Two earlier attempts on
+2026-09-03 and 2026-09-04 were aborted and published nothing (`sweep-log.md`).
+
+**Noise floor: 0.13.** Contrasts at or below it are marked and are not findings.
+
+## The registered predictions against what happened
+
+| Case | vs `none` | vs `oneliner` | vs `placebo` |
+|---|---|---|---|
+| `gate-stop-step0` | +1 → **+0.66 ✓** | +1 → **+0.17 ✓** | 0 → **~0 ✓** |
+| `looks-trivial-is-structural` | +1 → **+0.33 ✓** | +1 → **~0 ✗** | +1 → **−0.20 ✗** |
+| `triage-skip-oneliner` | 0 → **~0 ✓** | 0 → **+0.67 ✗** | 0 → **~0 ✓** |
+| `triage-decompose-epic` | +1 → **+0.27 ✓** | +1 → **~0 ✗** | +1 → **~0 ✗** |
+
+**Seven of twelve predictions held. Five did not.** The 2026-09-03 sweep had eight; the
+one that moved is `gate-stop-step0` vs `placebo`, which stayed inside the floor and so
+still holds, and `triage-decompose-epic` vs `oneliner`, +0.07, inside the floor both
+times. The count differs by the reading of ties, not by any contrast changing sign.
+
+### The same three findings, on a corrected instrument
+
+The picture is the one the 2026-09-03 sweep drew, reproduced on a different day with the
+step3 instrument corrected. **The placebo ties or beats the treatment on every delta
+case**: inside the floor on three, and −0.20 on `looks-trivial-is-structural` (placebo
+0.92, treatment 0.72; last time −0.24). **The one-liner** loses on gate-stopping (+0.17)
+and adds ceremony to a typo fix (+0.67), and ties on both structural-triage cases.
+**Against no instruction** the primer wins on three of four, and ties on the guardrail
+case as registered.
+
+### The one case the method has to itself, now measured cleanly
+
+`step3-markers-in-source` under Amendment 6, three graders, no transcript-only grader: the
+treatment scores **0.80** (runs 1.00 · 1.00 · 1.00 · 0.00 · 1.00); both controls score
+**0.00** on every run. The rewritten judge criteria passed every list-shaped report of
+placed markers (4 of 4, unanimous), which is what Amendment 6 predicted. The one zero is
+not a judge artefact: that run ignored the replayed transcript, restarted the method at
+step 0 and wrote a plan document instead of markers, failing all three graders. That is a
+real miss, and it is the shape of miss the case exists to catch.
+
+## What this supports, at the claim ceiling
+
+> With the primer loaded, the agent produces one step's artifact and stops, holds that
+> under task pressure, and does not add ceremony to work that does not need it — measured
+> against no skill, a one-line equivalent, and a same-shape placebo.
+
+Unchanged from the 2026-09-03 reading, now reproduced:
+
+1. **The sentence describes what the agent does with the primer loaded.**
+2. **None of it is attributable to the primer's content.** The same-shape placebo produces
+   the same behaviour, and on one case more of it.
+3. **Against one sentence, the advantage is gate-stopping and not over-ceremonialising a
+   typo.** Nothing on structural triage.
+4. **The unique capability is step 3**, at four runs in five, with the fifth a restart
+   rather than a list.
+
+These three records are the base the section-ablation experiment merges against. Each
+ablated condition is one sweep, compared here.
+
+---
+
 ## Earlier measurement — setup choices moved to gate 0
 
 Measured and shipped before the full sweep, and recorded here because this is where the

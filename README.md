@@ -49,17 +49,18 @@ and a placebo carrying the same eight gates with arbitrary contents. The one-lin
 whether 11KB beats one sentence; the placebo asks whether it is *this* method or any
 method of that shape.
 
-**What the sweep found** (2026-09-03, 150 runs, ~$27 API-equivalent, `sonnet`
-subject / `opus` judge, noise floor 0.12; a first sweep on 2026-09-01 was withdrawn after
-review found defects in the placebo and four graders):
+**What the sweep found** (2026-09-04, 150 runs, ~$27 API-equivalent, `sonnet`
+subject / `opus` judge, noise floor 0.13; it reproduces a 2026-09-03 sweep on a corrected
+instrument, and a first sweep on 2026-09-01 was withdrawn after review found defects in
+the placebo and four graders):
 
 | Behaviour | vs no skill | vs one sentence | vs same-shape placebo |
 |---|---|---|---|
-| Produces step 0 and stops | +0.69 | **+0.23** | +0.03 — noise |
-| Adds no ceremony to a typo fix | +0.02 — noise | **+0.67** | 0.00 — noise |
-| Recognises a structural change | +0.43 | −0.04 — noise | **−0.24** |
-| Decomposes an epic | +0.24 | 0.00 — noise | 0.00 — noise |
-| Places markers in source | — | **0.85 vs 0.25** | **0.85 vs 0.25** |
+| Produces step 0 and stops | +0.66 | **+0.17** | +0.06 — noise |
+| Adds no ceremony to a typo fix | 0.00 — noise | **+0.67** | 0.00 — noise |
+| Recognises a structural change | +0.33 | −0.08 — noise | **−0.20** |
+| Decomposes an epic | +0.27 | +0.07 — noise | 0.00 — noise |
+| Places markers in source | — | **0.80 vs 0.00** | **0.80 vs 0.00** |
 
 Read honestly: against no instruction the primer clearly changes behaviour. Against one
 good sentence it wins on gate-stopping and on *not* over-planning a triviality, and ties
@@ -79,7 +80,7 @@ prices it at roughly 20× this one.
 **Work in progress.** The suite runs, the invariants hold, and the results are committed —
 but it is one skill, one fixture, one model, five cases. Predictions were registered before
 the run (`evals/seven-steps-primer/PRE-REGISTRATION.md`) and **five of twelve missed**,
-including the placebo prediction landing backwards. Those misses are written up rather
+including the placebo prediction landing backwards, twice. Those misses are written up rather
 than smoothed over.
 
 ```bash
