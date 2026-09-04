@@ -961,6 +961,44 @@ grader shows the agent applying correctly.
 
 ---
 
+# Results — ablation 2, `treatment-no-failure-modes`, 2026-09-04
+
+One sweep, **$9.99**, merged against the four records above with nothing re-run. Suite
+`4fefb29`, instrument `a21420ccf879`, condition `921644fd9521`. Five-column report:
+`docs/plans/primer-evals/RESULTS-2026-09-04-no-failure-modes.md`; record committed. Every
+invariant passed on the first merge.
+
+## The registered predictions against what happened
+
+Contrast is treatment minus `treatment-no-failure-modes`; all four were registered **0**.
+
+| Case | Δ | verdict |
+|---|---|---|
+| `gate-stop-step0` | +0.00 | ✓ |
+| `looks-trivial-is-structural` | −0.12 | ✓ inside the floor (0.13) |
+| `triage-skip-oneliner` | +0.00 | ✓ |
+| `triage-decompose-epic` | −0.00 | ✓ |
+
+**Four of four held.** The failure-modes list does nothing Tier 1 can see. On
+`gate-stop-step0` the two conditions are grader-for-grader identical (every grader passes
+the same number of runs). The alternative 8.2 named, that "rushing to the diff" and
+"self-certifying" help the agent stop, has no support: with the list gone the agent stops
+at gate 0 exactly as often. `looks-trivial-is-structural` came out 0.84, between the
+treatment's 0.72 and the no-triage 0.92, with one run in five implementing the change; at
+−0.12 it is inside the floor and is not a finding.
+
+`step3-markers-in-source` (capability): 0.73 (runs 0.67 · 1.00 · 1.00 · 0.00 · 1.00),
+with the same restart-at-step-0 zero the treatment showed once. Not a contrast.
+
+## What this supports
+
+Two sections measured, neither earns its length on Tier 1: the triage section costs 0.20
+on one case (ablation 1), the failure-modes list costs and buys nothing. The third, the
+setup section, is the one Amendment 4.1 already showed to matter for `plan-exists`, and
+is registered next with that prediction.
+
+---
+
 ## Earlier measurement — setup choices moved to gate 0
 
 Measured and shipped before the full sweep, and recorded here because this is where the

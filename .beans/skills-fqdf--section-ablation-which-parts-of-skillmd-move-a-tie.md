@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-04T12:57:18Z
+updated_at: 2026-09-04T14:02:31Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
@@ -56,3 +56,8 @@ Order note, 2026-09-03: needs the three base records re-established (one full sw
 2026-09-04: treatment-no-failure-modes built and registered (Amendment 8, all four directions at 0). Sweep: EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment-no-failure-modes
 - [x] failure-modes ablation built and registered
 - [ ] failure-modes ablation swept and merged
+
+
+
+2026-09-04 16:01: treatment-no-failure-modes swept ($9.99) and merged; 4/4 zeros held, no measurable effect. Next: the setup section.
+- [x] failure-modes ablation swept and merged
