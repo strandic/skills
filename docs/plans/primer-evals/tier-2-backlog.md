@@ -67,7 +67,9 @@ Each ablation is a new condition: the treatment with one section deleted. Three 
   registered by Amendment 7 with all four directions at 0
 - the failure-modes list at the end — **built and swept 2026-09-04** as
   `treatment-no-failure-modes`, Amendment 8: four of four zeros held, no measurable effect
-- the setup section (artifact home, worktree, checkpoints)
+- the setup section (artifact home, worktree, checkpoints) — **built 2026-09-04** as
+  `treatment-no-setup`, Amendment 9, `gate-stop-step0` registered +1 (Amendment 4.1's
+  evidence), the rest 0
 
 Each condition is one Tier 1 sweep, about $10 and 35 minutes, and it merges against the
 existing treatment and control records without re-running them: since Amendment 5 the

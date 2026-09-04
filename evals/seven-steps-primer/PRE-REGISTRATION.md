@@ -37,6 +37,7 @@ them; the only thing that changes is which instruction text is loaded.
 | `none` | stock Claude Code — the harness's own `without` arm, measured once per sweep | the skill existing at all |
 | `treatment-no-triage` | the treatment minus its `## Does this earn the gates?` section, generated from the shipped skill (Amendment 7) | the triage rules: skip / decompose / run it |
 | `treatment-no-failure-modes` | the treatment minus its `## Failure modes` section, generated the same way (Amendment 8) | the seven named failure modes, "rushing to the diff" among them |
+| `treatment-no-setup` | the treatment minus its `## Set the artifact home` section, generated the same way (Amendment 9) | the artifact home, and the two setup choices handed over at gate 0 |
 
 All three authored conditions carry **identical frontmatter** — same `name`, same
 `description` — and all three are copied to the same `_condition/` path, so the plugin
@@ -166,7 +167,7 @@ The merger reads this block and nothing else in this file.
 
 ```json
 {
-  "conditions": ["treatment", "oneliner", "placebo", "treatment-no-triage", "treatment-no-failure-modes"],
+  "conditions": ["treatment", "oneliner", "placebo", "treatment-no-triage", "treatment-no-failure-modes", "treatment-no-setup"],
   "cases": [
     {
       "name": "gate-stop-step0",
@@ -237,7 +238,11 @@ The merger reads this block and nothing else in this file.
     "gate-stop-step0/treatment-no-failure-modes": 0,
     "looks-trivial-is-structural/treatment-no-failure-modes": 0,
     "triage-skip-oneliner/treatment-no-failure-modes": 0,
-    "triage-decompose-epic/treatment-no-failure-modes": 0
+    "triage-decompose-epic/treatment-no-failure-modes": 0,
+    "gate-stop-step0/treatment-no-setup": 1,
+    "looks-trivial-is-structural/treatment-no-setup": 0,
+    "triage-skip-oneliner/treatment-no-setup": 0,
+    "triage-decompose-epic/treatment-no-setup": 0
   },
   "threshold": 0.6,
   "subjectModel": "sonnet",
@@ -643,6 +648,36 @@ stop. The sixteen existing directions do not move.
 
 One sweep, about $11, merged against the four records of 2026-09-04. The merger refuses
 the suite until it lands.
+
+**Unchanged.** Everything else.
+
+## Amendment 9 — the third section ablation: `treatment-no-setup`
+
+Recorded 2026-09-04, after ablation 2 was merged and before this one is swept.
+
+### 9.1 The condition
+
+`treatment-no-setup` is the treatment minus its `## Set the artifact home` section: the
+default artifact home (`docs/plans/<feature>/`), the instruction to name it in the step-0
+artifact, the tracker binding, and the two setup choices (worktree, per-gate checkpoints)
+handed over at gate 0. Generated and drift-checked like the other two. Identical
+frontmatter.
+
+### 9.2 The registered directions, and why one is not 0
+
+`gate-stop-step0` vs `treatment-no-setup`: **+1**. This is the one ablation where the
+suite already holds evidence of an effect: Amendment 4.1 found that the placebo, lacking
+the equivalent setup wording, could not pass `plan-exists` by construction, and the
+"earlier measurement" section below found the same section's wording moving `plan-exists`
+from 0 of 5 to 4 of 5. `plan-exists` is one of seven graders on that case, so the
+predicted contrast is about +0.10 to +0.15, near the floor; the sign is what is registered.
+
+The three triage cases: **0**. None of them asks for an artifact, and the section says
+nothing about triage.
+
+### 9.3 What it costs
+
+One sweep, about $11, merged against the five records of 2026-09-04.
 
 **Unchanged.** Everything else.
 
