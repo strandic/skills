@@ -19,13 +19,13 @@ One full sweep of the three registered conditions, about $27, once the judge mod
 healthy. Probe first:
 
 ```bash
-CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude/versions/2.1.250 -p "Reply with the single word ok." --model opus
+CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude-pinned/2.1.250 -p "Reply with the single word ok." --model opus
 ```
 
 Then, from a terminal with `CLAUDE_CONFIG_DIR` pointing at the logged-in directory:
 
 ```bash
-EVAL_CLAUDE_BIN=~/.local/share/claude/versions/2.1.250 node scripts/run-evals.mjs
+EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs
 ```
 
 The runner will now stop a condition at the first thrown grader, so a judge outage costs

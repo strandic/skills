@@ -84,7 +84,7 @@ than smoothed over.
 
 ```bash
 # Requires CLI 2.1.250 — see evals/seven-steps-primer/README.md for why
-EVAL_CLAUDE_BIN=~/.local/share/claude/versions/2.1.250 node scripts/run-evals.mjs --smoke
+EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --smoke
 node scripts/merge-results.mjs evals/seven-steps-primer/results
 ```
 

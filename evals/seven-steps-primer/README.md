@@ -3,12 +3,26 @@
 ## Before you run it: the CLI version is pinned
 
 Sweeps need `EVAL_CLAUDE_BIN` pointed at **2.1.250**, and that binary logged in under the
-config directory the terminal uses (`CLAUDE_CONFIG_DIR`, default `~/.claude`). A `/login`
+config directory the terminal uses. Keep the binary OUTSIDE `~/.local/share/claude/versions/`:
+the CLI's auto-updater prunes that cache and deleted 2.1.250 from it overnight on
+2026-09-04. Fetch it once, with its checksum, into a directory the updater does not own:
+
+```bash
+P=darwin-arm64   # or darwin-x64
+B=https://downloads.claude.ai/claude-code-releases/2.1.250
+mkdir -p ~/.local/share/claude-pinned
+curl -fsSL -o ~/.local/share/claude-pinned/2.1.250 $B/$P/claude
+curl -fsSL $B/manifest.json | python3 -c "import sys,json; print(json.load(sys.stdin)['platforms']['$P']['checksum'])"
+shasum -a 256 ~/.local/share/claude-pinned/2.1.250   # must match
+chmod +x ~/.local/share/claude-pinned/2.1.250
+```
+
+The two must agree; the release server publishes the checksum in `manifest.json` (`CLAUDE_CONFIG_DIR`, default `~/.claude`). A `/login`
 in another session's directory does not count; the runner checks with `auth status`
 before spending anything and names the directory to log in.
 
 ```bash
-EVAL_CLAUDE_BIN=~/.local/share/claude/versions/2.1.250 node scripts/run-evals.mjs --smoke
+EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --smoke
 ```
 
 **Why.** From 2.1.251 the harness refuses any Bash-granting evaluation while `~/.docker`
