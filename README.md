@@ -62,6 +62,13 @@ the placebo and four graders):
 | Decomposes an epic | +0.27 | +0.07 — noise | 0.00 — noise |
 | Places markers in source | — | **0.80 vs 0.00** | **0.80 vs 0.00** |
 
+A first section ablation (the primer minus its triage section, one $11 sweep merged
+against the same records) moved nothing outside the noise floor on three cases and
+*improved* the structural-change case by 0.20: with the triage section, two runs in five
+decided the change was structural and then implemented it in the same turn instead of
+stopping at the gate. Full read in `evals/seven-steps-primer/PRE-REGISTRATION.md`,
+results section for ablation 1.
+
 Read honestly: against no instruction the primer clearly changes behaviour. Against one
 good sentence it wins on gate-stopping and on *not* over-planning a triviality, and ties
 on both structural-triage cases. Against a placebo with the same gates and none of the

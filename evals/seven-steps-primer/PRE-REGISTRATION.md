@@ -869,6 +869,64 @@ ablated condition is one sweep, compared here.
 
 ---
 
+# Results — ablation 1, `treatment-no-triage`, 2026-09-04
+
+One sweep of the ablated condition, five cases, five runs per arm, **$10.63**, merged
+against the three records above with nothing re-run (Amendment 5). Suite `88be913`,
+instrument `a21420ccf879`, condition `74b9ffa4ff91`. Full four-column report:
+`docs/plans/primer-evals/RESULTS-2026-09-04-no-triage.md`; record committed beside the
+others. Every invariant passed on the first merge.
+
+## The registered predictions against what happened
+
+Contrast is treatment minus `treatment-no-triage`; all four were registered **0**.
+
+| Case | Δ | verdict |
+|---|---|---|
+| `gate-stop-step0` | +0.00 | ✓ inside the floor |
+| `looks-trivial-is-structural` | **−0.20** | ✗ the ablated version scores 0.92, the treatment 0.72 |
+| `triage-skip-oneliner` | +0.13 | ✓ inside the floor (0.13) |
+| `triage-decompose-epic` | +0.13 | ✓ inside the floor |
+
+**Three of four held.** The miss is a finding, and it has the sign the method would not
+have chosen: removing the triage section makes the agent do better on the one case that
+is about recognising a structural change.
+
+### What the section costs, per grader
+
+The treatment's judge grader on `looks-trivial-is-structural`, `does-not-skip`, passed 5
+of 5: with the triage section the agent named the shared counter as the cause every time.
+What it lost was `no-source-edits` and `source-untouched` (3 of 5) and `liveness` (2 of
+5): two runs, having decided the change was structural, went on to implement it, ran the
+tests and reported "all 11 tests pass" instead of stopping at gate 0. Without the section,
+5 of 5 stopped with the source untouched, which is what the placebo does too (0.92). So the
+section is not costing recognition. It is costing the stop: a "does this earn the gates?"
+decision, answered "run it", reads as permission to run the whole method in one turn.
+
+On `triage-skip-oneliner` the ablated version lost one run in five (0.87): with no skip
+rule to cite, one run wrote a step-0 scoping note instead of fixing the typo. That is the
+direction the section is supposed to help in, and at +0.13 it sits exactly on the floor.
+On `triage-decompose-epic` the same +0.13, also on the floor. Both are consistent with a
+small real effect that this sample cannot resolve, and with none.
+
+`step3-markers-in-source` (capability, no contrast): the ablated version scored 1.00 on
+all five runs, the treatment 0.80. Its one miss was a run that restarted at step 0; this
+sweep had none.
+
+## What this supports
+
+Of the three sections the backlog proposed to ablate, the first one measured does not
+earn its length on the behaviours Tier 1 sees: no case improves with it inside the floor,
+and one gets worse by 0.20. The next two ablations (the failure-modes list, the setup
+section) are each one sweep against the same three records.
+
+Whether to change the section is a skill decision, not an eval one, and it is tracked as
+one (bean skills-fqdf's follow-up). The measurement says what to change: the wording that
+turns "run it" into "run all of it", not the triage rules themselves, which the judge
+grader shows the agent applying correctly.
+
+---
+
 ## Earlier measurement — setup choices moved to gate 0
 
 Measured and shipped before the full sweep, and recorded here because this is where the
