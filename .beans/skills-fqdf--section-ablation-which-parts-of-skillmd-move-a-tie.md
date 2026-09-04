@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-03T14:58:22Z
+updated_at: 2026-09-04T09:48:08Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
@@ -33,3 +33,7 @@ Order note, 2026-09-03: needs the three base records re-established (one full sw
 
 
 2026-09-03 16:57: the full sweep was aborted — Opus judge 529 on most calls, records void under I1c, $11.37 spent. See docs/plans/primer-evals/sweep-log.md. Still pending: one full sweep when the judge is healthy.
+
+
+
+2026-09-04: base records exist and are committed (docs/plans/primer-evals/records/2026-09-04/, report RESULTS-2026-09-04.md, instrument a21420ccf879). Each ablation condition is now one sweep (--condition <id>, ~$9) merged against them. Ready to start.
