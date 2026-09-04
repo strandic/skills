@@ -48,6 +48,7 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
  */
 export const ABLATIONS = {
   'treatment-no-triage': { section: '## Does this earn the gates?' },
+  'treatment-no-failure-modes': { section: '## Failure modes' },
 };
 
 export const paths = {
