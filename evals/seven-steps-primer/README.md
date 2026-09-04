@@ -176,6 +176,11 @@ rate-limit windows. Recon's five probe sweeps came to $0.28 of estimate.
 
 `_conditions/` and `results/` are generated and gitignored.
 
+**Section ablations** (the treatment minus one `## ` section) are not authored by hand:
+declare the id and heading in `ABLATIONS` in `scripts/build-conditions.mjs`, run
+`node scripts/build-conditions.mjs generate`, and the drift check covers it from then on.
+`treatment-no-triage` is the first. Then register it as below.
+
 **Adding a condition.** The pre-registration's `conditions` list is the registry; the
 runner and the merger read it; the only list in code is the default for a caller that
 has not read the registration. To add one: create

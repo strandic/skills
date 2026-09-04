@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { stripModelInvocation, detectDrift, check, paths } from '../build-conditions.mjs';
+import { stripModelInvocation, detectDrift, check, paths, removeSection, buildAblation, ABLATIONS } from '../build-conditions.mjs';
 
 const FLAG = 'disable-model-invocation';
 
@@ -164,4 +164,47 @@ test('check reports a shipped skill that no longer carries the flag', async () =
     mirror: '---\nname: s\n---\n\nBody.\n',
   }), where);
   assert.deepEqual(result, { drifted: false, reason: '', stripped: false });
+});
+
+/* ── Section ablations — the treatment minus one `## ` section, generated the same way ── */
+
+const DOC = '---\nname: s\n---\n\nIntro.\n\n## Keep A\n\nA body.\n\n## Drop me\n\n- one\n- two\n\n## Keep B\n\nB body.\n';
+
+test('removeSection drops the heading through the line before the next `## `, leaving one blank line', () => {
+  assert.equal(removeSection(DOC, '## Drop me'),
+    '---\nname: s\n---\n\nIntro.\n\n## Keep A\n\nA body.\n\n## Keep B\n\nB body.\n');
+});
+
+test('removeSection on the last section runs to the end of the file', () => {
+  assert.equal(removeSection(DOC, '## Keep B'),
+    '---\nname: s\n---\n\nIntro.\n\n## Keep A\n\nA body.\n\n## Drop me\n\n- one\n- two\n');
+});
+
+test('removeSection refuses a heading it cannot find — an ablation that removes nothing is the treatment', () => {
+  assert.throws(() => removeSection(DOC, '## Not here'), /would remove nothing/);
+  assert.throws(() => removeSection(DOC, '## drop me'), /would remove nothing/, 'verbatim, case included');
+});
+
+test('every declared ablation names a section the shipped skill actually has', async () => {
+  const shipped = await readFile(paths.shippedSkill, 'utf8');
+  for (const [id, spec] of Object.entries(ABLATIONS)) {
+    const out = await buildAblation(async () => shipped, { shippedSkill: 'x' }, id);
+    assert.ok(!out.includes(`${spec.section}\n`), `${id}: the section is gone`);
+    assert.ok(out.length < shipped.length, `${id}: shorter than the shipped skill`);
+    assert.ok(out.startsWith('---\nname: seven-steps-primer\n'), `${id}: identical frontmatter name`);
+    assert.ok(!/^disable-model-invocation/m.test(out), `${id}: the flag is stripped like the treatment`);
+  }
+});
+
+test('check covers the ablations: a stale or missing ablation is drift, named by id', async () => {
+  const shipped = `---\nname: s\n${FLAG}: true\n---\n\nIntro.\n\n## Does this earn the gates?\n\nTriage.\n\n## Steps\n\nBody.\n`;
+  const mirror = '---\nname: s\n---\n\nIntro.\n\n## Does this earn the gates?\n\nTriage.\n\n## Steps\n\nBody.\n';
+  const ablated = '---\nname: s\n---\n\nIntro.\n\n## Steps\n\nBody.\n';
+  const w = { shippedSkill: 'shipped', treatmentMirror: 'mirror', ablations: { 'treatment-no-triage': 'abl' } };
+  assert.deepEqual(await check(reader({ shipped, mirror, abl: ablated }), w), { drifted: false, reason: '', stripped: true });
+  const stale = await check(reader({ shipped, mirror, abl: mirror }), w);
+  assert.equal(stale.drifted, true);
+  assert.match(stale.reason, /^treatment-no-triage: line 7/);
+  const missing = await check(reader({ shipped, mirror }), w);
+  assert.match(missing.reason, /^treatment-no-triage: no generated condition/);
 });

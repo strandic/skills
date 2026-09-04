@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-04T09:48:08Z
+updated_at: 2026-09-04T11:06:11Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
@@ -37,3 +37,11 @@ Order note, 2026-09-03: needs the three base records re-established (one full sw
 
 
 2026-09-04: base records exist and are committed (docs/plans/primer-evals/records/2026-09-04/, report RESULTS-2026-09-04.md, instrument a21420ccf879). Each ablation condition is now one sweep (--condition <id>, ~$9) merged against them. Ready to start.
+
+
+
+2026-09-04: treatment-no-triage built (generated, drift-checked), registered by Amendment 7 with all four directions at 0 (the placebo prior). Ready to sweep: EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment-no-triage (~$9), then merge.
+- [x] triage-section ablation built and registered
+- [ ] triage-section ablation swept and merged
+- [ ] failure-modes ablation
+- [ ] setup-section ablation

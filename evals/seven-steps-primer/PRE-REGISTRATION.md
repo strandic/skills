@@ -35,6 +35,7 @@ them; the only thing that changes is which instruction text is loaded.
 | `oneliner` | thirteen words: *Present a plan and wait for my explicit approval before editing any code.* | gating-as-an-idea |
 | `placebo` | eight gates, the same stop-and-wait scaffolding, different substance | this method vs any method of this shape |
 | `none` | stock Claude Code — the harness's own `without` arm, measured once per sweep | the skill existing at all |
+| `treatment-no-triage` | the treatment minus its `## Does this earn the gates?` section, generated from the shipped skill (Amendment 7) | the triage rules: skip / decompose / run it |
 
 All three authored conditions carry **identical frontmatter** — same `name`, same
 `description` — and all three are copied to the same `_condition/` path, so the plugin
@@ -164,7 +165,7 @@ The merger reads this block and nothing else in this file.
 
 ```json
 {
-  "conditions": ["treatment", "oneliner", "placebo"],
+  "conditions": ["treatment", "oneliner", "placebo", "treatment-no-triage"],
   "cases": [
     {
       "name": "gate-stop-step0",
@@ -227,7 +228,11 @@ The merger reads this block and nothing else in this file.
     "triage-skip-oneliner/placebo": 0,
     "triage-decompose-epic/none": 1,
     "triage-decompose-epic/oneliner": 1,
-    "triage-decompose-epic/placebo": 1
+    "triage-decompose-epic/placebo": 1,
+    "gate-stop-step0/treatment-no-triage": 0,
+    "looks-trivial-is-structural/treatment-no-triage": 0,
+    "triage-skip-oneliner/treatment-no-triage": 0,
+    "triage-decompose-epic/treatment-no-triage": 0
   },
   "threshold": 0.6,
   "subjectModel": "sonnet",
@@ -566,6 +571,46 @@ this amendment alone.
 
 **Unchanged.** The three conditions, the five scored cases, the threshold, the subject
 and judge models, five runs per case, and all twelve registered directions.
+
+## Amendment 7 — the first section ablation: `treatment-no-triage`
+
+Recorded 2026-09-04, after the full sweep of that day and before the ablation is swept.
+This is the first experiment of `docs/plans/primer-evals/tier-2-backlog.md`: remove one
+section of the primer, re-run the existing suite, and see whether any Tier 1 score moves.
+
+### 7.1 The condition
+
+`treatment-no-triage` is the treatment with its `## Does this earn the gates?` section
+removed, and nothing else changed: 1888 words against the treatment's 2004, identical
+frontmatter. It is generated from the shipped skill by `scripts/build-conditions.mjs`
+(`ABLATIONS`), the same way as the treatment mirror, and drift-checked the same way, so it
+cannot describe a version of the skill the treatment has moved on from. The section holds
+the three triage rules: skip a one-line fix, decompose an epic, run the method on a medium
+structural change.
+
+### 7.2 The registered directions, and why they are all 0
+
+The contrast is treatment minus `treatment-no-triage`, one per delta case. The method's
+own claim is that the triage section is what makes the agent skip a typo fix, decompose an
+epic and recognise a structural change, which would predict +1 on the three triage cases.
+The evidence registered above predicts otherwise: the placebo, which carries no triage
+content at all, tied or beat the treatment on every delta case in two sweeps. A prediction
+is what we expect, not what we hope, so all four directions are registered **0**: removing
+the section moves nothing outside the noise floor. A contrast that clears the floor in
+either direction is then a miss, and a finding: the section earns its length.
+
+The four directions are added; the twelve existing ones do not move (I8). The condition is
+capability-irrelevant: `step3-markers-in-source` is single-arm and has no contrast.
+
+### 7.3 What it costs
+
+One sweep of the new condition, about $9, merged against the three 2026-09-04 records.
+Nothing is re-run: the condition's own digest is stamped on its record alone (Amendment 5).
+Until the sweep lands, the merger refuses the suite, by design: a registered condition with
+no record is a comparison missing a column.
+
+**Unchanged.** The five scored cases, the threshold, the subject and judge models, five
+runs per case, and the twelve directions registered before this amendment.
 
 ---
 
