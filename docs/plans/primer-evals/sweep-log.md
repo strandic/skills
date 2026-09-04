@@ -19,10 +19,12 @@ is the durable list. Costs are the harness's API-equivalent estimate.
 
 | 2026-09-04 | ablation 1, `treatment-no-triage`, started 14:01 | treatment-no-triage | $10.63 | **published**, `RESULTS-2026-09-04-no-triage.md`; merged against the three records above with nothing re-run; 3 of 4 registered zeros held, `looks-trivial-is-structural` −0.20 |
 
+| 2026-09-04 | ablation 2, `treatment-no-failure-modes`, started 15:13 | treatment-no-failure-modes | $9.99 | **published**, `RESULTS-2026-09-04-no-failure-modes.md`; 4 of 4 registered zeros held |
+
 ## Pending
 
-The next two ablations (failure-modes list, setup section), one sweep each against the
-2026-09-04 records. Probe the judge first:
+The third ablation (setup section), one sweep against the 2026-09-04 records. Probe the
+judge first:
 
 ```bash
 CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude-pinned/2.1.250 -p "Reply with the single word ok." --model opus

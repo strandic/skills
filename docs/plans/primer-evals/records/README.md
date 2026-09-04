@@ -8,4 +8,4 @@ against a tree at the report's suite sha.
 
 | directory | report | suite | instrument |
 |---|---|---|---|
-| `2026-09-04/` | `../RESULTS-2026-09-04.md` (three conditions) and `../RESULTS-2026-09-04-no-triage.md` (the same three plus `treatment-no-triage`, swept later the same day) | `510488a` / `88be913` | `a21420ccf879` |
+| `2026-09-04/` | `../RESULTS-2026-09-04.md` (three conditions) and `../RESULTS-2026-09-04-no-triage.md` (the same three plus `treatment-no-triage`, swept later the same day) and `../RESULTS-2026-09-04-no-failure-modes.md` (plus `treatment-no-failure-modes`) | `510488a` / `88be913` / `4fefb29` | `a21420ccf879` |
