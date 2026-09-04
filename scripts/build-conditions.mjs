@@ -39,9 +39,22 @@ const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
  * `node scripts/build-conditions.mjs check` means the same thing from anywhere —
  * including from a git hook, whose cwd is not yours.
  */
+/**
+ * Section ablations: each is the treatment with ONE `## ` section removed, generated
+ * from the shipped skill exactly as the treatment mirror is, and drift-checked the same
+ * way — so an ablation can never quietly describe a version of the skill that no longer
+ * exists. The key is the condition id (its directory under `conditions/`); `section` is
+ * the heading line, verbatim. See docs/plans/primer-evals/tier-2-backlog.md.
+ */
+export const ABLATIONS = {
+  'treatment-no-triage': { section: '## Does this earn the gates?' },
+};
+
 export const paths = {
   shippedSkill: join(repoRoot, 'skills/seven-steps-primer/SKILL.md'),
   treatmentMirror: join(repoRoot, 'evals/seven-steps-primer/conditions/treatment/SKILL.md'),
+  ablations: Object.fromEntries(Object.keys(ABLATIONS).map((id) =>
+    [id, join(repoRoot, `evals/seven-steps-primer/conditions/${id}/SKILL.md`)])),
 };
 
 /* ── Pure ──────────────────────────────────────────────────────────────────── */
@@ -95,6 +108,31 @@ export function stripModelInvocation(skillMarkdown) {
   const kept = all.filter((line) => !FLAG_LINE.test(line));
   if (kept.length === all.length) return skillMarkdown;
   return skillMarkdown.slice(0, span.start) + kept.join('') + skillMarkdown.slice(span.end);
+}
+
+/**
+ * RemoveSection — the text minus one `## ` section: from the heading line through the
+ * line before the next `## ` heading (or the end), then exactly one blank line where it
+ * was, so the surrounding prose still reads. Every other byte is untouched.
+ *
+ * A heading that is not found THROWS. An ablation that removed nothing would sweep as
+ * the treatment under another name and report a null result that measured nothing.
+ *
+ * @param {string} markdown
+ * @param {string} heading  the `## ` line, verbatim, without its newline
+ * @returns {string}
+ */
+export function removeSection(markdown, heading) {
+  const all = lines(markdown);
+  const start = all.findIndex((l) => l.replace(/\r?\n$/, '') === heading);
+  if (start < 0) throw new Error(`removeSection: no line reads ${JSON.stringify(heading)} — the ablation would remove nothing`);
+  let end = start + 1;
+  while (end < all.length && !/^## /.test(all[end])) end++;
+  // Drop the blank lines that preceded the heading as well, so one blank line remains.
+  let before = start;
+  while (before > 0 && /^\r?\n$/.test(all[before - 1])) before--;
+  // No blank line when the removed section was the last: the file ends where the previous one did.
+  return all.slice(0, before).join('') + (end < all.length ? '\n' + all.slice(end).join('') : '');
 }
 
 /**
@@ -164,17 +202,36 @@ export async function buildTreatment(read, where) {
 }
 
 /**
- * `generate` — read the shipped skill, strip, write the mirror.
+ * @param {ReadTextFile} read
+ * @param {{shippedSkill: string}} where
+ * @param {string} id  a key of {@link ABLATIONS}
+ * @returns {Promise<string>} the treatment text minus that ablation's section
+ */
+export async function buildAblation(read, where, id) {
+  const spec = ABLATIONS[id];
+  if (!spec) throw new Error(`buildAblation: '${id}' is not a declared ablation`);
+  const { generated } = await buildTreatment(read, where);
+  return removeSection(generated, spec.section);
+}
+
+/**
+ * `generate` — read the shipped skill, strip, write the mirror; then every ablation.
  *
  * @param {ReadTextFile} read
  * @param {WriteTextFile} write
- * @param {{shippedSkill: string, treatmentMirror: string}} where
- * @returns {Promise<{bytes: number, stripped: boolean}>}
+ * @param {{shippedSkill: string, treatmentMirror: string, ablations?: Record<string,string>}} where
+ * @returns {Promise<{bytes: number, stripped: boolean, ablations: Record<string, number>}>}
  */
 export async function generate(read, write, where) {
   const { generated, stripped } = await buildTreatment(read, where);
   await write(where.treatmentMirror, generated);
-  return { bytes: Buffer.byteLength(generated), stripped };
+  const ablations = {};
+  for (const [id, path] of Object.entries(where.ablations ?? {})) {
+    const text = await buildAblation(read, where, id);
+    await write(path, text);
+    ablations[id] = Buffer.byteLength(text);
+  }
+  return { bytes: Buffer.byteLength(generated), stripped, ablations };
 }
 
 /**
@@ -193,7 +250,26 @@ export async function check(read, where) {
   } catch {
     return { drifted: true, reason: `no mirror at ${where.treatmentMirror}`, stripped };
   }
-  return { ...detectDrift(generated, committed), stripped };
+  const treatment = detectDrift(generated, committed);
+  if (treatment.drifted) return { ...treatment, stripped };
+  // Then each ablation, the same way; the first drift names its condition.
+  for (const [id, path] of Object.entries(where.ablations ?? {})) {
+    let expected;
+    try {
+      expected = await buildAblation(read, where, id);
+    } catch (e) {
+      return { drifted: true, reason: `${id}: ${e.message}`, stripped };
+    }
+    let onDisk;
+    try {
+      onDisk = await read(path);
+    } catch {
+      return { drifted: true, reason: `${id}: no generated condition at ${path}`, stripped };
+    }
+    const d = detectDrift(expected, onDisk);
+    if (d.drifted) return { drifted: true, reason: `${id}: ${d.reason}`, stripped };
+  }
+  return { drifted: false, reason: '', stripped };
 }
 
 /* ── Entry point ───────────────────────────────────────────────────────────── */
@@ -219,19 +295,22 @@ export async function main(argv) {
   }
 
   if (mode === 'generate') {
-    const { bytes, stripped } = await generate(readTextFile, writeTextFile, paths);
+    const { bytes, stripped, ablations } = await generate(readTextFile, writeTextFile, paths);
     if (!stripped) console.error(NO_FLAG);
     console.log(`wrote ${show(paths.treatmentMirror)} — ${bytes} bytes, flag ${stripped ? 'stripped' : 'absent'}`);
+    for (const [id, n] of Object.entries(ablations))
+      console.log(`wrote ${show(paths.ablations[id])} — ${n} bytes, minus ${JSON.stringify(ABLATIONS[id].section)}`);
     return 0;
   }
 
   const { drifted, reason, stripped } = await check(readTextFile, paths);
   if (!stripped) console.error(NO_FLAG);
   if (!drifted) {
-    console.log(`no drift — ${show(paths.treatmentMirror)} is ${show(paths.shippedSkill)} minus the flag`);
+    console.log(`no drift — ${show(paths.treatmentMirror)} is ${show(paths.shippedSkill)} minus the flag` +
+      (Object.keys(paths.ablations).length ? `, and ${Object.keys(paths.ablations).join(', ')} each minus one section` : ''));
     return 0;
   }
-  console.error(`DRIFT: ${show(paths.treatmentMirror)} is not ${show(paths.shippedSkill)} minus the flag`);
+  console.error(`DRIFT: a generated condition is not ${show(paths.shippedSkill)} minus what it should be`);
   console.error(`  ${reason}`);
   console.error('  regenerate with: node scripts/build-conditions.mjs generate');
   return 1;
