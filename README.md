@@ -67,8 +67,12 @@ same records) then asked which parts of the document earn their length. The tria
 section moved nothing outside the noise floor on three cases and *improved* the
 structural-change case by 0.20 when removed: with it, two runs in five decided the change
 was structural and then implemented it in the same turn instead of stopping at the gate.
-The failure-modes list moved nothing at all. Full reads in
-`evals/seven-steps-primer/PRE-REGISTRATION.md`, results sections for ablations 1 and 2.
+The failure-modes list moved nothing at all. The setup section is the only one with a
+visible mechanism (without it the step-0 plan never lands in a file, 4 of 5 to 0 of 5),
+and even that stays inside the noise floor at the case level. Every ablation improved the
+structural-change case, so the over-eagerness there belongs to the whole document rather
+than to any one section. Full reads in `evals/seven-steps-primer/PRE-REGISTRATION.md`,
+results sections for ablations 1 to 3.
 
 Read honestly: against no instruction the primer clearly changes behaviour. Against one
 good sentence it wins on gate-stopping and on *not* over-planning a triviality, and ties

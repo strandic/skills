@@ -1,11 +1,11 @@
 ---
 # skills-fqdf
 title: 'Section ablation: which parts of SKILL.md move a Tier 1 score'
-status: todo
+status: completed
 type: task
 priority: high
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-04T14:03:01Z
+updated_at: 2026-09-05T15:08:26Z
 parent: skills-c25p
 blocked_by:
     - skills-ccsx
@@ -67,3 +67,8 @@ Order note, 2026-09-03: needs the three base records re-established (one full sw
 2026-09-04: treatment-no-setup built and registered (Amendment 9; gate-stop-step0 +1, the rest 0). Sweep: EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment-no-setup
 - [x] setup-section ablation built and registered
 - [ ] setup-section ablation swept and merged
+
+
+
+2026-09-05 17:06: treatment-no-setup swept ($9.68) and merged; experiment complete. 2/4 held; plan-exists 4/5→0/5 as predicted (+0.09, inside floor); looks-trivial −0.28. Cross-ablation: every ablation improves looks-trivial (0.72 → 0.84/0.92/1.00); no single section owns it. Write-up: PRE-REGISTRATION.md results section for ablation 3. Follow-up decision: skills-2q2k.
+- [x] setup-section ablation swept and merged
