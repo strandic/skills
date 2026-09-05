@@ -1276,6 +1276,65 @@ gate-stopping and the typo guardrail; step 3 is the method's own.
 
 ---
 
+# Results — ablation 4, `treatment-no-recon`, 2026-09-05
+
+One sweep, **$9.67**, merged against the three 2026-09-05 records with nothing re-run (a
+first attempt the same evening hit the session limit on its third case and the runner
+stopped it; $7.40, nothing published, though its two complete cases are quoted below as
+corroboration). Suite `78aa56b`, instrument `a21420ccf879`, condition `4e6a35a2381b`.
+Four-column report: `docs/plans/primer-evals/RESULTS-2026-09-05-no-recon.md`; record
+committed. Every invariant passed on the first merge. Noise floor 0.08.
+
+## The registered predictions against what happened
+
+Contrast is treatment minus `treatment-no-recon`.
+
+| Case | registered | Δ | verdict |
+|---|---|---|---|
+| `gate-stop-step0` | 0 | +0.09 | ✗ just outside the floor (0.08) |
+| `looks-trivial-is-structural` | −1 | **+0.16** | ✗ the opposite sign |
+| `triage-skip-oneliner` | 0 | +0.00 | ✓ |
+| `triage-decompose-epic` | 0 | +0.00 | ✓ |
+
+**Two of four held.** The hypothesis is refuted.
+
+### What happened on `looks-trivial-is-structural`
+
+Without the recon lines the treatment scores 0.72 (runs 0.60 · 0.80 · 1.00 · 1.00 ·
+0.20); the aborted first attempt had it at 0.76 (1.00 · 0.20 · 1.00 · 0.60 · 1.00). With
+them, 0.88. Per grader: both versions have **one implementer in five** (`no-source-edits`
+and `source-untouched` 4 of 5 in each). What the ablated version loses is elsewhere:
+`liveness` 2 of 5 against 4 (two runs wrote a step-0 plan and did not hand control back in
+plain words) and `does-not-skip` 4 of 5 against 5. So the recon material is not what
+licenses the remaining implementer. It was one run in five with the lines and one run in
+five without them, twice.
+
+### What this says about the earlier pattern
+
+Before Amendment 10, every removal helped this case (0.72 → 0.84, 0.92, 1.00). After it,
+the largest removal yet, 37% of the document, does not help and slightly hurts. So "any
+large cut helps" was not the mechanism either. The reading that fits everything measured:
+the old text lacked a stop instruction strong enough to survive the rest of the document,
+and any cut reduced what it had to survive; the new text has one, and cuts now cost
+whatever the cut lines were contributing. The one implementer in five that remains is not
+owned by the triage section, the failure modes, the setup section or the recon material.
+At n=5 it may be the base rate of a Sonnet agent handed a diagnosable bug and a document
+it can see how to finish.
+
+`gate-stop-step0`: +0.09, one grader on one run, and 0.01 outside a floor that came out
+unusually small; not a finding by any reading. `step3-markers-in-source` (capability):
+1.00 on all five ablated runs.
+
+## What this closes
+
+The section-ablation line of work is done: four cuts measured, one skill edit made on
+their evidence and confirmed, and the residual on `looks-trivial-is-structural` is not
+attributable to any part of the document that Tier 1 can isolate. Further Tier 1 sweeps on
+this fixture will not resolve it; what would is more runs per cell (a floor at 0.08 with
+n=5 is luck, not resolution) or Tier 2's outcome measure.
+
+---
+
 ## Earlier measurement — setup choices moved to gate 0
 
 Measured and shipped before the full sweep, and recorded here because this is where the

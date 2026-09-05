@@ -1,11 +1,11 @@
 ---
 # skills-btt2
 title: 'Recon-section ablation: does ''run it, don''t read it'' license implementing at step 0?'
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-09-05T17:28:13Z
-updated_at: 2026-09-05T17:35:48Z
+updated_at: 2026-09-05T20:11:28Z
 parent: skills-c25p
 ---
 
@@ -23,3 +23,8 @@ No Tier 1 case reaches step 4, so this measures the section's side effect on ste
 2026-09-05: built as treatment-no-recon (removeLines variant in build-conditions.mjs; 12 lines, 1315 words vs 2075), registered by Amendment 11 with looks-trivial −1 and the rest 0. Sweep: EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment-no-recon
 - [x] decide the cut and extend the generator
 - [ ] register, sweep, merge — registered; sweep pending
+
+
+
+2026-09-05 22:10: swept ($9.67 after a $7.40 session-limit abort) and merged. looks-trivial +0.16 against a registered −1: refuted. Both versions have one implementer in five; the ablation loses liveness instead. After Amendment 10, cutting 37% of the document does not help, so 'any large cut helps' is out too. Write-up: results section for ablation 4. Section-ablation work closed.
+- [x] register, sweep, merge

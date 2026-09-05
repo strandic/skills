@@ -30,10 +30,16 @@ Six-condition suite total: **$57.06** of published sweeps.
 
 Published total: **$75.66**.
 
+| 2026-09-05 | ablation 4, `treatment-no-recon`, started 19:55 | treatment-no-recon (3 cases) | $7.40 | **stopped by the runner**: session limit hit on the last judge call of the third case; nothing published |
+| 2026-09-05 | ablation 4 restart, started 21:21 | treatment-no-recon | $9.67 | **published**, `RESULTS-2026-09-05-no-recon.md`; 2 of 4 held; `looks-trivial` +0.16 against a registered −1: the recon hypothesis is refuted |
+
+Published total: **$85.33**.
+
 ## Pending
 
-Nothing registered. Candidate next: a recon-section ablation (the one remaining
-implementer opened "Reproduced and fixed"). Probe the judge first:
+Nothing registered, and no further Tier 1 sweep on this fixture is planned: the
+section-ablation work is closed (results section for ablation 4). Probe the judge first
+before any future sweep:
 
 ```bash
 CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude-pinned/2.1.250 -p "Reply with the single word ok." --model opus
