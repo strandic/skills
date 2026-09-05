@@ -26,16 +26,14 @@ is the durable list. Costs are the harness's API-equivalent estimate.
 
 Six-condition suite total: **$57.06** of published sweeps.
 
+| 2026-09-05 | Amendment 10 re-sweep, started 17:49 | treatment, placebo | $18.60 | **published**, `RESULTS-2026-09-05.md`; looks-trivial 0.72 → 0.88, gate-stop 0.94 → 1.00, guardrail intact; placebo looks-trivial 0.92 → 1.00 |
+
+Published total: **$75.66**.
+
 ## Pending
 
-Amendment 10 changed the shipped skill and the placebo (the gate rule restated). Two
-sweeps, treatment and placebo, about $20; the one-liner record stands:
-
-```bash
-EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment,placebo
-```
-
-Probe the judge first:
+Nothing registered. Candidate next: a recon-section ablation (the one remaining
+implementer opened "Reproduced and fixed"). Probe the judge first:
 
 ```bash
 CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude-pinned/2.1.250 -p "Reply with the single word ok." --model opus
