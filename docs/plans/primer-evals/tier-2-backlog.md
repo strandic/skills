@@ -67,9 +67,15 @@ Each ablation is a new condition: the treatment with one section deleted. Three 
   registered by Amendment 7 with all four directions at 0
 - the failure-modes list at the end — **built and swept 2026-09-04** as
   `treatment-no-failure-modes`, Amendment 8: four of four zeros held, no measurable effect
-- the setup section (artifact home, worktree, checkpoints) — **built 2026-09-04** as
-  `treatment-no-setup`, Amendment 9, `gate-stop-step0` registered +1 (Amendment 4.1's
-  evidence), the rest 0
+- the setup section (artifact home, worktree, checkpoints) — **built 2026-09-04, swept
+  2026-09-05** as `treatment-no-setup`, Amendment 9: `plan-exists` 4/5 → 0/5 as
+  predicted, but +0.09 on the case, inside the floor; `looks-trivial` −0.28
+
+**Experiment 1 is complete** (2026-09-05, $30 for the three ablations). Summary in
+PRE-REGISTRATION.md, results section for ablation 3: no section earns its length on a
+triage case; the setup section alone has a visible mechanism (the plan lands in a file);
+and every ablation improves `looks-trivial-is-structural`, where the full treatment
+implements the change in two runs of five.
 
 Each condition is one Tier 1 sweep, about $10 and 35 minutes, and it merges against the
 existing treatment and control records without re-running them: since Amendment 5 the

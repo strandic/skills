@@ -1034,6 +1034,94 @@ is registered next with that prediction.
 
 ---
 
+# Results — ablation 3, `treatment-no-setup`, 2026-09-05
+
+One sweep, **$9.68**, merged against the five records above with nothing re-run (a first
+attempt on 2026-09-04 hit the subscription's usage limit on its second case and the runner
+stopped it at the first thrown grader; $2.91, nothing published). Suite `3049b39`,
+instrument `a21420ccf879`, condition `073435ffd412`. Six-column report:
+`docs/plans/primer-evals/RESULTS-2026-09-05-no-setup.md`; record committed. Every
+invariant passed on the first merge. The six-condition suite has now cost $57.06.
+
+## The registered predictions against what happened
+
+Contrast is treatment minus `treatment-no-setup`.
+
+| Case | registered | Δ | verdict |
+|---|---|---|---|
+| `gate-stop-step0` | +1 | +0.09 | ✗ inside the floor (0.13) |
+| `looks-trivial-is-structural` | 0 | **−0.28** | ✗ the ablated version scores 1.00 on every run |
+| `triage-skip-oneliner` | 0 | +0.00 | ✓ |
+| `triage-decompose-epic` | 0 | +0.07 | ✓ inside the floor |
+
+**Two of four held.** Both misses need reading.
+
+### The +1 that did not clear the floor, and the grader that did
+
+The prediction named a mechanism: without the setup section the plan does not land in a
+file, so `plan-exists` fails. That is exactly what happened: `plan-exists` passed 4 of 5
+treatment runs and **0 of 5** ablated runs, and every other grader on the case was equal or
+better without the section (`liveness` 5 of 5 against 4). The case score moved +0.09
+because one grader lost 4 and another gained 1 out of seven per run, and +0.09 is inside a
+0.13 floor. So the registered sign is right, the registered contrast is not a finding, and
+the rule stands: the case-level number is what was registered, and it did not resolve. The
+grader-level reading is recorded here as description, not as a held prediction.
+
+What the section buys, then, is one thing Tier 1 can see: the step-0 artifact written to
+disk rather than set out in the reply. Whether that is worth 232 words is a design
+question the number does not answer.
+
+### The −0.28, and the pattern across all three ablations
+
+Without the setup section, `looks-trivial-is-structural` scores 1.00 on all five runs:
+every run named the shared counter and stopped with the source untouched. The treatment
+scores 0.72 because two runs in five implement the change in the same turn. Now the same
+case across every condition of this length:
+
+| condition | words | score | runs that implemented |
+|---|---|---|---|
+| treatment | 2004 | 0.72 | 2 of 5 |
+| `treatment-no-failure-modes` | 1704 | 0.84 | 1 of 5 |
+| `treatment-no-triage` | 1888 | 0.92 | 0 of 5 |
+| `treatment-no-setup` | 1772 | 1.00 | 0 of 5 |
+| placebo | 1993 | 0.92 | 0 of 5 |
+
+Every ablation improves this case, and no two remove the same content. Ablation 1's
+reading, that the triage section's "run it" is what licenses running everything, is still
+consistent with its own row, but it cannot explain the no-setup row, which keeps the
+triage section and does better still. The reading that fits all five rows is that the
+treatment, as a whole, gives the agent enough to do on a structural request that two runs
+in five do it, and removing any sizeable part of it tips those runs back to stopping. The
+placebo, at the same length but with no method content, also stops. Length alone is not
+it either, then: it is the treatment's content, in aggregate, and no single section owns
+it. At five runs per cell this is a pattern worth registering as the next hypothesis, not
+a result.
+
+`step3-markers-in-source` (capability): 0.93 (runs 1.00 · 1.00 · 1.00 · 0.67 · 1.00), no
+restart this time.
+
+## What the three ablations support, together
+
+On the five behaviours Tier 1 measures, at five runs per arm and a 0.13 floor:
+
+1. **No section earns its length on any triage case.** Removing the triage section, the
+   failure-modes list or the setup section leaves `triage-skip-oneliner` and
+   `triage-decompose-epic` inside the floor.
+2. **The setup section is the only one with a visible mechanism**, and it is a small one:
+   it puts the step-0 artifact in a file (`plan-exists` 4 of 5 against 0 of 5) without
+   moving the case score outside the floor.
+3. **The treatment under-performs its own ablations on `looks-trivial-is-structural`**,
+   consistently: 0.72 against 0.84, 0.92 and 1.00, and against a placebo at 0.92. Two runs
+   in five implement instead of stopping. This is the one Tier 1 result that argues for
+   changing the shipped skill, and it argues for making it do less, not more.
+
+The section-ablation experiment is complete. What it did not test: the steps list itself,
+the deliverables list, and the recon section (no Tier 1 case reaches step 4). What it
+cannot say: anything about the software that comes out, which is Tier 2's second
+experiment.
+
+---
+
 ## Earlier measurement — setup choices moved to gate 0
 
 Measured and shipped before the full sweep, and recorded here because this is where the

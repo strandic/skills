@@ -21,10 +21,16 @@ is the durable list. Costs are the harness's API-equivalent estimate.
 
 | 2026-09-04 | ablation 2, `treatment-no-failure-modes`, started 15:13 | treatment-no-failure-modes | $9.99 | **published**, `RESULTS-2026-09-04-no-failure-modes.md`; 4 of 4 registered zeros held |
 
+| 2026-09-04 | ablation 3, `treatment-no-setup`, started 16:29 | treatment-no-setup (1 case + part) | $2.91 | **stopped by the runner** at the second case: the subscription usage limit was hit, 10 of 10 graders threw, the new thrown-grader stop ended it. Nothing published |
+| 2026-09-05 | ablation 3 rerun, started 16:21 | treatment-no-setup | $9.68 | **published**, `RESULTS-2026-09-05-no-setup.md`; 2 of 4 held; `plan-exists` 4/5 → 0/5 as predicted but +0.09 inside the floor; `looks-trivial` −0.28 |
+
+Six-condition suite total: **$57.06** of published sweeps.
+
 ## Pending
 
-The third ablation (setup section), one sweep against the 2026-09-04 records. Probe the
-judge first:
+Nothing registered. The section-ablation experiment is complete; see the results
+section for ablation 3 in PRE-REGISTRATION.md for what it supports. Before any further
+sweep, probe the judge first:
 
 ```bash
 CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude-pinned/2.1.250 -p "Reply with the single word ok." --model opus
