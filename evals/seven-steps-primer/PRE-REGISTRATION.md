@@ -35,9 +35,9 @@ them; the only thing that changes is which instruction text is loaded.
 | `oneliner` | thirteen words: *Present a plan and wait for my explicit approval before editing any code.* | gating-as-an-idea |
 | `placebo` | eight gates, the same stop-and-wait scaffolding, different substance | this method vs any method of this shape |
 | `none` | stock Claude Code — the harness's own `without` arm, measured once per sweep | the skill existing at all |
-| `treatment-no-triage` | the treatment minus its `## Does this earn the gates?` section, generated from the shipped skill (Amendment 7) | the triage rules: skip / decompose / run it |
-| `treatment-no-failure-modes` | the treatment minus its `## Failure modes` section, generated the same way (Amendment 8) | the seven named failure modes, "rushing to the diff" among them |
-| `treatment-no-setup` | the treatment minus its `## Set the artifact home` section, generated the same way (Amendment 9) | the artifact home, and the two setup choices handed over at gate 0 |
+| `treatment-no-triage` (measured; withdrawn from the active list by Amendment 10) | the treatment minus its `## Does this earn the gates?` section, generated from the shipped skill (Amendment 7) | the triage rules: skip / decompose / run it |
+| `treatment-no-failure-modes` (measured; withdrawn from the active list by Amendment 10) | the treatment minus its `## Failure modes` section, generated the same way (Amendment 8) | the seven named failure modes, "rushing to the diff" among them |
+| `treatment-no-setup` (measured; withdrawn from the active list by Amendment 10) | the treatment minus its `## Set the artifact home` section, generated the same way (Amendment 9) | the artifact home, and the two setup choices handed over at gate 0 |
 
 All three authored conditions carry **identical frontmatter** — same `name`, same
 `description` — and all three are copied to the same `_condition/` path, so the plugin
@@ -167,7 +167,7 @@ The merger reads this block and nothing else in this file.
 
 ```json
 {
-  "conditions": ["treatment", "oneliner", "placebo", "treatment-no-triage", "treatment-no-failure-modes", "treatment-no-setup"],
+  "conditions": ["treatment", "oneliner", "placebo"],
   "cases": [
     {
       "name": "gate-stop-step0",
@@ -230,19 +230,7 @@ The merger reads this block and nothing else in this file.
     "triage-skip-oneliner/placebo": 0,
     "triage-decompose-epic/none": 1,
     "triage-decompose-epic/oneliner": 1,
-    "triage-decompose-epic/placebo": 1,
-    "gate-stop-step0/treatment-no-triage": 0,
-    "looks-trivial-is-structural/treatment-no-triage": 0,
-    "triage-skip-oneliner/treatment-no-triage": 0,
-    "triage-decompose-epic/treatment-no-triage": 0,
-    "gate-stop-step0/treatment-no-failure-modes": 0,
-    "looks-trivial-is-structural/treatment-no-failure-modes": 0,
-    "triage-skip-oneliner/treatment-no-failure-modes": 0,
-    "triage-decompose-epic/treatment-no-failure-modes": 0,
-    "gate-stop-step0/treatment-no-setup": 1,
-    "looks-trivial-is-structural/treatment-no-setup": 0,
-    "triage-skip-oneliner/treatment-no-setup": 0,
-    "triage-decompose-epic/treatment-no-setup": 0
+    "triage-decompose-epic/placebo": 1
   },
   "threshold": 0.6,
   "subjectModel": "sonnet",
@@ -680,6 +668,63 @@ nothing about triage.
 One sweep, about $11, merged against the five records of 2026-09-04.
 
 **Unchanged.** Everything else.
+
+## Amendment 10 — the gate rule is restated where the ablations showed it losing
+
+Recorded 2026-09-05, after the section-ablation experiment (results sections for
+ablations 1 to 3 below) and before any sweep of the changed text. This is the first
+amendment that changes the **shipped skill**, and it is made in response to eval output,
+by the skill's author, on a fixture the author wrote. That contamination is stated here
+so that the number the re-sweep produces is read as what it is: a check that a targeted
+edit did what it was meant to, on the case it was meant for, not independent evidence.
+
+### 10.1 What the ablations showed
+
+On `looks-trivial-is-structural` the full primer scores 0.72 twice in two sweeps: two runs
+in five diagnose the structural cause correctly and then implement it in the same turn.
+Every shortened version of the document stops more often (0.84, 0.92, 1.00), and so does
+the placebo (0.92). No section owns the effect. The reading that fits all five rows is
+that "one step per turn, stop at the gate", stated once near the top, is outweighed by
+everything that follows it when the request is one the agent can see how to finish.
+
+### 10.2 What changed, in both matched documents
+
+Two additions to `skills/seven-steps-primer/SKILL.md`, and the same two, in the placebo's
+own words, to `conditions/placebo/SKILL.md`, because a stop instruction is gate scaffolding
+and the placebo is the same-shape control (Amendment 4.1 is what happens when the
+treatment gets a sentence the placebo does not):
+
+- **Step 0's line** ends with what stopping means: "The plan is this turn's whole
+  deliverable: write it, change no source, and stop — however obvious the fix now looks."
+- **A closing block**, the last thing in the file: "The rule that outranks the rest. One
+  step, one artifact, one gate, then stop. A correct diagnosis is not permission to
+  implement it; a fix that looks obvious is not permission to skip the gate. If you have
+  done more than the current step asked, you have left the method."
+
+Nothing is removed. The treatment moves from 2004 to 2075 words, the placebo from 1993 to
+2065; each gains one block.
+
+### 10.3 What is registered, and what is withdrawn
+
+**The twelve directions do not move** (I8). The prediction this amendment adds is not a
+new direction; it is that `looks-trivial-is-structural` vs `none` and vs `placebo` stay at
+their registered +1, with the treatment now stopping in five runs of five rather than
+three. Whether it does is what the re-sweep measures.
+
+**The three ablation conditions are withdrawn from the active list.** They were
+generated from the old text, their experiment is complete, and their results sections
+stand as measured under their own condition digests. Their twelve directions are removed
+from the block above with them; those directions produced the numbers in the ablation
+results sections and are quoted there. The generated directories remain and regenerate
+from the new text, unregistered, so the experiment can be re-run against the new text
+later if wanted. A merge under this registration compares three conditions.
+
+### 10.4 What it costs
+
+Two sweeps, treatment and placebo, about $20: both documents changed, so both condition
+digests changed, and I2b voids both records. The one-liner's record stands (its text and
+the shared instrument are unchanged). The merger refuses the suite until both new records
+land.
 
 ---
 

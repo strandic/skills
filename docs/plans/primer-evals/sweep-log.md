@@ -28,9 +28,14 @@ Six-condition suite total: **$57.06** of published sweeps.
 
 ## Pending
 
-Nothing registered. The section-ablation experiment is complete; see the results
-section for ablation 3 in PRE-REGISTRATION.md for what it supports. Before any further
-sweep, probe the judge first:
+Amendment 10 changed the shipped skill and the placebo (the gate rule restated). Two
+sweeps, treatment and placebo, about $20; the one-liner record stands:
+
+```bash
+EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment,placebo
+```
+
+Probe the judge first:
 
 ```bash
 CLAUDE_CODE_WALNUT_SPIRE=1 ~/.local/share/claude-pinned/2.1.250 -p "Reply with the single word ok." --model opus
