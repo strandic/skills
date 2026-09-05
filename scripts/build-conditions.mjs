@@ -50,6 +50,24 @@ export const ABLATIONS = {
   'treatment-no-triage': { section: '## Does this earn the gates?' },
   'treatment-no-failure-modes': { section: '## Failure modes' },
   'treatment-no-setup': { section: '## Set the artifact home' },
+  // Not a section: step 4 is a list item. The step line itself stays, so the steps still
+  // number 0 to 7; what goes is every line that says recon is a RUN — the eight
+  // sub-bullets under step 4 and the four failure modes about running, reproducing and
+  // evidence from runs. Each entry is a line prefix, matched exactly at column 0.
+  'treatment-no-recon': { lines: [
+    '  - **Recon is a run, not a read.**',
+    '  - **Run every seam',
+    '  - **Name the excuse and refuse it**',
+    '  - **An environment that blocks the run',
+    '  - **Run the whole path',
+    '  - **Tests are part of the run.**',
+    '  - **Close the loop before you revert',
+    '  - **Output = corrected artifacts',
+    '- **Trusting the shipped half**',
+    '- **Reading in place of running**',
+    '- **Reporting the break instead of fixing the artifact**',
+    '- **Verdicts without evidence**',
+  ] },
 };
 
 export const paths = {
@@ -138,6 +156,31 @@ export function removeSection(markdown, heading) {
 }
 
 /**
+ * RemoveLines — the text minus every line that starts with one of the given prefixes.
+ * Whole lines only, matched at column 0; every other byte is untouched. A prefix that
+ * matches nothing THROWS, for the same reason as {@link removeSection}: an ablation that
+ * removed less than it says would measure something other than what was registered.
+ *
+ * @param {string} markdown
+ * @param {string[]} prefixes
+ * @returns {string}
+ */
+export function removeLines(markdown, prefixes) {
+  const all = lines(markdown);
+  const hit = new Set();
+  const kept = all.filter((line) => {
+    const p = prefixes.find((prefix) => line.startsWith(prefix));
+    if (p === undefined) return true;
+    hit.add(p);
+    return false;
+  });
+  const missed = prefixes.filter((p) => !hit.has(p));
+  if (missed.length > 0)
+    throw new Error(`removeLines: no line starts with ${missed.map((m) => JSON.stringify(m)).join(', ')} — the ablation would remove less than it says`);
+  return kept.join('');
+}
+
+/**
  * Numbered lines, without the empty element a trailing newline leaves behind — so
  * "line 12" means what a reader's editor says it means, and a file that merely ends
  * one line sooner reports as ending sooner rather than as a mismatch against ''.
@@ -213,7 +256,9 @@ export async function buildAblation(read, where, id) {
   const spec = ABLATIONS[id];
   if (!spec) throw new Error(`buildAblation: '${id}' is not a declared ablation`);
   const { generated } = await buildTreatment(read, where);
-  return removeSection(generated, spec.section);
+  if (spec.section) return removeSection(generated, spec.section);
+  if (spec.lines) return removeLines(generated, spec.lines);
+  throw new Error(`buildAblation: '${id}' declares neither a section nor lines`);
 }
 
 /**
@@ -301,7 +346,8 @@ export async function main(argv) {
     if (!stripped) console.error(NO_FLAG);
     console.log(`wrote ${show(paths.treatmentMirror)} — ${bytes} bytes, flag ${stripped ? 'stripped' : 'absent'}`);
     for (const [id, n] of Object.entries(ablations))
-      console.log(`wrote ${show(paths.ablations[id])} — ${n} bytes, minus ${JSON.stringify(ABLATIONS[id].section)}`);
+      console.log(`wrote ${show(paths.ablations[id])} — ${n} bytes, minus ` +
+        (ABLATIONS[id].section ? JSON.stringify(ABLATIONS[id].section) : `${ABLATIONS[id].lines.length} lines`));
     return 0;
   }
 
@@ -309,7 +355,7 @@ export async function main(argv) {
   if (!stripped) console.error(NO_FLAG);
   if (!drifted) {
     console.log(`no drift — ${show(paths.treatmentMirror)} is ${show(paths.shippedSkill)} minus the flag` +
-      (Object.keys(paths.ablations).length ? `, and ${Object.keys(paths.ablations).join(', ')} each minus one section` : ''));
+      (Object.keys(paths.ablations).length ? `, and ${Object.keys(paths.ablations).join(', ')} each minus its declared cut` : ''));
     return 0;
   }
   console.error(`DRIFT: a generated condition is not ${show(paths.shippedSkill)} minus what it should be`);

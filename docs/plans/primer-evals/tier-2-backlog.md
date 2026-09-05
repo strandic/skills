@@ -71,7 +71,12 @@ Each ablation is a new condition: the treatment with one section deleted. Three 
   2026-09-05** as `treatment-no-setup`, Amendment 9: `plan-exists` 4/5 → 0/5 as
   predicted, but +0.09 on the case, inside the floor; `looks-trivial` −0.28
 
-**Experiment 1 is complete** (2026-09-05, $30 for the three ablations). Summary in
+- the recon material (step 4's sub-bullets and four failure modes) — **built 2026-09-05**
+  as `treatment-no-recon`, Amendment 11, after the Amendment 10 re-sweep left one
+  implementer that opened "Reproduced and fixed"; `looks-trivial` registered −1
+
+**Experiment 1 is complete** (2026-09-05, $30 for the three section ablations; the recon
+cut is a follow-up). Summary in
 PRE-REGISTRATION.md, results section for ablation 3: no section earns its length on a
 triage case; the setup section alone has a visible mechanism (the plan lands in a file);
 and every ablation improves `looks-trivial-is-structural`, where the full treatment
