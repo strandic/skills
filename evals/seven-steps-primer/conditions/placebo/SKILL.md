@@ -27,7 +27,7 @@ The record needs a home in _this_ repo (default `docs/notes/<change>/`) — unna
 
 ## The steps
 
-- **0 — the brief.** The request in your own words: what is being asked, which parts of the repo it lands in, what would have to be true for it to be worth doing, and what you do not yet know. Write the unknowns as questions with names attached, not as a shrug. A brief nobody disputes is a brief nobody read. **Gate.**
+- **0 — the brief.** The request in your own words: what is being asked, which parts of the repo it lands in, what would have to be true for it to be worth doing, and what you do not yet know. Write the unknowns as questions with names attached, not as a shrug. A brief nobody disputes is a brief nobody read. The brief is this turn's whole deliverable: write it, change no source, and stop — however obvious the change now looks. **Gate.**
 - **1 — the vocabulary.** Every noun the change introduces, spelled once and spelled that way everywhere afterwards. Names and nothing else — no behaviour, no shapes, no structure hiding inside a name. A name you cannot define in one clause is two names you have not separated yet. **Gate.**
 - **2 — the inventory.** Everything the change touches that you did not write: callers, config keys, dependencies, environment variables, fixtures. Quote each one with the version or value actually in play here, taken from the file it came from and **never from memory**, because memory is where the stale value survives. **Gate.**
 - **3 — the walkthrough.** The change narrated end to end in the order a reader meets it, in prose, using the names from step 1 and inventing **nothing** past them. If a hop cannot be narrated without a name or a caller you never listed, the inventory is short an entry: go back and add it. **Gate.**
@@ -61,3 +61,5 @@ A step whose artifact is a file (2, 4, 5) is **not** satisfied by a sentence pro
 - **Self-clearing** — the agent declaring a gate cleared. **Only the human clears a gate.**
 - **Racing ahead** — starting a later step while an earlier one is still open. Seeing the next step is not licence to begin it; each step produces only its own artifact.
 - **Stopping at the diff** — the change shipped and step 7 never happened, so the record ends one step before the only step that checks whether anyone else can use it.
+
+**The rule that outranks the rest.** One step, one artifact, one gate, then stop. A finished brief is not permission to make the change; a change that looks obvious is not permission to skip the gate. If you have done more than the current step asked, you have left the record.

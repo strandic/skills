@@ -21,7 +21,7 @@ Triage before starting — the method is tuned for **medium, structural** change
 
 ## The steps
 
-- **0 — research & plan.** Read the code and the constraints. Produce: scope, module placement, test strategy, the open questions for the human, and the _style_ question — does the artifact style match the house style? Wrong designs die cheapest here. **Gate.**
+- **0 — research & plan.** Read the code and the constraints. Produce: scope, module placement, test strategy, the open questions for the human, and the _style_ question — does the artifact style match the house style? Wrong designs die cheapest here. The plan is this turn's whole deliverable: write it, change no source, and stop — however obvious the fix now looks. **Gate.**
 - **1 — data structures.** The types and nothing else. **Gate.**
 - **2 — interfaces.** Signatures and nothing else — one pure function per unit of behaviour where the domain allows. Every parameter that is a runtime handle — a live resource the signature _receives_ rather than constructs — must name who builds the real instance in the real environment, or it is flagged as an open seam: an injected dependency reads as clean precisely because it defers that question, so **no un-provided dependency reaches a later step unflagged**. **Gate.**
 - **3 — to-dos.** Place a literal marker (a `TODO` comment) **in the source at every site** where code will change — enumerated, not described. _A list in a planning doc does not satisfy this step_: the markers live in the code so step 4 can implement directly onto them, and their absence is grep-able. Every site, or the step isn't done. **Gate.**
@@ -55,3 +55,5 @@ A step whose artifact lives in code (3, 4, 6) is **not** satisfied by a document
 - **Reading in place of running** — you inspected instead of ran: traced the source, waved through the seam you were sure of, priced the run as not worth it. Inspection can't fail, so it isn't recon, and the false premise hides in the certainty you skipped — run every seam, hardest the one you'd skip.
 - **Reporting the break instead of fixing the artifact** — you logged what broke and reverted, losing the fix with the spike. A break is a defect in the prior step's artifact (0 premise / 1 type / 2 seam / 3 site): fix it in place and re-clear that gate _before_ the revert, which discards the spike, never the corrections.
 - **Verdicts without evidence** — the report says "works" with no command and no observed mechanism. Show the real run and what you saw (the value that stripped-not-rejected, the status that routed); no observed-run evidence, no passed gate.
+
+**The rule that outranks the rest.** One step, one artifact, one gate, then stop. A correct diagnosis is not permission to implement it; a fix that looks obvious is not permission to skip the gate. If you have done more than the current step asked, you have left the method.
