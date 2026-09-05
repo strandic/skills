@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-09-04T12:56:34Z
-updated_at: 2026-09-05T15:48:25Z
+updated_at: 2026-09-05T17:28:13Z
 ---
 
 Finding from ablation 1 (PRE-REGISTRATION.md, results section for treatment-no-triage, 2026-09-04): with the '## Does this earn the gates?' section the agent names the shared counter 5/5 (does-not-skip passes) but 2/5 runs then implement the change in the same turn (no-source-edits, source-untouched, liveness fail). Without the section 5/5 stop. Δ −0.20, outside the 0.13 floor, registered 0.
@@ -26,3 +26,8 @@ Decided 2026-09-05: option 1, strengthen the stop and cut nothing. SKILL.md step
 - [x] decide: option 1
 - [x] change SKILL.md, regenerate conditions, amendment
 - [ ] treatment + placebo sweep, merge, results section
+
+
+
+2026-09-05 19:23: re-swept ($18.60). looks-trivial 0.72 → 0.88 (4/5 stop; the one implementer opened 'Reproduced and fixed'), gate-stop 0.94 → 1.00, skip-oneliner 1.00 (guardrail intact), step3 0.93. Placebo with the same sentence: looks-trivial 1.00. Published in RESULTS-2026-09-05.md and the pre-registration.
+- [x] treatment + placebo sweep, merge, results section

@@ -1167,6 +1167,64 @@ experiment.
 
 ---
 
+# Results — after Amendment 10, 2026-09-05
+
+Treatment and placebo re-swept on the amended text, **$18.60**; the one-liner record is
+the 2026-09-04 one, unchanged, and merged with them under Amendment 5. Suite `ce5814d`,
+instrument `a21420ccf879`, conditions `503291b82253` / `69937f816b3e` /
+`0ddcff104f11`. Report: `docs/plans/primer-evals/RESULTS-2026-09-05.md`; records
+committed under `records/2026-09-05/`. Every invariant passed on the first merge.
+
+**Noise floor: 0.08.** Smaller than before (0.13): the three `none` columns happened to
+agree more closely this time, so more contrasts clear it.
+
+## The registered predictions against what happened
+
+| Case | vs `none` | vs `oneliner` | vs `placebo` |
+|---|---|---|---|
+| `gate-stop-step0` | +1 → **+0.70 ✓** | +1 → **+0.23 ✓** | 0 → **~0 ✓** |
+| `looks-trivial-is-structural` | +1 → **+0.52 ✓** | +1 → **~0 ✗** | +1 → **−0.12 ✗** |
+| `triage-skip-oneliner` | 0 → **~0 ✓** | 0 → **+0.67 ✗** | 0 → **~0 ✓** |
+| `triage-decompose-epic` | +1 → **+0.22 ✓** | +1 → **~0 ✗** | +1 → **~0 ✗** |
+
+**Seven of twelve held**, the same seven as on 2026-09-04.
+
+## What the amendment did
+
+Amendment 10 predicted one thing: that the treatment would stop on
+`looks-trivial-is-structural` in five runs of five rather than three. It stopped in
+**four**. The case moved from 0.72 to 0.88 (runs 1.00 · 1.00 · 0.40 · 1.00 · 1.00), and
+`gate-stop-step0` moved from 0.94 to 1.00 on every run, with `triage-skip-oneliner`
+still 1.00 on every run: the stronger stop added no ceremony to a typo fix. That is the
+edit doing what it was meant to, on the cases it was meant for, at a size the floor can
+see, and it is read with the contamination Amendment 10 stated.
+
+**The placebo, given the same sentence, stops in five of five** (1.00, from 0.92), and
+its `gate-stop-step0` moved from 0.89 to 0.94. So the sentence works on both documents,
+and the treatment still carries something the placebo does not that licenses one run in
+five to implement. That run's reply opens "Reproduced and fixed": it ran a reproduction
+of the symptom, then keyed the throttle per user. Reproducing by running is the primer's
+own step-4 vocabulary (recon is a run, not a read), and the placebo has no equivalent. At
+one run this is a hypothesis for the next ablation, not a finding: that the recon
+section's "run it, don't read it" is what the remaining implementer is obeying.
+
+`step3-markers-in-source` (capability): treatment 0.93 (runs 0.67 · 1.00 · 1.00 · 1.00 ·
+1.00), placebo 0.00 on every run.
+
+## What this supports, at the claim ceiling
+
+> With the primer loaded, the agent produces one step's artifact and stops, holds that
+> under task pressure, and does not add ceremony to work that does not need it — measured
+> against no skill, a one-line equivalent, and a same-shape placebo.
+
+The sentence holds, and holds better than before on its first clause: gate-stopping is
+now 1.00 in five of five against 0.30 with no skill. The rest of the reading is unchanged
+from 2026-09-04: the same-shape placebo produces the same behaviour, so none of it is
+attributable to the primer's method content; against one sentence the advantage is
+gate-stopping and the typo guardrail; step 3 is the method's own.
+
+---
+
 ## Earlier measurement — setup choices moved to gate 0
 
 Measured and shipped before the full sweep, and recorded here because this is where the

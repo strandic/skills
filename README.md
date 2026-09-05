@@ -49,18 +49,18 @@ and a placebo carrying the same eight gates with arbitrary contents. The one-lin
 whether 11KB beats one sentence; the placebo asks whether it is *this* method or any
 method of that shape.
 
-**What the sweep found** (2026-09-04, 150 runs, ~$27 API-equivalent, `sonnet`
-subject / `opus` judge, noise floor 0.13; it reproduces a 2026-09-03 sweep on a corrected
-instrument, and a first sweep on 2026-09-01 was withdrawn after review found defects in
-the placebo and four graders):
+**What the sweep found** (2026-09-05, 150 runs, ~$27 API-equivalent, `sonnet`
+subject / `opus` judge, noise floor 0.08; the fourth full measurement, after a skill
+edit the section ablations motivated; earlier sweeps and a withdrawn first one are in the
+pre-registration):
 
 | Behaviour | vs no skill | vs one sentence | vs same-shape placebo |
 |---|---|---|---|
-| Produces step 0 and stops | +0.66 | **+0.17** | +0.06 — noise |
+| Produces step 0 and stops | +0.70 | **+0.23** | +0.06 — noise |
 | Adds no ceremony to a typo fix | 0.00 — noise | **+0.67** | 0.00 — noise |
-| Recognises a structural change | +0.33 | −0.08 — noise | **−0.20** |
-| Decomposes an epic | +0.27 | +0.07 — noise | 0.00 — noise |
-| Places markers in source | — | **0.80 vs 0.00** | **0.80 vs 0.00** |
+| Recognises a structural change | +0.52 | +0.08 — noise | **−0.12** |
+| Decomposes an epic | +0.22 | +0.07 — noise | 0.00 — noise |
+| Places markers in source | — | **0.93 vs 0.00** | **0.93 vs 0.00** |
 
 Section ablations (the primer minus one section, one ~$10 sweep each merged against the
 same records) then asked which parts of the document earn their length. The triage
@@ -70,9 +70,14 @@ was structural and then implemented it in the same turn instead of stopping at t
 The failure-modes list moved nothing at all. The setup section is the only one with a
 visible mechanism (without it the step-0 plan never lands in a file, 4 of 5 to 0 of 5),
 and even that stays inside the noise floor at the case level. Every ablation improved the
-structural-change case, so the over-eagerness there belongs to the whole document rather
-than to any one section. Full reads in `evals/seven-steps-primer/PRE-REGISTRATION.md`,
-results sections for ablations 1 to 3.
+structural-change case, so the over-eagerness there belonged to the whole document rather
+than to any one section. The skill was then edited once, on that evidence: the gate rule
+is restated at step 0 and at the end of the document (Amendment 10, with its contamination
+stated). Re-measured, the primer stops on the structural case in four runs of five instead
+of three, and at gate 0 in five of five, with the typo guardrail intact; the placebo given
+the same sentence stops in five of five. Full reads in
+`evals/seven-steps-primer/PRE-REGISTRATION.md`, results sections for ablations 1 to 3 and
+for Amendment 10.
 
 Read honestly: against no instruction the primer clearly changes behaviour. Against one
 good sentence it wins on gate-stopping and on *not* over-planning a triviality, and ties
