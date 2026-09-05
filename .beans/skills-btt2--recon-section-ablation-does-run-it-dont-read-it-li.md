@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-05T17:28:13Z
-updated_at: 2026-09-05T17:28:13Z
+updated_at: 2026-09-05T17:35:48Z
 parent: skills-c25p
 ---
 
@@ -17,3 +17,9 @@ No Tier 1 case reaches step 4, so this measures the section's side effect on ste
 
 - [ ] decide the cut and extend the generator
 - [ ] register, sweep, merge
+
+
+
+2026-09-05: built as treatment-no-recon (removeLines variant in build-conditions.mjs; 12 lines, 1315 words vs 2075), registered by Amendment 11 with looks-trivial −1 and the rest 0. Sweep: EVAL_CLAUDE_BIN=~/.local/share/claude-pinned/2.1.250 node scripts/run-evals.mjs --condition treatment-no-recon
+- [x] decide the cut and extend the generator
+- [ ] register, sweep, merge — registered; sweep pending

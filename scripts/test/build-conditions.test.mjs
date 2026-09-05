@@ -12,7 +12,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { stripModelInvocation, detectDrift, check, paths, removeSection, buildAblation, ABLATIONS } from '../build-conditions.mjs';
+import { stripModelInvocation, detectDrift, check, paths, removeSection, removeLines, buildAblation, ABLATIONS } from '../build-conditions.mjs';
 
 const FLAG = 'disable-model-invocation';
 
@@ -185,11 +185,19 @@ test('removeSection refuses a heading it cannot find — an ablation that remove
   assert.throws(() => removeSection(DOC, '## drop me'), /would remove nothing/, 'verbatim, case included');
 });
 
-test('every declared ablation names a section the shipped skill actually has', async () => {
+test('removeLines drops exactly the lines with the given prefixes, whole lines, and refuses a prefix that hits nothing', () => {
+  const doc = '- **4 — recon.** Keep.\n  - **Run it.** Drop.\n  - **Keep this.**\n- **Verdicts** drop\nTail.\n';
+  assert.equal(removeLines(doc, ['  - **Run it.**', '- **Verdicts**']), '- **4 — recon.** Keep.\n  - **Keep this.**\nTail.\n');
+  assert.throws(() => removeLines(doc, ['  - **Run it.**', '- **Nowhere**']), /no line starts with "- \*\*Nowhere\*\*"/);
+  assert.throws(() => removeLines(doc, ['**Run it.**']), /remove less than it says/, 'column 0, not substring');
+});
+
+test('every declared ablation names a section or lines the shipped skill actually has', async () => {
   const shipped = await readFile(paths.shippedSkill, 'utf8');
   for (const [id, spec] of Object.entries(ABLATIONS)) {
     const out = await buildAblation(async () => shipped, { shippedSkill: 'x' }, id);
-    assert.ok(!out.includes(`${spec.section}\n`), `${id}: the section is gone`);
+    if (spec.section) assert.ok(!out.includes(`${spec.section}\n`), `${id}: the section is gone`);
+    for (const p of spec.lines ?? []) assert.ok(!out.split('\n').some((l) => l.startsWith(p)), `${id}: ${p} is gone`);
     assert.ok(out.length < shipped.length, `${id}: shorter than the shipped skill`);
     assert.ok(out.startsWith('---\nname: seven-steps-primer\n'), `${id}: identical frontmatter name`);
     assert.ok(!/^disable-model-invocation/m.test(out), `${id}: the flag is stripped like the treatment`);
