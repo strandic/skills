@@ -7,9 +7,13 @@
  *
  * The split: everything that decides something is pure; everything that touches
  * the world takes a named runtime handle first. Each handle names who builds the
- * real instance — three cannot yet be named and are marked OPEN SEAM.
+ * real instance — three could not be named at step 2 of the first feature and were
+ * marked OPEN SEAM until recon resolved them. The second feature's seams are marked
+ * the same way and listed in its own step-2 document.
  *
- * Rationale and call-flow diagrams: `docs/plans/primer-evals/2-interfaces.md`.
+ * Rationale and call-flow diagrams: `docs/plans/primer-evals/2-interfaces.md`; the
+ * grader-group, suite, ledger and isolation signatures:
+ * `docs/plans/primer-evals/defect-injection/2-interfaces.md`.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -163,6 +167,38 @@
  *
  * Argument order is load-bearing: the target path must precede `--tag`,
  * `--allow-tools` and `--json`, each of which will otherwise consume it.
+ *
+ * Two optional pass-throughs, absent by default so every Tier 1 argv is unchanged:
+ * `inv.maxCostUsd` becomes `--max-cost-usd <n>` and `inv.keepTemp` becomes `--keep-temp`.
+ * A ceiling of zero or a negative number is refused here rather than by the harness.
+ */
+
+/**
+ * @callback ResolveSuite
+ * @param {string[]} argv
+ * @param {string} repoRoot
+ * @returns {{ suite: SuitePaths, rest: string[] }}
+ *
+ * Pure. Takes `--suite <dir>` out of the argv and returns the paths for that suite,
+ * built by `suitePathsFor`, plus the remaining arguments for the ordinary parser. With
+ * no flag the suite is the one the runner has always swept. The directory must sit
+ * directly under `evals/` and hold a `PRE-REGISTRATION.md`; anything else is refused
+ * before a spend. The runner's module-level `paths` constant stops being the only
+ * instance: every caller that took it by default takes the resolved suite instead.
+ */
+
+/**
+ * @callback ReadDeclaredEvidence
+ * @param {Record<string, unknown>} caseYaml  the flattened `case.yaml`, dotted keys
+ * @returns {{ evidence: EvidenceKind, ablation: 'none'|'with-without', declared: boolean }}
+ *
+ * Pure. The rule `readCaseSpec` applies. Derived by default: a `context.history_file`
+ * makes the case `capability`/`none`, anything else `delta`/`with-without`. Declared
+ * when the yaml carries BOTH `evidence` and `ablation` at the top level: the declared
+ * pair wins and `declared` is true. A declared pair that is `delta`+`none` or
+ * `capability`+`with-without` is refused, the same two pairs the registration refuses.
+ * One field declared without the other is refused too — half a declaration is a
+ * derivation wearing a label.
  */
 
 /**
@@ -230,6 +266,12 @@
  * argv already built, plus the files that must exist before the first one spends
  * anything. These decisions used to live in the entry point, where `BuildEvalArgv` could
  * be pinned byte for byte while the caller passed it the wrong arguments unobserved.
+ *
+ * `args.runs` is supplied by the entry point from the registration's `runsPerCase`
+ * unless `--runs` overrides it. The code constant that used to supply it is gone: two
+ * unlinked copies of one number were how a sweep could be refused by I1c after it had
+ * been paid for. `args` also carries `maxCostUsd` and `keepTemp`, copied onto every
+ * invocation.
  */
 
 /**
@@ -341,6 +383,12 @@
  *
  * Pure. Splits rows by {@link EvidenceKind} into two arrays so delta and
  * capability results cannot be averaged together by omission.
+ *
+ * For a case registered with `contrasts: 'groups'`, the row's `contrasts` stays empty,
+ * no case-level pair is formed, and the group fields on {@link MergedCaseRow} are
+ * filled from {@link ExtractGroupRunScores}, {@link ComputeDifferenceRunScores},
+ * {@link ComputeGroupContrasts} and {@link CountRuns}. The harness score is still
+ * read into `conditionScores`, because it is printed; it is not contrasted.
  */
 
 /**
@@ -361,6 +409,247 @@
  * Pure. Delta and capability tables under separate headings, noise floor beside
  * them: a contrast at or below the spread (within NOISE_EPSILON) must not read as a
  * finding.
+ *
+ * A row with groups prints one table per group: the score per condition and `none`,
+ * then its contrasts, each with the floor it was judged against and the floor's parts.
+ * A group whose floor is zero prints its scores and the word unmeasurable where its
+ * contrasts would be. The three counts per condition and arm print beside the group
+ * scores. A row whose case is registered `contrasts: 'groups'` prints its harness score
+ * with no contrast column and a note that none was registered.
+ */
+
+/**
+ * @callback ExtractGroupRunScores
+ * @param {HarnessDocument} doc
+ * @param {string} caseName
+ * @param {GradersGroup} group
+ * @returns {{ with: (number|null)[], without: (number|null)[] }}
+ *
+ * Pure. Every run's score on this group, in run order, never a mean. Per run: the
+ * weight of the named graders that passed over the weight of the named graders that were
+ * scored — the harness's own arithmetic, with `withOnly` graders left out of both. A
+ * run in which no named grader was scored, and a run whose paid graders were skipped by
+ * a cost ceiling, is `null` in its position rather than dropped, so the caller can count
+ * it. A grader name the case does not carry is refused, not ignored.
+ */
+
+/**
+ * @callback ComputeDifferenceRunScores
+ * @param {(number|null)[]} minuend
+ * @param {(number|null)[]} subtrahend
+ * @returns {(number|null)[]}
+ *
+ * Pure. Position by position, minuend minus subtrahend; `null` where either is null.
+ * Refuses arrays of different length — the two groups were scored on the same runs or
+ * they were not.
+ */
+
+/**
+ * @callback CountRuns
+ * @param {HarnessDocument} doc
+ * @param {string} caseName
+ * @param {(number|null)[][]} groupRunScores  one array per group, from ExtractGroupRunScores
+ * @returns {{ runCounts: ArmCounts, errorCounts: ArmCounts, excludedCounts: ArmCounts }}
+ *
+ * Pure. Runs present, runs with a non-null `error`, and runs excluded from every group
+ * score, per arm. Excluded means `skippedPaidGraders` was true; a run with no scored
+ * grader in one group but a score in another is not excluded.
+ */
+
+/**
+ * @callback ComputeGroupFloor
+ * @param {{ noneMeans: number[], treatmentRuns: number[], controlRuns: number[] }} parts
+ *   `noneMeans`: the group's `none` mean from each sweep. `treatmentRuns` and
+ *   `controlRuns`: every scored run's group score in the two cells entering the contrast;
+ *   for the `none` control, the three without-arm columns concatenated
+ * @returns {{ noneRange: number, errorBound: number, pooledSd: number,
+ *             treatmentRuns: number, controlRuns: number, floor: number }}
+ *
+ * Pure. `noneRange` is max minus min of `noneMeans`, NaN with fewer than two.
+ * `pooledSd` is the standard deviation pooled over the two run arrays. `errorBound` is
+ * FLOOR_ERROR_MULTIPLIER × pooledSd × sqrt(1/treatmentRuns + 1/controlRuns). `floor` is
+ * the larger of the two that are numbers; NaN when neither is. The multiplier is an
+ * exported constant beside NOISE_EPSILON, so the marker and the checker cannot drift,
+ * and its value is fixed by the registration.
+ */
+
+/**
+ * @callback ComputeGroupContrasts
+ * @param {string} caseName
+ * @param {string} groupName
+ * @param {Record<ConditionId, number|null>} groupScores        per condition, the with-arm mean
+ * @param {Record<ConditionId, (number|null)[]>} groupRunScores per condition, the with-arm runs
+ * @param {number[]} groupBaselineScores                         the `none` mean per sweep
+ * @param {(number|null)[][]} groupBaselineRunScores             the `none` runs per sweep
+ * @param {PreRegistration} preRegistration
+ * @returns {{ contrasts: Contrast[], unmeasurable: boolean }}
+ *
+ * Pure. One contrast per control, the direction read from the registration under
+ * `<case>#<group>/<control>` and never inferred; a missing direction throws, as the
+ * case-level function does. Each contrast carries the floor {@link ComputeGroupFloor}
+ * built for it and its parts, and `belowNoiseFloor` is |value| <= floor + NOISE_EPSILON.
+ * A floor of exactly zero on any contrast makes the group unmeasurable: no contrast is
+ * returned for it and the flag is set, so the report shows a state rather than a number.
+ * A treatment with no score returns no contrasts, as at case level.
+ */
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * build-conditions — one generator, several suites
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @callback SuiteConditionPlan
+ * @param {string} suiteDir
+ * @returns {{ generated: Record<ConditionId, string>, copied: Record<ConditionId, string>,
+ *             ablations: Record<ConditionId, string> }}
+ *
+ * Pure. What each condition directory of a suite is derived from: `generated` maps an id
+ * to the shipped skill it mirrors (flag stripped), `copied` maps an id to another suite's
+ * condition it must equal byte for byte, `ablations` maps an id to the shipped skill it
+ * is cut from. The drift check walks every suite's plan and a copied condition that has
+ * diverged from its source is drift, named by suite and id. The two suites share one
+ * generator so the placebo cannot quietly become two placebos.
+ */
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * the defect ledger — acceptance, classification, and the judge probe
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @callback ReadDefectLedger
+ * @param {ReadTextFile} readTextFile
+ * @param {(path: string) => Promise<{name: string, isDirectory: boolean}[]>} listDirectory
+ * @param {string} ledgerDir   `fixtures/<seeded>/defects`
+ * @returns {Promise<DefectSpec[]>}
+ *
+ * One entry per directory under the ledger. Refuses an entry missing any of its files,
+ * a tally without `of`, or a `neighbour` that names no other entry. An empty ledger is
+ * an empty array, which every consumer below refuses on its own terms.
+ */
+
+/**
+ * @callback ClassifyDefect
+ * @param {ReviewTally} tallyAlone
+ * @returns {DefectClass|'dropped'}
+ *
+ * Pure. Zero named: `run-only`. Two or more: `read-visible`. Exactly one: `dropped`,
+ * which means replaced by a fresh defect and reviewed again. No other input reaches a
+ * class, and nothing but this function sets one.
+ */
+
+/**
+ * @callback RunDetectScript
+ * @param {SpawnCapture} spawnCapture
+ * @param {string} scriptPath
+ * @param {string} serviceDir   the directory holding the service the script must start
+ * @returns {Promise<{ fired: boolean, stderr: string }>}
+ *
+ * `bash <scriptPath>` with `serviceDir` as the working directory. Exit 1 is `fired`,
+ * exit 0 is not, any other exit is a thrown error: a script that could not run has
+ * said nothing about the defect. Real instance: {@link SpawnCapture} at the entry point.
+ */
+
+/**
+ * @callback CheckDefectAcceptance
+ * @param {DefectSpec[]} ledger
+ * @param {Record<string, { suiteGreenWithAll: boolean,
+ *                          firedOnSeeded: boolean, firedOnClean: boolean,
+ *                          firedAfterReference: boolean,
+ *                          signatureInShippedFiles: boolean,
+ *                          signatureInTranscript: boolean,
+ *                          signatureInNonRunningTraces: boolean,
+ *                          workspaceHasLedger: boolean }>} observed  keyed by defect id
+ * @param {{ runOnly: number, readVisible: number }} minimum
+ * @returns {{ ok: boolean, violations: string[], accepted: string[] }}
+ *
+ * Pure over what the acceptance runs recorded. A defect is accepted when the suite is
+ * green with every defect present, its script fires on the seeded service, does not fire
+ * on the clean one, still fires after the reference implementation, its signature is in
+ * no shipped file, not in the transcript and in no trace from a run that did not start
+ * the service, and the scaffolded workspace carries no ledger. `ok` also requires the
+ * accepted set to meet the minimum per class. An empty ledger or an empty `observed` is
+ * refused, not accepted vacuously.
+ */
+
+/**
+ * @callback JudgePrompt
+ * @param {string} criteria
+ * @param {string} focusLabel   e.g. `last_message`
+ * @param {string} text
+ * @returns {{ system: string, user: string }}
+ *
+ * Pure. The harness's own judge prompt, verbatim, so an offline probe asks the judge
+ * exactly what a sweep would. Recorded from the shipped code at step 0; a CLI release
+ * that changes it changes this function, and the test that pins it against the binary
+ * says so.
+ */
+
+/**
+ * @callback AskJudge
+ * @param {SpawnCapture} spawnCapture
+ * @param {EvalCommand} evalCommand
+ * @param {string} model
+ * @param {{ system: string, user: string }} prompt
+ * @returns {Promise<'PASS'|'FAIL'|'unclear'>}
+ *
+ * OPEN SEAM. One judge call outside the harness, for the criterion probes. The intended
+ * real instance is the pinned binary in print mode with the judge model, the prompt
+ * on stdin, and the harness's own reading of the reply (PASS present and FAIL absent).
+ * Whether print mode accepts a separate system prompt, what one call costs, and
+ * whether the reply is a single word are settled by running at step 4, not here.
+ */
+
+/**
+ * @callback CheckCriterionProbes
+ * @param {{ probe: 'by-cause'|'by-observable'|'hedge'|'wrong'|'neighbour',
+ *           verdict: 'PASS'|'FAIL'|'unclear' }[]} verdicts
+ * @returns {{ ok: boolean, failures: string[] }}
+ *
+ * Pure. `by-cause` and `by-observable` must PASS; `hedge`, `wrong` and `neighbour` must
+ * FAIL; `unclear` fails whichever it is. All five must be present — a criterion probed
+ * on four is a criterion probed on the four it happened to pass.
+ */
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * isolation and vocabulary checks — proposals for step 5, signatures now
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * @callback CheckAuthoringIsolation
+ * @param {{ role: string, text: string }[]} transcripts
+ * @param {string[]} forbiddenRoots   absolute paths; the repository checkout at least
+ * @returns {{ ok: boolean, violations: string[], digests: Record<string, string> }}
+ *
+ * Pure over the transcript text. A transcript that names a path under any forbidden
+ * root fails, with the role and the path. `digests` is the sha256 of each transcript,
+ * to be recorded in the ledger. An empty transcript list is refused: an isolation
+ * nobody was subject to is not isolation.
+ */
+
+/**
+ * @callback CheckTraceIsolation
+ * @param {{ condition: ConditionId, arm: 'with'|'without', run: number, text: string }[]} traces
+ * @param {string[]} forbiddenFragments   e.g. `/defects/`, the shipped skill's directory,
+ *                                        the clean fixture's directory
+ * @returns {{ ok: boolean, violations: string[] }}
+ *
+ * Pure over trace text. A trace containing any fragment fails, naming condition, arm
+ * and run. Fragments, not roots: the condition under test is a directory inside the
+ * repository that every with-arm trace may legitimately name. Refuses an empty trace
+ * list and an empty fragment list.
+ */
+
+/**
+ * @callback CheckInstrumentVocabulary
+ * @param {{ path: string, text: string }[]} files
+ * @param {string[]} words   authored by the human at step 5; matched whole-word,
+ *                           case-insensitive
+ * @returns {{ ok: boolean, violations: string[] }}
+ *
+ * Pure. A file containing any word fails, naming the file and the word. Refuses an
+ * empty file list and an empty word list. Lexical only, and known to be: it catches a
+ * grader written from the skill's text and cannot catch a brief that states the
+ * hypothesis in other words.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
