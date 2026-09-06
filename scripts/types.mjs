@@ -8,7 +8,8 @@
  * Nothing here names a particular skill. A suite lives at `evals/<skill>/` and
  * supplies its own conditions, cases and pre-registration; this file is shared.
  *
- * Rationale: `docs/plans/primer-evals/1-types.md`.
+ * Rationale: `docs/plans/primer-evals/1-types.md`; the grader-group, declared-evidence
+ * and defect-ledger shapes: `docs/plans/primer-evals/defect-injection/1-types.md`.
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -27,6 +28,11 @@
  *                                  from the score denominator in both arms
  * @property {boolean}   scored     always !withOnly
  * @property {boolean[]} [judgeVotes]  3 votes, strict majority, `llm`/`baseline` only
+ * @property {string}    [evidence]    what the judge was shown, `llm`/`baseline` only.
+ *                                     The real documents carry it and the typedef omitted
+ *                                     it; the hand-labelling of judge verdicts reads it,
+ *                                     so it is declared here rather than reached through
+ *                                     an untyped property
  */
 
 /**
@@ -126,9 +132,64 @@
  * @property {string}       name
  * @property {EvidenceKind} evidence
  * @property {'none'|'with-without'} ablation
+ * @property {boolean}      [declared]  true when `evidence` and `ablation` came from the
+ *                                      case's own frontmatter rather than from the
+ *                                      `history_file` derivation. The derivation stays the
+ *                                      default: a replay case is `capability`/`none`
+ *                                      because its transcript carries the plugin into
+ *                                      both arms. A replay case may be `delta`/
+ *                                      `with-without` only when declared, and the two
+ *                                      pairs the registration refuses (`delta`+`none`,
+ *                                      `capability`+`with-without`) stay refused either
+ *                                      way. Absent means not declared
  * @property {string[]}     tags       `control` marks the diagnostic, excluded from scored runs
  * @property {boolean}      scored
  * @property {string}       measures   one line, for the report; not a grader
+ * @property {GraderGroup[]} [groups]   named subsets of this case's graders, each scored
+ *                                      and contrasted on its own from the per-grader
+ *                                      verdicts the sweep record holds. Absent means the
+ *                                      case has no groups and only its harness score is
+ *                                      read
+ * @property {'case'|'groups'} [contrasts]  which score carries the registered contrasts.
+ *                                      `case` (the default): the harness score, keyed
+ *                                      `<case>/<control>`. `groups`: each group in
+ *                                      `groups`, keyed `<case>#<group>/<control>`, and
+ *                                      the case-level pair is registered as carrying no
+ *                                      contrast — the merger reads this before it builds
+ *                                      the control list, so it neither computes nor
+ *                                      throws on the case-level pair, and the harness
+ *                                      score is printed alone
+ */
+
+/**
+ * A group scored from a fixed list of grader names. Per run, the score is the weighted
+ * fraction of the named graders that passed, over the named graders that were scored,
+ * with the harness's own `withOnly` exclusion. A run in which no named grader was
+ * scored has no score for the group, not zero.
+ *
+ * @typedef {object} GradersGroup
+ * @property {'graders'} kind
+ * @property {string}    name       unique within the case; used in direction keys
+ * @property {string[]}  graders    grader names as the harness reports them; every name
+ *                                  must exist on the case, and a name may appear in more
+ *                                  than one group
+ */
+
+/**
+ * A group scored as the per-run difference of two other groups on the same run: the
+ * `minuend` score minus the `subtrahend` score. A run missing either has no score.
+ * This is how a registered "advantage on A over and above any advantage on B" is
+ * computed on the same runs rather than read off two tables after the fact.
+ *
+ * @typedef {object} DifferenceGroup
+ * @property {'difference'} kind
+ * @property {string} name
+ * @property {string} minuend      the name of a `GradersGroup` on the same case
+ * @property {string} subtrahend   likewise; never the same as `minuend`
+ */
+
+/**
+ * @typedef {GradersGroup|DifferenceGroup} GraderGroup
  */
 
 /**
@@ -149,6 +210,13 @@
  * @property {ConditionId[]} conditions
  * @property {CaseSpec[]} cases
  * @property {Record<string, ExpectedDirection>} expectedDirection  keyed `<case>/<control>`
+ *                                       for a case whose `contrasts` is `case`, and
+ *                                       `<case>#<group>/<control>` for every group of a
+ *                                       case whose `contrasts` is `groups`. `#` cannot
+ *                                       appear in a case or group name, so the key splits
+ *                                       without ambiguity. Completeness is per key kind:
+ *                                       every registered group of a scored delta case
+ *                                       needs a direction against every control
  * @property {number}     threshold      set explicitly; the harness default of 1.0 is
  *                                       unreachable with `llm` graders and would always exit 1
  * @property {string}     subjectModel   pinned so a model rollout never reads as a regression
@@ -184,6 +252,19 @@
  * @property {string[]} tagFilters
  * @property {boolean}  scaffold
  * @property {string}   outputDir
+ * @property {number}   [maxCostUsd]  `--max-cost-usd`, a ceiling PER INVOCATION. When it
+ *                                    trips the harness marks the document partial and
+ *                                    exits 2, the runner stops the sweep, and I1c refuses
+ *                                    the short record — so it is a runaway guard set well
+ *                                    above the invocation's expected spend (runs × arms ×
+ *                                    the measured per-run cost, doubled), never a budget.
+ *                                    Absent means no ceiling, which is what every Tier 1
+ *                                    sweep ran with
+ * @property {boolean}  [keepTemp]    `--keep-temp`: keep every run's sandbox (workspace and
+ *                                    `out/trace.jsonl`) and print its path. Without it only
+ *                                    errored runs are kept. A regex grader over the trace
+ *                                    leaves no `evidence` in the record, so a suite that
+ *                                    grades the trace keeps the sandboxes. Absent means off
  */
 
 /**
@@ -286,6 +367,25 @@
  *                                        mathematical tie lands one ulp either side.
  *                                        Such a contrast is published, never suppressed —
  *                                        but it must carry this mark (I1b)
+ * @property {string}  [group]     the group this contrast belongs to, for a case whose
+ *                                 `contrasts` is `groups`. Absent on a case-level contrast
+ * @property {number}  [floor]     the floor THIS contrast was judged against, when it is
+ *                                 not the report-wide `baselineSpread`: the larger of
+ *                                 `floorParts.noneRange` and `floorParts.errorBound`.
+ *                                 `belowNoiseFloor` is then |value| <= floor + epsilon.
+ *                                 A floor of exactly 0 is not a measurement: such a
+ *                                 contrast is withheld and its group marked unmeasurable
+ * @property {{ noneRange: number, errorBound: number, pooledSd: number,
+ *              treatmentRuns: number, controlRuns: number }} [floorParts]
+ *                                 how `floor` was built, kept so a reader can check it.
+ *                                 `noneRange`: max − min of the per-sweep `none` means of
+ *                                 this group (Tier 1's rule). `errorBound`: 2 × pooledSd ×
+ *                                 sqrt(1/treatmentRuns + 1/controlRuns), with `pooledSd`
+ *                                 the standard deviation of the group's per-run scores
+ *                                 pooled over the two cells entering this contrast, and
+ *                                 `controlRuns` the three without-arm columns together
+ *                                 when the control is `none`. The multiplier 2 is fixed
+ *                                 by the registration, not chosen here
  */
 
 /**
@@ -297,8 +397,52 @@
  *                                                       only if these survive
  * @property {number[]} baselineScores   the `without` column from EACH sweep, kept apart:
  *                                       their spread is the suite's noise floor
- * @property {Contrast[]} contrasts      empty when evidence === 'capability'
+ * @property {Contrast[]} contrasts      empty when evidence === 'capability', and empty
+ *                                       when the case's `contrasts` is `groups`
  * @property {string[]}   advisories
+ * @property {Record<string, Record<ConditionId, number|null>>} [groupScores]
+ *                                       group name → condition → mean of that group's
+ *                                       per-run scores in the with-arm; null where the
+ *                                       case did not run or no run scored the group
+ * @property {Record<string, Record<ConditionId, number[]>>} [groupRunScores]
+ *                                       group name → condition → every scored run, kept
+ *                                       for the scatter; a run with no group score is
+ *                                       omitted, never written as 0
+ * @property {Record<string, number[]>}   [groupBaselineScores]
+ *                                       group name → the group's `none` mean from EACH
+ *                                       sweep, kept apart: their range is the first floor
+ *                                       component
+ * @property {Record<string, number[][]>} [groupBaselineRunScores]
+ *                                       group name → per sweep, every without-arm run's
+ *                                       group score. The second floor component pools
+ *                                       these, so a mean alone would not do
+ * @property {Record<string, Contrast[]>} [groupContrasts]
+ *                                       group name → its contrasts, each carrying its own
+ *                                       `floor`. Present exactly when the case's
+ *                                       `contrasts` is `groups`
+ * @property {Record<ConditionId, ArmCounts>} [runCounts]
+ *                                       runs actually present per condition and arm — a
+ *                                       registered reported figure, printed beside the
+ *                                       group scores, because the header's `runsPerCase`
+ *                                       is the registered lower bound and not the count
+ * @property {Record<ConditionId, ArmCounts>} [errorCounts]
+ *                                       runs with a non-null `error` (timed out, turn-
+ *                                       capped) per condition and arm. On a presence-
+ *                                       graded case such a run scores near zero and reads
+ *                                       as "found nothing", so the count is published
+ *                                       rather than hidden in the mean
+ * @property {Record<ConditionId, ArmCounts>} [excludedCounts]
+ *                                       runs left out of every group score because their
+ *                                       paid graders were skipped by a cost ceiling. Never
+ *                                       scored as zero
+ */
+
+/**
+ * A count per arm. `without` is absent for a case that ran single-arm.
+ *
+ * @typedef {object} ArmCounts
+ * @property {number} with
+ * @property {number} [without]
  */
 
 /**
@@ -347,6 +491,63 @@
  */
 
 /* ────────────────────────────────────────────────────────────────────────────
+ * Ours — the defect ledger
+ * A seeded fixture carries planted defects; each one is described here so the
+ * acceptance checks, the vocabulary check and the report can read it. The ledger lives
+ * beside the fixture, is withheld from the scaffold copy, and is hashed into the
+ * instrument digest.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * What kind of defect a planted one turned out to be. Never the designer's intent: the
+ * class is set by the reviewer tally and nothing else.
+ *
+ * `run-only`      — named by no read-only reviewer; shows when the service is run.
+ * `read-visible`  — named by two or more read-only reviewers.
+ *
+ * A defect named by exactly one reviewer has no class: it is dropped and replaced.
+ *
+ * @typedef {'run-only'|'read-visible'} DefectClass
+ */
+
+/**
+ * How many independent read-only reviewers named a defect, out of how many looked.
+ * `of` travels with `named` so a tally is never read against an assumed panel size.
+ *
+ * @typedef {object} ReviewTally
+ * @property {number} named
+ * @property {number} of
+ */
+
+/**
+ * One planted defect, as the ledger records it. File contents are not inlined: each
+ * entry names its files under `fixtures/<seeded>/defects/<id>/`, and the digest covers
+ * them.
+ *
+ * @typedef {object} DefectSpec
+ * @property {string}      id
+ * @property {DefectClass} intendedClass   what the designer meant to plant; recorded, not used
+ * @property {DefectClass} class           set by `tallyAlone`, mechanically
+ * @property {ReviewTally} tallyAlone      reviewed as the only defect in an otherwise clean
+ *                                         fixture — the classification
+ * @property {ReviewTally} tallyInCompany  reviewed with every other accepted defect present,
+ *                                         which is the fixture the sweep runs. A read-visible
+ *                                         defect nobody names in company is reported as such
+ * @property {string}      signature       the runtime signal the `surfaced-*` grader matches:
+ *                                         letters, digits, spaces, hyphens, underscores; at
+ *                                         least six characters; not a bare status code; not a
+ *                                         literal in any shipped source file
+ * @property {string}      neighbour       id of the nearest other defect in the same part of
+ *                                         the service; its observable-only probe reply must
+ *                                         FAIL this defect's criterion
+ * @property {string[]}    graders         the grader names on the case that score this defect
+ *                                         (`reported-<id>`, and `surfaced-<id>` for run-only)
+ * @property {Record<'designer'|'criteriaAuthor'|'reviewers', string>} transcriptDigests
+ *                                         sha256 of each authoring transcript, so the
+ *                                         isolation check has something to check against
+ */
+
+/* ────────────────────────────────────────────────────────────────────────────
  * Ours — grader self-tests and paths
  * ──────────────────────────────────────────────────────────────────────────── */
 
@@ -364,6 +565,11 @@
  */
 
 /**
+ * Built per suite. The runner used to hold one instance for one suite; a second suite
+ * beside the first is a second instance of this shape and nothing else changes in it.
+ * `resultsDir` is where that suite's own `drift.json` lives too — one drift record cannot
+ * vouch for two suites with different instrument digests.
+ *
  * @typedef {object} SuitePaths
  * @property {string} repoRoot
  * @property {string} suiteDir      evals/<skill>
