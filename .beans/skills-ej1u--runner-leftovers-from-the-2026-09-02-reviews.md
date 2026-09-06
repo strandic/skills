@@ -1,11 +1,11 @@
 ---
 # skills-ej1u
 title: Runner leftovers from the 2026-09-02 reviews
-status: todo
+status: completed
 type: task
 priority: low
 created_at: 2026-09-03T09:32:25Z
-updated_at: 2026-09-03T14:04:07Z
+updated_at: 2026-09-06T06:42:12Z
 ---
 
 Informational items the 2026-09-02 review verifiers left open, none blocking. Record in `docs/plans/primer-evals/pr-1-review-2026-09-02.md`, outcome section.
@@ -27,3 +27,9 @@ Informational items the 2026-09-02 review verifiers left open, none blocking. Re
 Deferred until after the merge, because each changes the shared instrument digest:
 - [ ] nested README in the digest (instrument.mjs rule change → skip README.md at any depth? decide; a typo fix there should not cost a sweep)
 - [ ] input_match anchor (src/|server\.js|test/) matches any path containing those segments — anchor to the workspace root
+
+
+
+2026-09-06: last two items closed by Amendment 12 — input_match anchored (segment after a slash, never under /docs/, two probes per grader); nested-README digest rule kept on purpose (a fixture README is instrument).
+- [x] nested README in the digest — won't fix, reason recorded
+- [x] input_match anchor

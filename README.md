@@ -26,6 +26,11 @@ skills, invoked by name (e.g. `/seven-steps-primer`).
 /plugin install strandic@strandic
 ```
 
+A plugin install copies the whole repository into the plugin cache, evals and docs
+included; only `skills/` is loaded from it. Neither manifest has an exclude field, so this
+is accepted rather than worked around with a restructure that could break the other
+install path.
+
 Installed this way, skills are namespaced under the plugin, e.g.
 `/strandic:seven-steps-primer`.
 
