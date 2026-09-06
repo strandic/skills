@@ -113,6 +113,18 @@ node scripts/merge-results.mjs evals/seven-steps-primer/results
 
 Full method, per-run scatter and the honest limits: **[`evals/seven-steps-primer/`](evals/seven-steps-primer/)**.
 
+**What has been measured, and what has not.** `seven-steps-primer` has been run through a
+pre-registered behavioural eval (150 agent runs per sweep, Sonnet subject, Opus judge,
+three controls: no skill, a one-sentence instruction, and a same-shape placebo). With it
+loaded, the agent produces a step-0 plan and stops at the gate in five runs of five, does
+not add ceremony to a one-character fix, and puts to-do markers in the source instead of
+listing them in a document, which no control does. A placebo with the same gates and none
+of the method's content produces the first two behaviours just as well, so those come from
+the document's shape, not its advice. Nothing has been measured about whether the software
+that comes out is better; that is the method's actual claim, and it is untested. Numbers,
+per-run scatter and the twelve amendments are in
+`evals/seven-steps-primer/PRE-REGISTRATION.md`.
+
 ## Adding a skill
 
 Drop it at `skills/<name>/SKILL.md` (frontmatter needs `name` + `description`),
