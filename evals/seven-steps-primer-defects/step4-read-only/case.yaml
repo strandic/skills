@@ -1,0 +1,30 @@
+schema_version: "1.1"
+name: step4-read-only
+# `control` keeps this case out of every sweep and every table (I7 needs one such case).
+# `diagnostic` shares no tag with the scored case, because the runner drops any tag a
+# control case carries.
+tags: [control, diagnostic]
+plugins: ["../../_conditions/current"]
+context:
+  # TODO: the same history.jsonl and scaffold as step4-seeded-defects — reuse by a
+  # relative path if the harness allows one inside the case directory, else a copy the
+  # instrument test asserts byte-identical.
+  history_file: history.jsonl
+  scaffold_script: scaffold.sh
+execution:
+  # TODO: the same prompt as the scored case, verbatim.
+  prompt: "TODO"
+  # TODO: caps from the recon run; a treatment told to run but unable to may spend turns
+  # trying, so the turn cap is set lower than the scored case's once measured.
+  max_turns: 30
+  timeout_seconds: 900
+  # Read-only on purpose: Bash, Write and Edit are not granted, and the harness
+  # intersects this list with the operator grant, so the run cannot start the service.
+  allowed_tools: [Read, Glob, Grep, Skill]
+runs: 5
+# TODO: the same reported-<id> graders as the scored case (copied from the ledger's
+# criteria) plus liveness-read; no surfaced-* and no service-started, since nothing can run.
+# Run by hand at step 7 under the treatment, reported outside the tables: the treatment
+# with Bash against the treatment without it is the one comparison that varies running
+# while holding the text fixed.
+graders: []

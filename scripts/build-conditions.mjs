@@ -70,6 +70,7 @@ export const ABLATIONS = {
   ] },
 };
 
+// TODO: SuiteConditionPlan — one plan per suite: seven-steps-primer (generated treatment + ABLATIONS) and seven-steps-primer-defects (generated treatment; placebo COPIED from the first suite's; run-oneliner authored, never generated).
 export const paths = {
   shippedSkill: join(repoRoot, 'skills/seven-steps-primer/SKILL.md'),
   treatmentMirror: join(repoRoot, 'evals/seven-steps-primer/conditions/treatment/SKILL.md'),
@@ -269,6 +270,7 @@ export async function buildAblation(read, where, id) {
  * @param {{shippedSkill: string, treatmentMirror: string, ablations?: Record<string,string>}} where
  * @returns {Promise<{bytes: number, stripped: boolean, ablations: Record<string, number>}>}
  */
+// TODO: iterate every suite's plan; write copied conditions from their source byte for byte.
 export async function generate(read, write, where) {
   const { generated, stripped } = await buildTreatment(read, where);
   await write(where.treatmentMirror, generated);
@@ -289,6 +291,7 @@ export async function generate(read, write, where) {
  * @param {{shippedSkill: string, treatmentMirror: string}} where
  * @returns {Promise<{drifted: boolean, reason: string, stripped: boolean}>}
  */
+// TODO: iterate every suite's plan; a copied condition that differs from its source is drift, named by suite and id.
 export async function check(read, where) {
   const { generated, stripped } = await buildTreatment(read, where);
   let committed;
@@ -334,6 +337,7 @@ const show = (path) => relative(repoRoot, path);
  * @param {string[]} argv
  * @returns {Promise<number>} process exit code
  */
+// TODO: report per suite.
 export async function main(argv) {
   const mode = argv.length === 0 ? 'check' : argv[0];
   if (argv.length > 1 || (mode !== 'generate' && mode !== 'check')) {

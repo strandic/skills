@@ -1,0 +1,3 @@
+# The defect ledger
+
+<!-- TODO: one directory per accepted defect, `<id>/`, holding: class (set by ClassifyDefect from tally-alone), intended-class, tally-alone and tally-in-company (named/of), diff.patch, signature, detect.sh, behaviour.md, cause.md, criteria.md, neighbour, probes/{by-cause,by-observable,hedge,wrong}.md, transcript-digests. Plus reference-implementation.patch at this level, applied by the acceptance run. Everything here is hashed into the instrument digest and withheld from the scaffold copy. Written at step 4 by the isolated designer, reviewers and criteria author; the human reads it at gate 4. -->

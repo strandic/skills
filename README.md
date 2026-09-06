@@ -126,6 +126,8 @@ that comes out is better; that is the method's actual claim, and it is untested.
 per-run scatter and the twelve amendments are in
 `evals/seven-steps-primer/PRE-REGISTRATION.md`.
 
+<!-- TODO: one paragraph under the evals section pointing at evals/seven-steps-primer-defects/ (Tier 2 experiment 2) and its results file, once the sweep has been merged; outside every instrument digest -->
+
 ## Adding a skill
 
 Drop it at `skills/<name>/SKILL.md` (frontmatter needs `name` + `description`),
