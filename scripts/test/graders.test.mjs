@@ -28,6 +28,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import {
   paths, discoverCases, frontmatter, buildEvalArgv, invocationFor,
+// TODO(seam): the suite list — this file walks one suite through the imported `paths`; the defects suite needs the same walk (probes for every patterned grader: surfaced-* and service-started; llm bodies clean); how the list arrives is decided at step 6 (2-interfaces.md).
 } from '../run-evals.mjs';
 import { mergeSweeps } from '../merge-results.mjs';
 import * as inv from '../invariants.mjs';
@@ -55,6 +56,7 @@ const listDirectory = async (p) => {
 // 26 since 2026-09-03: step3-markers-in-source's `skill-fired` was removed (Amendment 6) —
 // the replayed seed turn names the skill, so it fired under every condition and scored the
 // transcript, not the behaviour. The pre-registration's grader table never counted it.
+// TODO: ratchets become per suite; the defects suite's counts are set at step 4 once the ledger is accepted (reported-<id> per defect, surfaced-<id> per run-only defect, liveness-read, service-started, skill-fired).
 const EXPECTED_GRADERS = 26;
 
 /**
@@ -89,6 +91,7 @@ const MIN_DECLARED_TESTS = 191;
  * a `sed -i` over a file that already existed. Naming a case here that has no source to
  * leave alone would fail I6 for the wrong reason.
  */
+// TODO: per suite; the defects suite registers no absence case, so I6 is skipped for it with the reason, not run against an empty list.
 const ABSENCE_CASES = ['gate-stop-step0', 'looks-trivial-is-structural'];
 
 /** Exactly one diagnostic, and it must never reach a scored table (I7). */
@@ -562,6 +565,7 @@ test('every committed mustMatch set rejects a pattern that matches nothing', () 
  * edit.
  * ──────────────────────────────────────────────────────────────────────────── */
 
+// TODO: seeded-fixture health beside this, per suite — suite green with every defect present; each detect.sh red on seeded, green on clean, red after the reference implementation; signature grep over the five shipped files empty; scaffolded workspace carries no defects/; two concurrent starts succeed; test/notes.test.js byte-identical to the clean fixture's.
 const FIXTURE_MIDDLEWARE = 'evals/seven-steps-primer/fixtures/notesvc/src/middleware/index.js';
 
 /** One substitution, refusing to be a no-op — a mutation that changed nothing proves nothing. */
@@ -867,6 +871,7 @@ test('I6 — strip the content grader and the absence claim is refused', () => {
 /* ── I3 — the claim ceiling, read out of the ruling that set it ────────────── */
 
 /** The D7 blockquote in `0-plan.md`. One copy in the repo; every check reads that one. */
+// TODO: anchor per suite — the defects suite's ceiling opens "Gates 0 to 3 are already cleared" and its plan is docs/plans/primer-evals/defect-injection/0-plan.md; the check takes the plan path and the anchor.
 function claimCeiling(planMarkdown) {
   const lines = planMarkdown.split('\n');
   const start = lines.findIndex((l) => /^>\s*With the primer loaded/.test(l));
@@ -1098,6 +1103,7 @@ const CLI_VERSIONS = join(homedir(), '.local', 'share', 'claude', 'versions');
  * it and eleven citations silently "broke" while neither they nor the harness had moved.
  * A failing marker is first evidence that the bundling changed, not that a fact did.
  */
+// TODO: pin JudgePrompt's text against the binary the same way — marker "You are grading the output of a coding agent against a criterion." and the system line "You are a strict, terse evaluation judge for coding-agent traces."
 function unresolvedMarkers(bin, markers) {
   return new Promise((resolve, reject) => {
     const remaining = new Set(markers);

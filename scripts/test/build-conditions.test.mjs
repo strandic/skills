@@ -9,6 +9,7 @@
  * `node --test scripts/test/*.test.mjs` — the trailing glob matters; a bare
  * directory is read as a module path and fails to load.
  */
+// TODO: tests for SuiteConditionPlan (two suites), copied-condition drift named by suite and id, generate writing copies, check walking both.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';

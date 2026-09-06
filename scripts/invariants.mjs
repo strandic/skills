@@ -32,6 +32,7 @@ const fail = (violations) => ({ ok: violations.length === 0, violations });
  * contrast that TIES the floor is inside it, not above it: the floor is the smallest
  * difference this instrument can resolve, and a difference equal to it resolves nothing.
  */
+// TODO: export FLOOR_ERROR_MULTIPLIER = 2 beside this — fixed by the registration; ComputeGroupFloor reads it here so marker and checker cannot drift.
 export const NOISE_EPSILON = 1e-9;
 
 /**
@@ -52,6 +53,7 @@ export function i1PublishableOnlyWhenComplete(report) {
  * The comparison is `<= spread + NOISE_EPSILON`, not `<`: see {@link NOISE_EPSILON}.
  * @param {MergedReport} report
  */
+// TODO: group form — every group contrast with |value| <= its own floor + NOISE_EPSILON carries belowNoiseFloor; a group whose floor is 0 has no contrasts and is marked unmeasurable; the expected group count comes from the caller and an empty group set is refused; the report-wide check below is skipped (with the reason) rather than failed when no case-level delta contrast exists.
 export function i1bNoiseFloorMarked(report) {
   const v = [];
   const spread = report?.baselineSpread;
@@ -464,6 +466,7 @@ export function i5GradersHaveCompleteProbes(probes, graderIds) {
  * @param {{name: string, graders: {type: string, tool?: string, target?: any}[]}[]} cases
  * @param {string[]} absenceCaseNames  cases that make an absence claim
  */
+// TODO: unchanged; a suite that registers no absence case (the defects suite) is not run through this — its test skips with the reason instead of passing an empty list.
 export function i6AbsenceClaimsHaveContentEvidence(cases, absenceCaseNames) {
   const v = [];
   if (!Array.isArray(absenceCaseNames) || absenceCaseNames.length === 0)
@@ -508,6 +511,7 @@ export function i7ControlNeverInHeadline(report, specs) {
  * @param {string} reportSha     digest recorded in the report
  * @param {boolean} dirty
  */
+// TODO: proposals for step 5, authored by the human, signatures in interfaces.mjs — CheckAuthoringIsolation (I9: transcripts vs forbidden roots, digests returned), CheckTraceIsolation (I9: traces vs forbidden fragments, never roots), CheckInstrumentVocabulary (I10: files vs a word list); each refuses an empty input.
 export function i8PreRegistrationFrozen(committedSha, reportSha, dirty) {
   const v = [];
   if (!committedSha || !reportSha) return fail(['a pre-registration digest is missing on one side']);

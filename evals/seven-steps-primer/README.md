@@ -283,6 +283,8 @@ recall, component ablation — are costed in
 [`docs/plans/primer-evals/tier-2-backlog.md`](../../docs/plans/primer-evals/tier-2-backlog.md).
 None of them is in this suite.
 
+<!-- TODO: a pointer to evals/seven-steps-primer-defects/ (Tier 2 experiment 2, its own registration and README); this README is outside the instrument digest, and the Tier 1 registration is not amended -->
+
 ## Where the instrument is weak
 
 An instrument that can false-positive erodes what it measures, so the known holes are

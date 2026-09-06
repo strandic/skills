@@ -12,6 +12,7 @@
  * `node --test scripts/test/*.test.mjs` — the trailing glob matters; a bare directory
  * is read as a module path and fails to load.
  */
+// TODO: tests for ResolveSuite (default, --suite, refusals), ReadDeclaredEvidence (derived, declared, half a pair, the two bad pairs), buildEvalArgv pass-throughs (absent by default, byte-identical Tier 1 argv), runs from the registration, parseArgv --max-cost-usd/--keep-temp.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';

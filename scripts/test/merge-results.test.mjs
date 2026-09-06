@@ -13,6 +13,7 @@
  *
  * `node --test scripts/test/*.test.mjs`
  */
+// TODO: tests for parsePreRegistration groups/contrasts/keys, ExtractGroupRunScores (withOnly out, null for unscored and skippedPaidGraders, unknown name refused), ComputeDifferenceRunScores, CountRuns, ComputeGroupFloor (noneRange, errorBound, none nC pooled over three columns, zero → unmeasurable), ComputeGroupContrasts (keys, missing direction throws, floor on each), mergeSweeps group fields, formatComparison group tables and the no-contrast note.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as m from '../merge-results.mjs';

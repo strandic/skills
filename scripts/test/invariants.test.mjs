@@ -8,6 +8,7 @@
  *
  * `node --test scripts/test/*.test.mjs`
  */
+// TODO: tests for the group form of I1b (marked, unmeasurable, empty refused, report-wide skipped with reason), FLOOR_ERROR_MULTIPLIER exported, and the three step-5 proposals once the human authors them (vacuity and absence-as-agreement pair for each).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as inv from '../invariants.mjs';

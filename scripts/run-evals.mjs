@@ -89,6 +89,7 @@ const isGated = (tool) => {
  * would exit 1 on every run; `judgeModel` is pinned away from the subject to keep
  * same-model self-preference out of the numbers (D2).
  */
+// TODO: `runs` stops defaulting from this constant — main supplies preRegistration.runsPerCase unless --runs (PlanSweep, 2-interfaces).
 const DEFAULTS = {
   ablation: /** @type {'with-without'} */ ('with-without'),
   runs: 5,
@@ -125,6 +126,8 @@ export const suitePathsFor = (suiteDir) => ({
   resultsDir: `${suiteDir}/results`,
 });
 
+// TODO: one SuitePaths instance per resolved suite (ResolveSuite: --suite <dir>, directly under evals/, holding a PRE-REGISTRATION.md); this constant stays only as the default for a caller without argv.
+// TODO(seam): graders.test.mjs imports this constant; with two suites the tests need both — enumerate evals/*/PRE-REGISTRATION.md or take a list, decided at step 6 (2-interfaces.md).
 export const paths = suitePathsFor('evals/seven-steps-primer');
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -196,6 +199,7 @@ export function buildEvalArgv(inv) {
     inv.scaffold ? '--scaffold' : '--no-scaffold',
     // Keep the HTML report local. Publishing on every sweep is a side effect the suite
     // never asked for, and recon's verified invocation carried this.
+// TODO: append '--max-cost-usd', String(inv.maxCostUsd) when set (refuse <= 0 here, not in the harness) and '--keep-temp' when inv.keepTemp (BuildEvalArgv).
     '--no-publish',
     // `--case <glob>` is ONE glob (harness-facts #44): the option is not variadic and a
     // repeated flag keeps only the last value. Four flags ran one case on 2026-09-03 and
@@ -425,6 +429,7 @@ export function readCaseSpec(dirName, caseYaml, promptMd) {
 
   const tags = inlineList(pick('tags'), `${where} tags`) ?? [];
   const allowedTools = inlineList(pick('allowed_tools'), `${where} allowed_tools`) ?? [];
+// TODO: ReadDeclaredEvidence — a top-level `evidence` + `ablation` pair in case.yaml overrides the derivation below and sets spec.declared; half a pair, delta+none and capability+with-without are refused.
   const replay = y['context.history_file'] !== undefined;
 
   return {
@@ -958,6 +963,7 @@ export function buildSweepRecord(combined, run) {
  * Pure — the operator's own arguments.
  * ──────────────────────────────────────────────────────────────────────────── */
 
+// TODO: usage gains --suite <dir>, --max-cost-usd <n>, --keep-temp; "the pre-registered count" for --runs must become literally true.
 const USAGE = `usage: node scripts/run-evals.mjs [--condition <id>]... [--runs <n>] [--smoke]
 
   --condition <id>  A condition the pre-registration names (treatment | oneliner |
@@ -974,6 +980,7 @@ const USAGE = `usage: node scripts/run-evals.mjs [--condition <id>]... [--runs <
  *   default is the three the suite shipped with; `main` passes the pre-registration's
  *   list, so a condition added by amendment is sweepable without touching this file.
  */
+// TODO: accept --max-cost-usd <n> (number > 0) and --keep-temp; --suite is consumed by ResolveSuite before this parser and is refused here as unknown.
 export function parseArgv(argv, known = CONDITION_IDS) {
   const args = { conditions: /** @type {ConditionId[]} */ ([]), runs: DEFAULTS.runs, smoke: false, help: false };
   // Both flags write `runs`, so whichever came last used to win silently — `--smoke
@@ -1054,6 +1061,7 @@ export function parseArgv(argv, known = CONDITION_IDS) {
  * @param {SuitePaths} [suitePaths]
  * @returns {SweepPlan}
  */
+// TODO: args gains maxCostUsd and keepTemp; both are copied onto every invocation (see the overrides below).
 export function planSweep(cases, args, suitePaths = paths) {
   if (!args || !Array.isArray(args.conditions) || args.conditions.length === 0)
     bad('planSweep: no condition to sweep');
@@ -1101,6 +1109,7 @@ export function planSweep(cases, args, suitePaths = paths) {
       condition,
       invocations: groups.flatMap(invocationsOf).map(({ ablation, cases: names, scoped }) => {
         const inv = invocationFor(condition, suitePaths, all, {
+// TODO: ...maxCostUsd: args.maxCostUsd, keepTemp: args.keepTemp — absent when unset so every Tier 1 argv is byte-identical.
           runs: args.runs,
           ablation,
           ...(scoped ? { caseGlobs: names } : {}),
@@ -1409,6 +1418,7 @@ export async function preflightAuth(spawnCapture, evalCommand) {
   return { ok: true };
 }
 
+// TODO: ResolveSuite(argv, repoRoot) first; thread the resolved SuitePaths into discoverCases, planSweep, selectCondition, writeDriftRecord, both digests and the results path; default args.runs from preRegistration.runsPerCase; pass --keep-temp and --max-cost-usd through; refuse a registration whose runsPerCase disagrees with an explicit --runs that is smaller (I1c would refuse the record after the spend).
 export async function main(argv) {
   // Help is answered before the registration is read, so it works in a tree with no
   // pre-registration. Only a `--help` in flag position counts: `--runs --help` is a

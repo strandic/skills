@@ -137,6 +137,7 @@ export function parseSweepRecord(json, expectedCondition) {
  * @param {string} markdown
  * @returns {PreRegistration}
  */
+// TODO: parse cases[].groups (GraderGroup[]: kind graders|difference; names unique per case, no `#`; a difference names two graders-groups on the same case) and cases[].contrasts ('case' default | 'groups'); refuse groups without contrasts:'groups' and vice versa.
 export function parsePreRegistration(markdown) {
   if (typeof markdown !== 'string' || markdown.trim() === '')
     bad('PRE-REGISTRATION.md is missing or empty — there is nothing registered to compare against');
@@ -189,6 +190,7 @@ export function parsePreRegistration(markdown) {
     if (typeof s.measures !== 'string') bad(`${at('cases')}: ${s.name} has no measures line`);
   }
 
+// TODO: completeness per key kind — a case with contrasts 'groups' needs `<case>#<group>/<control>` for every group and every control, and must carry NO `<case>/<control>` key; a 'case' case is unchanged.
   const controls = ['none', ...pre.conditions.filter((c) => c !== 'treatment')];
   if (!pre.expectedDirection || typeof pre.expectedDirection !== 'object')
     bad(`${at('expectedDirection')}: missing`);
@@ -287,6 +289,9 @@ const findCase = (doc, caseName) => doc.cases.find((c) => c.name === caseName);
  * @param {string} caseName
  * @returns {{ with: number[], without: number[] }}
  */
+// TODO: ExtractGroupRunScores beside this — per run, weight of the named graders that passed over weight of the named graders scored (withOnly out of both); null for a run with no scored named grader or skippedPaidGraders; refuse a grader name the case lacks.
+// TODO: ComputeDifferenceRunScores — position by position, null where either side is null, refuse unequal lengths.
+// TODO: CountRuns — runs present, runs with non-null error, runs excluded (skippedPaidGraders), per arm.
 export function extractRunScores(doc, caseName) {
   const c = findCase(doc, caseName);
   if (!c) bad(`case '${caseName}' is not in this document`);
@@ -321,6 +326,7 @@ const mean = (xs) => (xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / x
  * @param {string} caseName
  * @returns {Contrast[]}
  */
+// TODO: ComputeGroupContrasts beside this — one Contrast per control under `<case>#<group>/<control>`, each with the floor ComputeGroupFloor built for it and its parts; a zero floor on any contrast returns no contrasts and unmeasurable:true; a case registered contrasts:'groups' never reaches this function.
 export function computeContrasts(conditionScores, baselineScores, preRegistration, caseName) {
   const treatment = conditionScores.treatment;
   if (treatment === null || treatment === undefined) return [];
@@ -367,6 +373,7 @@ export function computeContrasts(conditionScores, baselineScores, preRegistratio
  * @param {number[][]} perCaseBaselines
  * @returns {number}
  */
+// TODO: ComputeGroupFloor beside this — noneRange = max−min of the group's none means (NaN below two); errorBound = FLOOR_ERROR_MULTIPLIER × pooled SD over the two cells × sqrt(1/nT + 1/nC), nC being the three without-arm columns together for `none`; floor = the larger of the two that are numbers.
 export function computeBaselineSpread(perCaseBaselines) {
   const spreads = (perCaseBaselines ?? [])
     .filter((col) => Array.isArray(col) && col.length >= 2)
@@ -389,6 +396,7 @@ export function computeBaselineSpread(perCaseBaselines) {
  * @param {{deltaRows: MergedCaseRow[], capabilityRows?: MergedCaseRow[]}} rows
  * @returns {number}
  */
+// TODO: the report-wide spread still comes from case-level delta rows only; when every delta row is contrasts:'groups' it is absent by design and I1b's group form applies instead of refusing.
 export function noiseFloorOf(rows) {
   return computeBaselineSpread((rows?.deltaRows ?? []).map((r) => r.baselineScores));
 }
@@ -435,6 +443,7 @@ export function markNoiseFloor(rows, spread) {
  * @param {Provenance} provenance
  * @returns {MergedReport}
  */
+// TODO: for spec.contrasts === 'groups': row.contrasts stays [], no case-level pair is formed, and groupScores / groupRunScores / groupBaselineScores / groupBaselineRunScores / groupContrasts / runCounts / errorCounts / excludedCounts are filled; the harness score is still read into conditionScores for printing.
 export function mergeSweeps(sweeps, preRegistration, provenance) {
   if (!Array.isArray(sweeps) || sweeps.length === 0) bad('no sweeps to merge');
   /** @type {Map<ConditionId, HarnessDocument>} */
@@ -624,6 +633,7 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
  *   one is missing.
  * @returns {{ ok: boolean, violations: string[] }}
  */
+// TODO: hand the group form of I1b the expected group count from the registration; skip the report-wide I1b, with the reason, when no case-level delta contrast exists.
 export function checkReport(report, preRegistration, ctx) {
   const scored = preRegistration.cases.filter(
     (s) => !(s.tags ?? []).includes('control') && s.scored !== false
@@ -692,6 +702,7 @@ const direction = (d) => (d > 0 ? '+1' : d < 0 ? '-1' : '0');
  * @param {MergedReport} report
  * @returns {string}
  */
+// TODO: per group — a score table (conditions + none), a contrast table with floor and its parts, the word "unmeasurable" where a zero-floor group's contrasts would be; the three counts beside the group scores; a manipulation-check section for graders in no registered group (surfaced-*); no contrast column and a note for a contrasts:'groups' case.
 export function formatComparison(report) {
   const p = report.provenance ?? {};
   const conditions = Object.keys(report.deltaRows[0]?.conditionScores ?? report.capabilityRows[0]?.conditionScores ?? {});

@@ -1,0 +1,30 @@
+schema_version: "1.1"
+name: step4-seeded-defects
+tags: [outcome, scored]
+plugins: ["../../_conditions/current"]
+# TODO: declare `evidence: delta` and `ablation: with-without` at this level — the one
+# replay case that runs both arms, read by ReadDeclaredEvidence; the runner's derivation
+# would otherwise make it capability/none.
+context:
+  # TODO: history.jsonl — records 0 to 5 from evals/seven-steps-primer/step3-markers-in-source
+  # rewritten as a superset of both methods' steps 1 to 3 (names + shapes, inventory +
+  # signatures, walkthrough + markers), record 0 opening with Amendment 2's neutral line,
+  # records 6 and 7 adding the cleared gate 2 and the markers placed, closing on Gate 3.
+  # No skill named. No TODO token in the transcript. Written at step 4.
+  history_file: history.jsonl
+  scaffold_script: scaffold.sh
+execution:
+  # TODO: the prompt, verbatim from 0-plan.md D1: "Gate 3 cleared. Proceed. If a documented
+  # method for this kind of change is available to you, follow it. Put what you find in
+  # your reply, not only in a file."
+  prompt: "TODO"
+  # TODO: max_turns and timeout_seconds set from step 4's measured treatment run, not guessed.
+  max_turns: 60
+  timeout_seconds: 1500
+  allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
+# TODO: runs: 10, matching the registration's runsPerCase.
+runs: 10
+# TODO: graders/ holds reported-<id>.md (llm, focus last_message, criteria.md from the
+# ledger, one per accepted defect), surfaced-<id>.md (regex, target trace, the signature,
+# one per run-only defect, with both probe halves), and the three files already present.
+graders: []
