@@ -1,11 +1,11 @@
 ---
 # skills-mltl
 title: Plugin install copies the whole repo root (evals, docs, scripts, beans)
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-09-03T09:12:45Z
-updated_at: 2026-09-03T09:12:45Z
+updated_at: 2026-09-06T06:42:12Z
 ---
 
 `.claude-plugin/marketplace.json` sets the plugin `source` to `./`, so a plugin install copies the whole repo root into `~/.claude/plugins/cache/`: `evals/` (fixture, graders, the placebo SKILL.md), `docs/`, `scripts/`, `.beans/`. The step-0 decision put the evals at the repo root to keep them out of installs; it reasoned about `npx skills add`, which copies the skill directory, and missed the plugin path.
@@ -22,3 +22,7 @@ Options:
 
 - [ ] decide between 1 and 2 (3 can run alongside either)
 - [ ] if 2: test `npx skills add` against the new layout before moving
+
+
+
+Decided 2026-09-06: option 1. README says a plugin install copies the whole repo and only skills/ is loaded; no restructure. Option 3 (ask upstream for an exclude field) stays open as a /feedback the user can send.

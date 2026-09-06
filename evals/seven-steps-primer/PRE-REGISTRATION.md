@@ -777,6 +777,38 @@ The twelve existing directions do not move (I8).
 
 One sweep, about $10, merged against the 2026-09-05 records.
 
+## Amendment 12 — housekeeping after the ablations: the `input_match` anchor
+
+Recorded 2026-09-06, after the section-ablation work closed and with no sweep planned.
+
+### 12.1 What changed
+
+The three scoped tool graders (`no-source-writes` in `gate-stop-step0`, `no-source-edits`
+in `gate-stop-step0` and `looks-trivial-is-structural`) matched `src/`, `server.js` or
+`test/` anywhere in a written path, so a step-0 artifact at
+`docs/plans/<feature>/test/notes.md` would have counted as a source write and failed a
+careful run for being careful. The segment must now follow a slash and the path must not
+pass through `/docs/`. Two probes per grader pin it. No run in any published sweep wrote
+such a path, so no published number would have differed.
+
+### 12.2 What was considered and left alone
+
+A nested README inside a fixture is instrument: the scaffolded service's README is in the
+workspace the agent reads. Distinguishing prose READMEs from fixture READMEs by path is a
+rule nobody could verify, so the digest keeps hashing every nested README, and a typo fix
+in one costs a re-sweep. Stated, not fixed.
+
+### 12.3 What it costs
+
+The grader change moves the shared instrument digest, so the committed records under
+`docs/plans/primer-evals/records/` no longer merge against the current tree. **They stand
+as published**, and each records directory names the suite sha to check out to re-merge
+them. Nothing is re-swept: no Tier 1 sweep on this fixture is planned (results section
+for ablation 4). The next sweep, whatever it is, starts from this instrument.
+
+**Unchanged.** The conditions, the cases, the threshold, the models, five runs per case,
+and every registered direction.
+
 ---
 
 # Results — first full sweep, 2026-09-01

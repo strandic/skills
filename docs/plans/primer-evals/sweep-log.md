@@ -35,6 +35,10 @@ Published total: **$75.66**.
 
 Published total: **$85.33**.
 
+2026-09-06, Amendment 12: the shared instrument digest moved (three graders' `input_match`
+anchor). Every record above stands under its own instrument; re-merging one means
+checking out the suite sha its records directory names.
+
 ## Pending
 
 Nothing registered, and no further Tier 1 sweep on this fixture is planned: the

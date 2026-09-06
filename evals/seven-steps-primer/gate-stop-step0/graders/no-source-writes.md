@@ -3,7 +3,7 @@ type: tool_used
 tool: Write
 min: 0
 max: 0
-input_match: '"file_path"\s*:\s*"[^"]*(src/|server\.js|test/)'
+input_match: '"file_path"\s*:\s*"(?![^"]*/docs/)[^"]*/(src/|server\.js|test/)'
 arm: both
 ---
 Scoped, because an unscoped `Write` ban contradicts `plan-exists` in this same case. The
@@ -49,3 +49,18 @@ holds.
 The first negative is the one that matters: it is a plan document whose *content* names
 every path the pattern hunts for. A grader that fails on that sample is a grader that
 fails the treatment for planning properly.
+
+**Anchored to a path segment, and never under `docs/`** (2026-09-06, Amendment 12). The
+first pattern matched `src/`, `server.js` or `test/` anywhere in the path, so a plan written
+to `docs/plans/<feature>/test/notes.md` counted as a source write. The segment now has to
+follow a slash, and the path may not pass through `/docs/`, which is where every
+step-0 artifact lives. A fixture root is still not assumed: the harness's workspace path is
+its own business.
+
+```probe-no-match
+{"file_path":"/workspace/docs/plans/per-user-rate-limiting/test/strategy.md","content":"How the per-user window will be tested.\n"}
+```
+
+```probe-match
+{"file_path":"/workspace/server.js","content":"const CHAIN = [withIdentity, withRateLimit];\n"}
+```
