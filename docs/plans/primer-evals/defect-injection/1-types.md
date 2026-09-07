@@ -120,3 +120,20 @@ The types name the shapes; they do not say who computes a group score, who reads
 `checkDefectAcceptance`, `checkAuthoringIsolation`, `checkTraceIsolation`,
 `checkInstrumentVocabulary`, the `--suite` resolver, and `buildEvalArgv` with the two
 pass-throughs. Every runtime handle among them must name who builds it.
+
+## Corrected at step 6
+
+Four fields were added while the code was written. All four are additive, all four are
+read by something that already existed, and none re-opens gate 1. The register
+(`6-cold-fork-register.md`) carries the reasoning; this is the list.
+
+| Type | Field | Why it was missing |
+|---|---|---|
+| `MergedCaseRow` | `refusedCounts` | I12 checks four counts and this document declared three. The fourth is I9's second half — runs whose kept trace named the fence — which gate 4 ruled is counted and published, so it is a field on the row like the other three. |
+| `MergedCaseRow` | `unmeasurableGroups` | I11 reads it to tell "this group's contrasts are withheld" from "this group has no contrasts". The state was described in prose here and typed nowhere. |
+| `MergedCaseRow` | `manipulationChecks` | The report prints a section for every grader the case scored that no group names. That is data the formatter cannot derive from the fields above it. |
+| `PreRegistration` | `floorErrorMultiplier` | The registration carries it and step 5 asks for it to be checked against the code's constant at merge time. It was in the file and in no type. |
+
+Both `refusedCounts` and `unmeasurableGroups` were written into `invariants.mjs` at step 5
+before they existed as fields. The check was right and the type was behind it.
+

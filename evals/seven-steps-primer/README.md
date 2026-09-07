@@ -283,7 +283,16 @@ recall, component ablation — are costed in
 [`docs/plans/primer-evals/tier-2-backlog.md`](../../docs/plans/primer-evals/tier-2-backlog.md).
 None of them is in this suite.
 
-<!-- TODO: a pointer to evals/seven-steps-primer-defects/ (Tier 2 experiment 2, its own registration and README); this README is outside the instrument digest, and the Tier 1 registration is not amended -->
+**One of them now exists as a suite of its own.**
+[`../seven-steps-primer-defects/`](../seven-steps-primer-defects/) is Tier 2 experiment 2:
+does the primer's step 4 make the agent name more planted defects in a small service than
+a same-shape placebo, a one-sentence instruction to run it, and no instruction? It is a
+sibling, and deliberately so. A case added here would void every record above (I2b) and
+would then have to appear in every later sweep of this suite (I4b). So it carries its own
+pre-registration, its own fixture, its own graders and its own claim ceiling, and nothing
+in this file or in `PRE-REGISTRATION.md` is amended — this registration says Tier 2
+registers nothing here, and that still stands. This README sits outside every instrument
+digest, which is why the pointer can live in it.
 
 ## Where the instrument is weak
 

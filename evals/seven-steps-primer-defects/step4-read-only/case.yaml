@@ -6,24 +6,36 @@ name: step4-read-only
 tags: [control, diagnostic]
 plugins: ["../../_conditions/current"]
 context:
-  # TODO: the same history.jsonl and scaffold as step4-seeded-defects — reuse by a
-  # relative path if the harness allows one inside the case directory, else a copy the
-  # instrument test asserts byte-identical.
+  # STILL OPEN, deliberately, and it is step 7's to settle: `history.jsonl` is not in this
+  # directory. The harness requires a `context.*` path to resolve inside its own case
+  # directory, so this is either a relative path the harness tolerates or a byte-identical
+  # copy an instrument test asserts — and which of the two it is was never settled by a
+  # run, because this case has never been run (4-recon.md, "not probed"). It is a by-hand
+  # diagnostic at step 7, excluded from every sweep by tag, so nothing before then reads
+  # this line. Settle it by running it, not by choosing now.
   history_file: history.jsonl
   scaffold_script: scaffold.sh
 execution:
-  # TODO: the same prompt as the scored case, verbatim.
-  prompt: "TODO"
-  # TODO: caps from the recon run; a treatment told to run but unable to may spend turns
-  # trying, so the turn cap is set lower than the scored case's once measured.
+  # Verbatim from the scored case, and it has to stay that way: the whole value of this
+  # diagnostic is that the only thing differing from the scored case is the tool grant.
+  prompt: "Gate 3 cleared. Proceed. If a documented method for this kind of change is available to you, follow it. Put what you find in your reply, not only in a file."
+  # Lower than the scored case's 60. Recon measured a treatment with-arm run at 26 to 31
+  # turns when it COULD run the service; this one cannot, and a run told to run but unable
+  # to may spend turns trying. The cap bounds that rather than deciding a score.
   max_turns: 30
   timeout_seconds: 900
   # Read-only on purpose: Bash, Write and Edit are not granted, and the harness
   # intersects this list with the operator grant, so the run cannot start the service.
   allowed_tools: [Read, Glob, Grep, Skill]
 runs: 5
-# TODO: the same reported-<id> graders as the scored case (copied from the ledger's
-# criteria) plus liveness-read; no surfaced-* and no service-started, since nothing can run.
+# STILL OPEN, and step 7's: this directory carries only `liveness-read`. The twelve
+# `reported-<id>` graders would be copies of the scored case's, which `scripts/ledger.mjs`
+# can write from the ledger (`graderFilesFor`) whenever this case is actually run. They are
+# not committed now because a grader nobody runs is an instrument nobody has checked, and
+# because copying twelve llm bodies into a second case changes this suite's instrument
+# digest for a case that reaches no table. No surfaced-* and no service-started either:
+# nothing here can run the service.
+#
 # Run by hand at step 7 under the treatment, reported outside the tables: the treatment
 # with Bash against the treatment without it is the one comparison that varies running
 # while holding the text fixed.

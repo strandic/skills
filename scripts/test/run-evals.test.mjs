@@ -12,7 +12,6 @@
  * `node --test scripts/test/*.test.mjs` — the trailing glob matters; a bare directory
  * is read as a module path and fails to load.
  */
-// TODO: tests for ResolveSuite (default, --suite, refusals), ReadDeclaredEvidence (derived, declared, half a pair, the two bad pairs), buildEvalArgv pass-throughs (absent by default, byte-identical Tier 1 argv), runs from the registration, parseArgv --max-cost-usd/--keep-temp.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
@@ -25,7 +24,7 @@ import {
   groupCasesByAblation, combineHarnessDocuments, combineSweepParts, buildSweepRecord,
   buildDriftRecord, makeSpawnCapture, exitCodeForSignal, isInterrupted, RunError,
   planSweep, sweepStopReason, processExitCode,
-  preflightAuth,
+  preflightAuth, resolveSuite, readDeclaredEvidence,
 } from '../run-evals.mjs';
 
 /** The real handles, read-only, so the suite's own case files are what gets asserted. */
@@ -1155,4 +1154,187 @@ test('preflightAuth refuses a binary that is logged out under the sweep\'s confi
   assert.match(garbage.why, /could not read/);
   const dead = await preflightAuth(async () => { throw new Error('ENOENT'); }, cmd({}));
   assert.equal(dead.ok, false);
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ResolveSuite — one SuitePaths per invocation, refused before any spend.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+test('with no flag the suite is the one the runner has always swept', () => {
+  const { suite, rest } = resolveSuite(['--condition', 'treatment']);
+  assert.deepEqual(suite, paths);
+  assert.deepEqual(rest, ['--condition', 'treatment'], 'the rest of the argv is untouched');
+});
+
+test('--suite is taken out of the argv and the remaining flags reach the ordinary parser', () => {
+  const { suite, rest } = resolveSuite(['--runs', '3', '--suite', 'evals/seven-steps-primer-defects', '--keep-temp']);
+  assert.equal(suite.suiteDir, 'evals/seven-steps-primer-defects');
+  assert.equal(suite.conditionsDir, 'evals/seven-steps-primer-defects/conditions');
+  assert.equal(suite.resultsDir, 'evals/seven-steps-primer-defects/results');
+  assert.deepEqual(rest, ['--runs', '3', '--keep-temp']);
+  // `_conditions/` sits BESIDE the suites, so both suites name the same copied path and
+  // sweeps stay sequential by construction rather than by anyone remembering.
+  assert.equal(suite.conditionUnderTest, 'evals/seven-steps-primer-defects/../_conditions/current');
+});
+
+test('a trailing slash, a leading ./ and an absolute path inside the checkout all resolve the same', () => {
+  for (const value of ['evals/seven-steps-primer-defects/', './evals/seven-steps-primer-defects',
+    `${paths.repoRoot}/evals/seven-steps-primer-defects`])
+    assert.equal(resolveSuite(['--suite', value]).suite.suiteDir, 'evals/seven-steps-primer-defects',
+      `--suite ${value}`);
+});
+
+test('a suite path that is not one directory under evals/ is refused before anything is spawned', () => {
+  for (const value of ['evals', 'evals/a/b', 'skills/seven-steps-primer', '../evals/x', 'evals/../skills',
+    '/tmp/elsewhere', ''])
+    assert.throws(() => resolveSuite(['--suite', value]), RunError, `--suite ${JSON.stringify(value)}`);
+  assert.throws(() => resolveSuite(['--suite']), /--suite needs a directory/);
+});
+
+test('--suite given twice with two values is refused rather than letting the second win', () => {
+  assert.throws(() => resolveSuite(['--suite', 'evals/a', '--suite', 'evals/b']), /--suite given twice/);
+  assert.equal(resolveSuite(['--suite', 'evals/a', '--suite', 'evals/a']).suite.suiteDir, 'evals/a',
+    'the same value twice names one suite and is not ambiguous');
+});
+
+test('parseArgv refuses --suite rather than ignoring it, because ignoring it sweeps the wrong suite', () => {
+  assert.throws(() => parseArgv(['--suite', 'evals/seven-steps-primer-defects']),
+    /--suite is resolved before the option parser/);
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ReadDeclaredEvidence — derived by mechanism, declared by exception.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+test('with neither field declared the pair is derived from the transcript, as it always was', () => {
+  assert.deepEqual(readDeclaredEvidence({}), { evidence: 'delta', ablation: 'with-without', declared: false });
+  assert.deepEqual(readDeclaredEvidence({ 'context.history_file': 'history.jsonl' }),
+    { evidence: 'capability', ablation: 'none', declared: false });
+});
+
+test('a declared pair overrides the derivation, and only a declared pair does', () => {
+  assert.deepEqual(readDeclaredEvidence({ 'context.history_file': 'history.jsonl', evidence: 'delta', ablation: 'with-without' }),
+    { evidence: 'delta', ablation: 'with-without', declared: true });
+  assert.deepEqual(readDeclaredEvidence({ evidence: 'capability', ablation: 'none' }),
+    { evidence: 'capability', ablation: 'none', declared: true });
+});
+
+test('half a declaration is refused — it is a derivation wearing a label', () => {
+  assert.throws(() => readDeclaredEvidence({ evidence: 'delta' }), /declares evidence without the other/);
+  assert.throws(() => readDeclaredEvidence({ ablation: 'with-without' }), /declares ablation without the other/);
+});
+
+test('the two pairs the registration refuses are refused here too, declared or not', () => {
+  assert.throws(() => readDeclaredEvidence({ evidence: 'delta', ablation: 'none' }), /a case cannot be both/);
+  assert.throws(() => readDeclaredEvidence({ evidence: 'capability', ablation: 'with-without' }), /a case cannot be both/);
+  assert.throws(() => readDeclaredEvidence({ evidence: 'outcome', ablation: 'none' }), /neither delta nor capability/);
+  assert.throws(() => readDeclaredEvidence({ evidence: 'delta', ablation: 'both' }), /not a harness ablation/);
+});
+
+test('the one declared case in the tree is the seeded-defects replay, and every other case is derived', async () => {
+  const defects = suitePathsFor('evals/seven-steps-primer-defects');
+  const cases = await discoverCases(readTextFile, listDirectory, defects);
+  const scored = cases.find((c) => c.name === 'step4-seeded-defects');
+  assert.equal(scored.declared, true, 'the replay that runs both arms says so itself');
+  assert.equal(scored.evidence, 'delta');
+  assert.equal(scored.ablation, 'with-without');
+  const diagnostic = cases.find((c) => c.name === 'step4-read-only');
+  assert.equal(diagnostic.declared, undefined, 'the diagnostic declares nothing and is derived capability/none');
+  assert.equal(diagnostic.ablation, 'none');
+  for (const spec of await discoverCases(readTextFile, listDirectory, paths))
+    assert.equal(spec.declared, undefined, `${spec.name}: no Tier 1 case declares its pair`);
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The two pass-throughs — absent by default, so every Tier 1 argv is unchanged.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+test('--max-cost-usd and --keep-temp appear only when asked for, in that order, before --tag', () => {
+  const argv = buildEvalArgv(invocation({ maxCostUsd: 30, keepTemp: true }));
+  assert.deepEqual(argv.slice(argv.indexOf('--no-publish'), argv.indexOf('--tag')),
+    ['--no-publish', '--max-cost-usd', '30', '--keep-temp'],
+    'both sit after --no-publish and before --tag, which is variadic and would swallow a bare value');
+});
+
+test('an invocation that asks for neither builds the argv it always built', () => {
+  assert.equal(buildEvalArgv(invocation()).includes('--max-cost-usd'), false);
+  assert.equal(buildEvalArgv(invocation()).includes('--keep-temp'), false);
+  assert.deepEqual(buildEvalArgv(invocation({ maxCostUsd: undefined, keepTemp: false })), buildEvalArgv(invocation()));
+});
+
+test('a cost ceiling of zero or less is refused here, not discovered as a partial document', () => {
+  for (const value of [0, -1, '30', NaN])
+    assert.throws(() => buildEvalArgv(invocation({ maxCostUsd: value })), /is not a positive number/,
+      `--max-cost-usd ${JSON.stringify(value)}`);
+});
+
+test('parseArgv takes the two flags, and refuses a ceiling that is not a positive number', () => {
+  assert.equal(parseArgv(['--max-cost-usd', '30']).maxCostUsd, 30);
+  assert.equal(parseArgv(['--keep-temp']).keepTemp, true);
+  assert.equal(parseArgv([]).maxCostUsd, undefined, 'absent by default, so the argv is unchanged');
+  assert.equal(parseArgv([]).keepTemp, undefined);
+  for (const value of ['0', '-1', 'lots', ''])
+    assert.throws(() => parseArgv(['--max-cost-usd', value]), /--max-cost-usd needs a positive number/);
+});
+
+test('planSweep copies both flags onto every invocation, and omits them when unset', async () => {
+  const defects = suitePathsFor('evals/seven-steps-primer-defects');
+  const cases = await discoverCases(readTextFile, listDirectory, defects);
+  const args = { conditions: ['treatment'], runs: 10, smoke: false, maxCostUsd: 30, keepTemp: true };
+  const plan = planSweep(cases, args, defects);
+  assert.equal(plan.sweeps[0].invocations.length, 1, 'one tag-filtered invocation: every scored case shares an ablation');
+  const { inv, argv } = plan.sweeps[0].invocations[0];
+  assert.equal(inv.maxCostUsd, 30);
+  assert.equal(inv.keepTemp, true);
+  assert.deepEqual(argv, [
+    'plugin', 'eval', '.',
+    '--eval-dir', 'evals/seven-steps-primer-defects',
+    '--ablation', 'with-without',
+    '--runs', '10',
+    '--model', 'sonnet',
+    '--judge-model', 'opus',
+    '--threshold', '0.6',
+    '--scaffold',
+    '--no-publish',
+    '--max-cost-usd', '30',
+    '--keep-temp',
+    '--tag', 'outcome', 'scored',
+    '--allow-tools', 'Bash', 'Edit', 'Write',
+  ]);
+  const plain = planSweep(cases, { conditions: ['treatment'], runs: 10, smoke: false }, defects);
+  assert.equal(plain.sweeps[0].invocations[0].argv.includes('--keep-temp'), false);
+  assert.equal(plain.sweeps[0].invocations[0].argv.includes('--max-cost-usd'), false);
+});
+
+test('the diagnostic is excluded from the defects sweep by tag, and the scored case is the only one named', async () => {
+  const defects = suitePathsFor('evals/seven-steps-primer-defects');
+  const plan = planSweep(await discoverCases(readTextFile, listDirectory, defects),
+    { conditions: ['treatment'], runs: 10, smoke: false }, defects);
+  assert.deepEqual(plan.scored, ['step4-seeded-defects']);
+  assert.deepEqual(plan.excluded, ['step4-read-only']);
+  const tags = plan.sweeps[0].invocations[0].inv.tagFilters;
+  assert.deepEqual(tags, ['outcome', 'scored']);
+  assert.equal(tags.includes('control'), false, '--tag is an include filter, and the control is kept out by not being named');
+  assert.equal(tags.includes('diagnostic'), false);
+});
+
+/* ── The run count comes from the registration, not from a constant ────────── */
+
+test('parseArgv takes its default run count from the caller, and the caller is the registration', () => {
+  assert.equal(parseArgv([], undefined, 10).runs, 10);
+  assert.equal(parseArgv([], undefined, 10).runsDeclared, false);
+  assert.equal(parseArgv(['--runs', '3'], undefined, 10).runs, 3);
+  assert.equal(parseArgv(['--runs', '3'], undefined, 10).runsDeclared, true,
+    'recorded so the entry point can refuse a count below the registered one BEFORE it spends');
+  assert.equal(parseArgv([]).runs, 5, 'a caller with no registration still gets the code default');
+  assert.throws(() => parseArgv([], undefined, 0), /is not a run count/);
+});
+
+test('the two registrations name the run counts the runner will default to', async () => {
+  const { parsePreRegistration } = await import('../merge-results.mjs');
+  const tier1 = parsePreRegistration(await readTextFile('evals/seven-steps-primer/PRE-REGISTRATION.md'));
+  const tier2 = parsePreRegistration(await readTextFile('evals/seven-steps-primer-defects/PRE-REGISTRATION.md'));
+  assert.equal(tier1.runsPerCase, 5);
+  assert.equal(tier2.runsPerCase, 10);
+  assert.deepEqual(tier2.conditions, ['treatment', 'placebo', 'run-oneliner']);
 });

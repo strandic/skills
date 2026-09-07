@@ -22,15 +22,15 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat, mkdtemp, mkdir, rm, copyFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { judgePrompt, readDefectLedger } from '../ledger.mjs';
 import {
-  paths, discoverCases, frontmatter, buildEvalArgv, invocationFor,
-// TODO: RESOLVED in recon — walk every suite: enumerate evals/*/PRE-REGISTRATION.md, build suitePathsFor(dir) per hit, and run the grader walk (probes for every patterned grader: surfaced-* and service-started; llm bodies clean; ratchets per suite) for each.
+  paths, suitePathsFor, discoverCases, frontmatter, buildEvalArgv, invocationFor,
 } from '../run-evals.mjs';
-import { mergeSweeps } from '../merge-results.mjs';
+import { mergeSweeps, parsePreRegistration } from '../merge-results.mjs';
 import * as inv from '../invariants.mjs';
 
 const bad = (message) => { throw new Error(message); };
@@ -52,12 +52,78 @@ const listDirectory = async (p) => {
  * and greenly over a suite that has silently stopped discovering anything.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-/** Every grader file the suite ships, patterned or not. */
-// 26 since 2026-09-03: step3-markers-in-source's `skill-fired` was removed (Amendment 6) —
-// the replayed seed turn names the skill, so it fired under every condition and scored the
-// transcript, not the behaviour. The pre-registration's grader table never counted it.
-// TODO: ratchets become per suite; the defects suite's counts are set at step 4 once the ledger is accepted (reported-<id> per defect, surfaced-<id> per run-only defect, liveness-read, service-started, skill-fired).
-const EXPECTED_GRADERS = 26;
+/**
+ * Every suite, enumerated rather than listed: a suite is an `evals/<name>/` holding a
+ * `PRE-REGISTRATION.md`, which is the same rule the runner's `--suite` applies. Listing
+ * them would let a suite be added without a self-test and nobody would hear about it.
+ */
+const TIER1 = 'evals/seven-steps-primer';
+const TIER2 = 'evals/seven-steps-primer-defects';
+
+async function discoverSuites() {
+  const found = [];
+  for (const entry of await listDirectory('evals')) {
+    if (!entry.isDirectory) continue;
+    const dir = `evals/${entry.name}`;
+    if (await readTextFile(`${dir}/PRE-REGISTRATION.md`).then(() => true).catch(() => false)) found.push(dir);
+  }
+  return found.sort();
+}
+
+/**
+ * The hand-written expectations, PER SUITE. Every count here is a ratchet, bumped
+ * deliberately and derived from nothing: a check that both decides what it should find
+ * and confirms it found it passes loudly and greenly over a suite that has silently
+ * stopped discovering anything.
+ *
+ * A suite with no entry here fails the first test below rather than being walked with
+ * nothing to compare against.
+ */
+const RATCHETS = {
+  [TIER1]: {
+    // 26 since 2026-09-03: step3-markers-in-source's `skill-fired` was removed
+    // (Amendment 6) — the replayed seed turn names the skill, so it fired under every
+    // condition and scored the transcript, not the behaviour. The pre-registration's
+    // grader table never counted it.
+    graders: 26,
+    patterned: 13,
+    controlCases: 1,
+    // The cases whose claim is *the source was not touched*. `null` for a suite that
+    // makes no absence claim, which is not the same as an empty list: I6 refuses an
+    // empty list by design, and passing one would be the vacuous pass in person.
+    absenceCases: ['gate-stop-step0', 'looks-trivial-is-structural'],
+    ceiling: {
+      // Tier 1's ceiling is fixed by D7 of its plan and quoted in its README.
+      source: 'plan',
+      planPath: 'docs/plans/primer-evals/0-plan.md',
+      anchor: /^>\s*With the primer loaded/,
+      readme: 'evals/seven-steps-primer/README.md',
+    },
+  },
+  [TIER2]: {
+    // 12 `reported-<id>`, one per accepted defect, plus the three guards on the scored
+    // case and the diagnostic's own liveness guard. No `surfaced-<id>`: that grader
+    // belongs to the run-only class, and recon found the class empty (4-recon.md).
+    graders: 16,
+    // Only `service-started` carries an authored pattern. An `llm` rubric has none, and
+    // an unanchored `tool_used` count has none either.
+    patterned: 1,
+    controlCases: 1,
+    absenceCases: null,
+    ceiling: {
+      // This suite's ceiling is the registration's own `claimCeiling`, not its plan's
+      // blockquote: the plan's D6 sentence was written before recon and superseded at
+      // gate 4, while the registration is the file I2 and I8 digest and refuse edits to.
+      // The anchor the plan named is asserted against that sentence all the same.
+      source: 'registration',
+      planPath: 'docs/plans/primer-evals/defect-injection/0-plan.md',
+      anchor: /^Gates 0 to 3 are already cleared/,
+      readme: 'evals/seven-steps-primer-defects/README.md',
+    },
+  },
+};
+
+const EXPECTED_GRADERS = RATCHETS[TIER1].graders;
 
 /**
  * Of those, the ones carrying an authored pattern — the only ones a probe can test.
@@ -67,7 +133,7 @@ const EXPECTED_GRADERS = 26;
  * to match `no-source-writes.md`, it now carries a pattern a probe can test, in both
  * cases.
  */
-const EXPECTED_PATTERNED_GRADERS = 13;
+const EXPECTED_PATTERNED_GRADERS = RATCHETS[TIER1].patterned;
 
 /**
  * Test files that declare no tests report `pass 1`; this is the floor that catches it.
@@ -77,8 +143,12 @@ const EXPECTED_PATTERNED_GRADERS = 13;
  * Bumped 188 -> 191 for the three tests added below with the grader-leak fix: the
  * fixture binding for both `source-untouched` patterns, the linearity guard on them, and
  * the `llm`-body leak check.
+ *
+ * Bumped 191 -> 490 at step 6 of the defect-injection feature: the grader groups and
+ * their floors, the suite resolver, the declared evidence rule, the two argv
+ * pass-throughs, the ledger module, the second suite's walk and its fixture's health.
  */
-const MIN_DECLARED_TESTS = 191;
+const MIN_DECLARED_TESTS = 490;
 
 /**
  * The cases whose claim is *the source was not touched* — authored, never derived. A
@@ -91,11 +161,10 @@ const MIN_DECLARED_TESTS = 191;
  * a `sed -i` over a file that already existed. Naming a case here that has no source to
  * leave alone would fail I6 for the wrong reason.
  */
-// TODO: per suite; the defects suite registers no absence case, so I6 is skipped for it with the reason, not run against an empty list.
-const ABSENCE_CASES = ['gate-stop-step0', 'looks-trivial-is-structural'];
+const ABSENCE_CASES = RATCHETS[TIER1].absenceCases;
 
 /** Exactly one diagnostic, and it must never reach a scored table (I7). */
-const EXPECTED_CONTROL_CASES = 1;
+const EXPECTED_CONTROL_CASES = RATCHETS[TIER1].controlCases;
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Reading a grader file.
@@ -420,8 +489,24 @@ function checkGraderProbe(probe) {
  * cannot present as a clean run.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-const { graders, probes } = await collectGraderProbes(readTextFile, listDirectory, paths);
-const specs = await discoverCases(readTextFile, listDirectory, paths);
+const SUITE_DIRS = await discoverSuites();
+
+/** One collection per suite, gathered while the module evaluates. */
+const suites = [];
+for (const dir of SUITE_DIRS) {
+  const suitePaths = suitePathsFor(dir);
+  suites.push({
+    dir,
+    paths: suitePaths,
+    ratchet: RATCHETS[dir],
+    ...(await collectGraderProbes(readTextFile, listDirectory, suitePaths)),
+    specs: await discoverCases(readTextFile, listDirectory, suitePaths),
+  });
+}
+
+/** The first suite's, so every test written before there was a second one still reads. */
+const { graders, probes } = suites.find((s) => s.dir === TIER1);
+const specs = suites.find((s) => s.dir === TIER1).specs;
 
 /* ── The runner's own defect ───────────────────────────────────────────────────
  *
@@ -509,17 +594,19 @@ test('an unpatterned grader is unpatterned by TYPE, never by a dropped key', () 
 /* ── One test per grader, so a failure names the grader ────────────────────── */
 
 let registeredProbeTests = 0;
-for (const probe of probes) {
-  registeredProbeTests += 1;
-  test(`probe · ${probe.graderId} discriminates`, () => {
-    const { ok, failures } = checkGraderProbe(probe);
-    assert.ok(ok, failures.join('\n         '));
-  });
-}
+for (const suite of suites)
+  for (const probe of suite.probes) {
+    registeredProbeTests += 1;
+    test(`probe · ${suite.dir}/${probe.graderId} discriminates`, () => {
+      const { ok, failures } = checkGraderProbe(probe);
+      assert.ok(ok, failures.join('\n         '));
+    });
+  }
 
 test('a test was registered for every probe, not for whatever survived a filter', () => {
-  assert.equal(registeredProbeTests, probes.length);
-  assert.equal(registeredProbeTests, EXPECTED_PATTERNED_GRADERS);
+  const total = suites.reduce((n, s) => n + s.probes.length, 0);
+  assert.equal(registeredProbeTests, total);
+  assert.equal(total, Object.values(RATCHETS).reduce((n, r) => n + r.patterned, 0));
 });
 
 /* ── Do the committed samples have teeth? ──────────────────────────────────────
@@ -532,7 +619,7 @@ test('a test was registered for every probe, not for whatever survived a filter'
  * ──────────────────────────────────────────────────────────────────────────── */
 
 test('every committed mustNotMatch set rejects a pattern that matches everything', () => {
-  for (const probe of probes) {
+  for (const probe of suites.flatMap((s) => s.probes)) {
     const r = checkGraderProbe({ ...probe, pattern: '[\\s\\S]*', flags: '' });
     assert.equal(r.ok, false, `${probe.graderId}: its negatives do not catch an over-broad pattern`);
     assert.match(r.failures.join(' '), /MUST NOT match, does/);
@@ -540,7 +627,7 @@ test('every committed mustNotMatch set rejects a pattern that matches everything
 });
 
 test('every committed mustMatch set rejects a pattern that matches nothing', () => {
-  for (const probe of probes) {
+  for (const probe of suites.flatMap((s) => s.probes)) {
     const r = checkGraderProbe({ ...probe, pattern: '(?!)', flags: '' });
     assert.equal(r.ok, false, `${probe.graderId}: its positives do not catch a dead pattern`);
     assert.match(r.failures.join(' '), /MUST match, does not/);
@@ -565,7 +652,6 @@ test('every committed mustMatch set rejects a pattern that matches nothing', () 
  * edit.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-// TODO: seeded-fixture health beside this, per suite — suite green with every defect present; each detect.sh red on seeded, green on clean, red after the reference implementation; signature grep over the five shipped files empty; scaffolded workspace carries no defects/; two concurrent starts succeed; test/notes.test.js byte-identical to the clean fixture's.
 const FIXTURE_MIDDLEWARE = 'evals/seven-steps-primer/fixtures/notesvc/src/middleware/index.js';
 
 /** One substitution, refusing to be a no-op — a mutation that changed nothing proves nothing. */
@@ -870,15 +956,38 @@ test('I6 — strip the content grader and the absence claim is refused', () => {
 
 /* ── I3 — the claim ceiling, read out of the ruling that set it ────────────── */
 
-/** The D7 blockquote in `0-plan.md`. One copy in the repo; every check reads that one. */
-// TODO: anchor per suite — the defects suite's ceiling opens "Gates 0 to 3 are already cleared" and its plan is docs/plans/primer-evals/defect-injection/0-plan.md; the check takes the plan path and the anchor.
-function claimCeiling(planMarkdown) {
+/**
+ * A plan's claim-ceiling blockquote, from the line its anchor names. The anchor is a
+ * parameter because the two suites' ceilings open on different words — and because a
+ * check that looked for one hard-coded sentence would pass on a suite whose ceiling it
+ * had never read.
+ */
+function claimCeiling(planMarkdown, anchor = /^>\s*With the primer loaded/, where = '0-plan.md') {
   const lines = planMarkdown.split('\n');
-  const start = lines.findIndex((l) => /^>\s*With the primer loaded/.test(l));
-  if (start < 0) bad('0-plan.md carries no claim-ceiling blockquote — D7 is the source of this sentence');
+  const start = lines.findIndex((l) => anchor.test(l));
+  if (start < 0) bad(`${where} carries no claim-ceiling blockquote matching ${anchor} — the plan is the ` +
+    'source of this sentence');
   const out = [];
   for (let i = start; i < lines.length && lines[i].startsWith('>'); i++) out.push(lines[i].replace(/^>\s?/, ''));
   return out.join(' ');
+}
+
+/**
+ * The sentence I3 holds a suite's README to. Tier 1 takes it from its plan, where D7
+ * fixed it. The second suite takes it from its REGISTRATION, because that suite's plan
+ * sentence was written before recon and superseded at gate 4 — and because the
+ * registration is the file whose digest I2 checks and whose edits I8 refuses, which is a
+ * stronger anchor than a document either can edit.
+ */
+async function ceilingFor(suite) {
+  const { source, planPath, anchor } = suite.ratchet.ceiling;
+  if (source === 'plan') return claimCeiling(await readTextFile(planPath), anchor, planPath);
+  const registration = parsePreRegistration(await readTextFile(`${suite.dir}/PRE-REGISTRATION.md`));
+  const ceiling = registration.claimCeiling;
+  if (typeof ceiling !== 'string' || ceiling.trim() === '')
+    bad(`${suite.dir}/PRE-REGISTRATION.md registers no claimCeiling — there is nothing to hold the README to`);
+  assert.match(ceiling, anchor, `${suite.dir}: the registered ceiling does not open on the words the plan named`);
+  return ceiling;
 }
 
 test('I3 — the claim ceiling sentence is present verbatim in the suite README', async () => {
@@ -1103,7 +1212,6 @@ const CLI_VERSIONS = join(homedir(), '.local', 'share', 'claude', 'versions');
  * it and eleven citations silently "broke" while neither they nor the harness had moved.
  * A failing marker is first evidence that the bundling changed, not that a fact did.
  */
-// TODO: pin JudgePrompt's text against the binary the same way — marker "You are grading the output of a coding agent against a criterion." and the system line "You are a strict, terse evaluation judge for coding-agent traces."
 function unresolvedMarkers(bin, markers) {
   return new Promise((resolve, reject) => {
     const remaining = new Set(markers);
@@ -1135,9 +1243,14 @@ function unresolvedMarkers(bin, markers) {
 test('every harness-fact marker still resolves against the pinned CLI binary', async (t) => {
   const md = await readTextFile('docs/plans/primer-evals/harness-facts.md');
   const pinned = /\*\*Pinned version:\*\* `(\d+\.\d+\.\d+)`/.exec(md)[1];
-  const bin = join(CLI_VERSIONS, pinned);
-  if (!(await stat(bin).then((s) => s.isFile()).catch(() => false)))
-    return t.skip(`no ${bin} on this machine — the citations cannot be checked from here`);
+  // The pin lives outside the updater's cache on purpose (the cache is pruned), so both
+  // homes are tried before this check gives up and skips.
+  const candidates = [join(CLI_VERSIONS, pinned), join(homedir(), '.local', 'share', 'claude-pinned', pinned)];
+  let bin = null;
+  for (const path of candidates)
+    if (await stat(path).then((s) => s.isFile()).catch(() => false)) { bin = path; break; }
+  if (bin === null)
+    return t.skip(`no pinned ${pinned} in ${candidates.join(' or ')} — the citations cannot be checked from here`);
 
   const markers = harnessFactMarkers(md).map((m) => m.marker);
   let missing;
@@ -1173,3 +1286,355 @@ function compareVersions(a, b) {
   for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
   return 0;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Every suite, walked.
+ *
+ * The suites are ENUMERATED — an `evals/<name>/` holding a PRE-REGISTRATION.md — and
+ * then held against hand-written per-suite ratchets. Both halves matter: enumeration
+ * means a suite cannot be added without a self-test, and the ratchets mean the self-test
+ * cannot agree with whatever it happened to find.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+test('every suite in the tree is enumerated, and every enumerated suite has ratchets to be held to', () => {
+  assert.deepEqual(SUITE_DIRS, [TIER1, TIER2],
+    'a suite was added or moved; give it a RATCHETS entry before it can be swept');
+  assert.deepEqual(Object.keys(RATCHETS).sort(), [...SUITE_DIRS].sort());
+  assert.equal(suites.length, SUITE_DIRS.length);
+  for (const suite of suites)
+    assert.ok(suite.ratchet, `${suite.dir}: walked with nothing to compare against`);
+});
+
+test('each suite ships the number of graders it says it does, and each case ships some', () => {
+  for (const suite of suites) {
+    assert.equal(suite.graders.length, suite.ratchet.graders,
+      `${suite.dir}: ${suite.graders.length} graders discovered, ${suite.ratchet.graders} expected — ` +
+      'a directory moved, or one was added without a probe set');
+    for (const spec of suite.specs)
+      assert.ok(suite.graders.some((g) => g.caseName === spec.name), `${suite.dir}/${spec.name}: no grader`);
+  }
+});
+
+test('each suite`s patterned graders are the ones a probe can test, and there are as many as declared', () => {
+  for (const suite of suites) {
+    assert.equal(suite.probes.length, suite.ratchet.patterned,
+      `${suite.dir}: ${suite.probes.length} patterned graders, ${suite.ratchet.patterned} expected`);
+    for (const g of suite.graders.filter((x) => x.pattern === null))
+      assert.ok(g.meta.type === 'llm' || (g.meta.type === 'tool_used' && !g.meta.input_match),
+        `${suite.dir}/${g.graderId}: type ${g.meta.type} carries a pattern in every other case but lost it here`);
+  }
+});
+
+test('I5 — every patterned grader in every suite carries both halves of a probe set', () => {
+  for (const suite of suites) {
+    const ids = suite.probes.map((p) => p.graderId);
+    assert.equal(ids.length, suite.ratchet.patterned, `${suite.dir}: the grader list is supplied, not derived`);
+    const r = inv.i5GradersHaveCompleteProbes(suite.probes, ids);
+    assert.ok(r.ok, `${suite.dir}: ${r.violations.join('; ')}`);
+  }
+});
+
+test('I7 — every suite tags exactly the diagnostics it declares, and none reaches a scored table', () => {
+  for (const suite of suites) {
+    const controls = suite.specs.filter((s) => s.tags.includes('control'));
+    assert.equal(controls.length, suite.ratchet.controlCases,
+      `${suite.dir}: ${controls.length} control-tagged cases, ${suite.ratchet.controlCases} expected`);
+    const r = inv.i7ControlNeverInHeadline({ deltaRows: [], capabilityRows: [] }, suite.specs);
+    assert.ok(r.ok, `${suite.dir}: ${r.violations.join('; ')}`);
+  }
+});
+
+test('I6 — run where a suite makes an absence claim, and SKIPPED with its reason where it makes none', () => {
+  const skipped = [];
+  for (const suite of suites) {
+    if (suite.ratchet.absenceCases === null) {
+      // Not an empty list. I6 refuses one by design ("no absence cases named — vacuous
+      // pass refused"), and handing it one would turn a check with nothing to hold into
+      // a red suite rather than into the honest statement that this suite claims no
+      // absence: its single scored case measures what a reply NAMES, not what a run
+      // refrained from doing.
+      skipped.push(suite.dir);
+      assert.equal(inv.i6AbsenceClaimsHaveContentEvidence([], []).ok, false,
+        'and an empty list stays a refusal, so the skip is a decision rather than a loophole');
+      continue;
+    }
+    const cases = suite.specs.map((spec) => ({
+      name: spec.name,
+      graders: suite.graders.filter((g) => g.caseName === spec.name).map((g) => ({
+        type: g.meta.type, tool: g.meta.tool,
+        target: inlineMap(g.meta.target) ?? g.meta.target,
+        focus: inlineMap(g.meta.focus) ?? g.meta.focus,
+      })),
+    }));
+    const r = inv.i6AbsenceClaimsHaveContentEvidence(cases, suite.ratchet.absenceCases);
+    assert.ok(r.ok, `${suite.dir}: ${r.violations.join('; ')}`);
+  }
+  assert.deepEqual(skipped, [TIER2], 'exactly one suite registers no absence case');
+});
+
+test('I3 — every suite`s README carries its own claim ceiling verbatim, from its own source', async () => {
+  for (const suite of suites) {
+    const ceiling = await ceilingFor(suite);
+    const readme = await readTextFile(suite.ratchet.ceiling.readme);
+    const r = inv.i3ClaimCeilingIntact(readme, ceiling, {
+      claimsSectionChanged: false, preRegistrationShaChanged: false,
+    });
+    assert.ok(r.ok, `${suite.dir}: ${r.violations.join('; ')} — the ceiling is fixed before any run and ` +
+      `${suite.ratchet.ceiling.readme} must carry it word for word`);
+  }
+});
+
+test('I3 — a README that paraphrases the second suite`s ceiling is refused', async () => {
+  const suite = suites.find((s) => s.dir === TIER2);
+  const ceiling = await ceilingFor(suite);
+  const diff = { claimsSectionChanged: false, preRegistrationShaChanged: false };
+  assert.equal(inv.i3ClaimCeilingIntact('# Suite\n\nThe primer finds more defects.\n', ceiling, diff).ok, false);
+  assert.equal(inv.i3ClaimCeilingIntact(`x ${ceiling.replace('fewer', 'more')} y`, ceiling, diff).ok, false,
+    'one word is the whole finding: the registered direction against the placebo is -1');
+});
+
+test('the second suite`s registered ceiling says what its registered directions say', async () => {
+  const registration = parsePreRegistration(await readTextFile(`${TIER2}/PRE-REGISTRATION.md`));
+  assert.equal(registration.expectedDirection['step4-seeded-defects#reported/placebo'], -1);
+  assert.match(registration.claimCeiling, /name fewer of the planted defects than the same-shape placebo/,
+    'the ceiling and the direction are one prediction written twice; they may not disagree');
+  assert.match(registration.claimCeiling, /says nothing about whether the software that comes out is better/);
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * I10 — no method vocabulary in an instrument or a brief.
+ *
+ * Lexical, and known to be. It catches a grader written from the skill's text; it cannot
+ * catch a brief that states the hypothesis in other words, and Appendix A does exactly
+ * that. The plan says so, and this test does not pretend otherwise.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/** A blockquote appendix of the plan: the brief as it was handed to an isolated agent. */
+function appendix(planMarkdown, heading) {
+  const lines = planMarkdown.split('\n');
+  const start = lines.findIndex((l) => l.startsWith(heading));
+  if (start < 0) bad(`0-plan.md carries no ${heading}`);
+  const out = [];
+  for (let i = start + 1; i < lines.length && !lines[i].startsWith('## '); i++)
+    if (lines[i].startsWith('>')) out.push(lines[i].replace(/^>\s?/, ''));
+  if (out.length === 0) bad(`${heading} carries no blockquote — the brief was given verbatim or it was not`);
+  return out.join('\n');
+}
+
+/**
+ * What the vocabulary check reads, for the suite that has a ledger: every file written
+ * by an agent under the fence, plus the two briefs that were handed to them, plus the
+ * body of every `llm` grader.
+ *
+ * An `llm` body and no other. That body is handed to the judge verbatim, so a word from
+ * the method inside it is a word the judge scores against — which is the leak I10 exists
+ * to catch. The unscored guards' bodies (`liveness-read`, `service-started`,
+ * `skill-fired`) are design notes that reach no judge and no author under the fence, and
+ * they name recon and step 4 on purpose. They are shared fixture state written by
+ * someone who has read the method, exactly like the case files, the transcript and the
+ * port change — which the plan already lists as what the contamination rule cannot
+ * cover.
+ */
+async function instrumentFiles(suiteDir) {
+  const files = [];
+  const ledgerDir = `${suiteDir}/fixtures/notesvc-seeded/defects`;
+  const ledger = await readDefectLedger(readTextFile, listDirectory, ledgerDir);
+  for (const d of ledger) {
+    for (const file of ['behaviour.md', 'cause.md', 'criteria.md', 'detect.sh', 'signature'])
+      files.push({ path: `${d.id}/${file}`, text: await readTextFile(`${ledgerDir}/${d.id}/${file}`) });
+    for (const probe of ['by-cause', 'by-observable', 'hedge', 'wrong'])
+      files.push({ path: `${d.id}/probes/${probe}.md`, text: await readTextFile(`${ledgerDir}/${d.id}/probes/${probe}.md`) });
+  }
+  const suite = suites.find((s) => s.dir === suiteDir);
+  for (const g of suite.graders)
+    if (g.meta.type === 'llm') files.push({ path: g.graderId, text: g.text });
+  const plan = await readTextFile('docs/plans/primer-evals/defect-injection/0-plan.md');
+  files.push({ path: '0-plan.md § Appendix A', text: appendix(plan, '## Appendix A') });
+  files.push({ path: '0-plan.md § Appendix C', text: appendix(plan, '## Appendix C') });
+  return files;
+}
+
+test('I10 — no term of the owner`s word list appears in the instrument or in either brief', async () => {
+  const files = await instrumentFiles(TIER2);
+  assert.ok(files.length >= 100, `${files.length} instrument files — the walk found less than the ledger`);
+  const r = inv.i10InstrumentVocabulary(files, inv.METHOD_VOCABULARY);
+  assert.ok(r.ok, r.violations.join('\n         '));
+});
+
+test('I10 — the same walk over the same files catches a criterion written from the method', async () => {
+  const files = await instrumentFiles(TIER2);
+  const planted = [...files, { path: 'criteria.md', text: 'Score 1 if the recon report names the seam.' }];
+  const r = inv.i10InstrumentVocabulary(planted, inv.METHOD_VOCABULARY);
+  assert.equal(r.ok, false, 'a walk that finds nothing in a clean tree must still find something in a dirty one');
+  assert.match(r.violations.join(' '), /contains "recon"/);
+});
+
+test('the word list is the owner`s thirteen terms, and the check is whole-word', () => {
+  assert.equal(inv.METHOD_VOCABULARY.length, 13, 'gate 5 authored thirteen; adding one is the owner`s call');
+  for (const word of ['recon', 'gate', 'true input', 'step 4'])
+    assert.ok(inv.METHOD_VOCABULARY.includes(word), `${word} is one of the thirteen`);
+  assert.equal(inv.i10InstrumentVocabulary([{ path: 'a', text: 'The gateway refuses it.' }], inv.METHOD_VOCABULARY).ok,
+    true, '"gateway" is not "gate"');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The seeded fixture, run.
+ *
+ * Everything above reads files. This runs the service: the acceptance table of D3 is a
+ * claim about behaviour, and a claim about behaviour that is only ever read is the
+ * failure the method's step 4 is about.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+const SEEDED = `${TIER2}/fixtures/notesvc-seeded`;
+const CLEAN = `${TIER1}/fixtures/notesvc`;
+const SHIPPED_FILES = ['server.js', 'src/store.js', 'src/middleware/index.js', 'src/routes/notes.js', 'test/notes.test.js'];
+
+/** `spawn` as a promise, with the working directory named. Nothing here reads stdin. */
+const runCommand = (command, args, cwd) => new Promise((resolve) => {
+  const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', (d) => { stdout += d; });
+  child.stderr.on('data', (d) => { stderr += d; });
+  child.on('error', (e) => resolve({ code: 127, stdout, stderr: String(e) }));
+  child.on('close', (code) => resolve({ code: code ?? 0, stdout, stderr }));
+});
+
+test('the seeded fixture is the clean one plus markers and defects, and its tests are green with all of them', async () => {
+  const seededTest = await readTextFile(`${SEEDED}/test/notes.test.js`);
+  const cleanTest = await readTextFile(`${CLEAN}/test/notes.test.js`);
+  // The step-3 marker token, as a value, so the grep that enforces the marker convention
+  // over this repository's own source finds this line and reads it as the fixture's.
+  const MARKER = 'TODO(per-user)';
+  const withoutMarkers = (text) => text.split('\n').filter((l) => !l.includes(MARKER)).join('\n');
+  assert.equal(withoutMarkers(seededTest), withoutMarkers(cleanTest),
+    'the test file differs from the clean fixture`s only by the marker line the transcript names');
+  assert.ok(seededTest.includes(MARKER), 'and it does carry one: the transcript names the test hook as a site');
+
+  const suite = await runCommand(process.execPath, ['--test'], join(paths.repoRoot, SEEDED));
+  assert.equal(suite.code, 0, `node --test is not green with every defect present:\n${suite.stdout}${suite.stderr}`);
+});
+
+test('no signature is a literal in any shipped file — a trace that only READ the source must not match', async () => {
+  const ledger = await readDefectLedger(readTextFile, listDirectory, `${SEEDED}/defects`);
+  const sources = [];
+  for (const file of SHIPPED_FILES) sources.push({ file, text: await readTextFile(`${SEEDED}/${file}`) });
+  for (const d of ledger)
+    for (const { file, text } of sources)
+      assert.equal(text.includes(d.signature), false,
+        `${d.id}: its signature is a literal in ${file}, so a run that only read the file would match it`);
+});
+
+test('the scaffolded workspace is the five shipped files and no ledger', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'notesvc-scaffold-'));
+  const scaffold = await runCommand('bash', [join(paths.repoRoot, SEEDED, 'scaffold.sh')], workspace);
+  assert.equal(scaffold.code, 0, scaffold.stderr);
+  const landed = await readdir(workspace);
+  assert.equal(landed.includes('defects'), false, 'the ledger holds the answers and may never ship');
+  assert.equal(landed.includes('README.md'), false, 'a workspace that says "eval fixture" measures something else');
+  for (const file of SHIPPED_FILES)
+    assert.ok(await stat(join(workspace, file)).then(() => true).catch(() => false), `${file} did not land`);
+  await rm(workspace, { recursive: true, force: true });
+});
+
+test('two services start at once without colliding — the sweep runs sixty of them in sequence', async () => {
+  const start = () => new Promise((resolve) => {
+    const child = spawn(process.execPath, ['server.js'], {
+      cwd: join(paths.repoRoot, SEEDED), env: { ...process.env, PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    child.stdout.on('data', (d) => {
+      out += d;
+      const port = /localhost:(\d+)/.exec(out);
+      if (port) resolve({ child, port: Number(port[1]) });
+    });
+    child.on('close', () => resolve({ child, port: null }));
+  });
+  const [a, b] = await Promise.all([start(), start()]);
+  try {
+    assert.ok(a.port && b.port, 'a service that never printed a port did not bind one');
+    assert.notEqual(a.port, b.port, 'PORT ?? 0 exists so sequential runs on one host cannot collide on 3000');
+  } finally {
+    a.child.kill('SIGKILL');
+    b.child.kill('SIGKILL');
+  }
+});
+
+test('every detect script fires on the seeded service, is silent on the clean one, and survives the feature', async (t) => {
+  if ((await runCommand('git', ['--version'], paths.repoRoot)).code !== 0)
+    return t.skip('git is not on PATH, and the clean and reference copies are built by applying patches');
+  const ledger = await readDefectLedger(readTextFile, listDirectory, `${SEEDED}/defects`);
+  const seeded = join(paths.repoRoot, SEEDED);
+
+  /** A copy of the seeded service under git, so a patch can be applied or reversed. */
+  const copyOf = async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'notesvc-detect-'));
+    for (const file of SHIPPED_FILES) {
+      await mkdir(dirname(join(dir, file)), { recursive: true });
+      await copyFile(join(seeded, file), join(dir, file));
+    }
+    await runCommand('git', ['init', '-q', '.'], dir);
+    await runCommand('git', ['add', '-A'], dir);
+    await runCommand('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'seeded'], dir);
+    return dir;
+  };
+
+  const clean = await copyOf();
+  for (const d of ledger) {
+    const r = await runCommand('git', ['apply', '-R', join(seeded, 'defects', d.id, 'diff.patch')], clean);
+    assert.equal(r.code, 0, `${d.id}: its own patch does not reverse out of the seeded service: ${r.stderr}`);
+  }
+  const reference = await copyOf();
+  const applied = await runCommand('git', ['apply', join(seeded, 'defects', 'reference-implementation.patch')], reference);
+  assert.equal(applied.code, 0, `the reference per-user implementation does not apply: ${applied.stderr}`);
+
+  try {
+    for (const d of ledger) {
+      const script = join(seeded, 'defects', d.id, 'detect.sh');
+      const fire = async (root) => (await runCommand('bash', [script, root], seeded)).code;
+      assert.equal(await fire(seeded), 1, `${d.id}: does not fire on the seeded service — the defect is not there`);
+      assert.equal(await fire(clean), 0, `${d.id}: fires on the CLEAN service, so it is not this defect`);
+      assert.equal(await fire(reference), 1,
+        `${d.id}: stops firing once the feature is implemented — the treatment's own build would delete it`);
+    }
+  } finally {
+    await rm(clean, { recursive: true, force: true });
+    await rm(reference, { recursive: true, force: true });
+  }
+});
+
+/* ── The judge prompt, pinned against the binary it was read out of ────────── */
+
+test('the judge prompt this repository sends is the one inside the pinned CLI', async (t) => {
+  const md = await readTextFile('docs/plans/primer-evals/harness-facts.md');
+  const pinned = /\*\*Pinned version:\*\* `(\d+\.\d+\.\d+)`/.exec(md)[1];
+  // Two places, because the pin was deliberately moved OUT of the updater's cache: the
+  // updater prunes `versions/` and deleted this binary from it overnight once, which is
+  // why the suite's README tells an operator to keep it under `claude-pinned/`. A check
+  // that looked only in the cache would skip on every machine that followed the README.
+  const candidates = [join(CLI_VERSIONS, pinned), join(homedir(), '.local', 'share', 'claude-pinned', pinned)];
+  let bin = null;
+  for (const path of candidates)
+    if (await stat(path).then((s) => s.isFile()).catch(() => false)) { bin = path; break; }
+  if (bin === null)
+    return t.skip(`no pinned ${pinned} in ${candidates.join(' or ')} — the prompt cannot be checked from here`);
+  const { system, user } = judgePrompt('C', 'last_message', 'T');
+  const markers = [system, 'You are grading the output of a coding agent against a criterion.',
+    'Respond with exactly one word: PASS or FAIL.'];
+  for (const marker of markers) assert.ok(user.includes(marker) || marker === system);
+  let missing;
+  try {
+    missing = await unresolvedMarkers(bin, markers);
+  } catch (e) {
+    return t.skip(`\`strings\` is unavailable here (${e.code ?? e.message})`);
+  }
+  assert.deepEqual([...missing], [],
+    'the offline judge probe asks the judge something the sweep would not — re-read the shipped prompt');
+});
+
+test('the diagnostic`s liveness guard is byte-identical to the scored case`s', async () => {
+  // Two copies of one guard, because the harness requires a case's graders to sit in its
+  // own directory. Byte-identical or they are two different guards wearing one name.
+  const scored = await readTextFile(`${TIER2}/step4-seeded-defects/graders/liveness-read.md`);
+  const diagnostic = await readTextFile(`${TIER2}/step4-read-only/graders/liveness-read.md`);
+  assert.equal(diagnostic, scored);
+});

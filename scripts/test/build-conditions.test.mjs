@@ -9,11 +9,13 @@
  * `node --test scripts/test/*.test.mjs` — the trailing glob matters; a bare
  * directory is read as a module path and fails to load.
  */
-// TODO: tests for SuiteConditionPlan (two suites), copied-condition drift named by suite and id, generate writing copies, check walking both.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { stripModelInvocation, detectDrift, check, paths, removeSection, removeLines, buildAblation, ABLATIONS } from '../build-conditions.mjs';
+import {
+  stripModelInvocation, detectDrift, check, checkAll, generate, paths, pathsFor,
+  suiteConditionPlan, SUITES, removeSection, removeLines, buildAblation, ABLATIONS,
+} from '../build-conditions.mjs';
 
 const FLAG = 'disable-model-invocation';
 
@@ -216,4 +218,84 @@ test('check covers the ablations: a stale or missing ablation is drift, named by
   assert.match(stale.reason, /^treatment-no-triage: line 7/);
   const missing = await check(reader({ shipped, mirror }), w);
   assert.match(missing.reason, /^treatment-no-triage: no generated condition/);
+});
+
+/* ── One generator, two suites ─────────────────────────────────────────────── */
+
+test('every suite the generator serves declares what each of its conditions is derived from', () => {
+  assert.deepEqual(SUITES, ['evals/seven-steps-primer', 'evals/seven-steps-primer-defects']);
+  const tier1 = suiteConditionPlan('evals/seven-steps-primer');
+  assert.deepEqual(Object.keys(tier1.generated), ['treatment']);
+  assert.deepEqual(Object.keys(tier1.ablations), Object.keys(ABLATIONS));
+  assert.deepEqual(tier1.copied, {}, 'the first suite copies nothing: it is where the copies come from');
+
+  const tier2 = suiteConditionPlan('evals/seven-steps-primer-defects');
+  assert.deepEqual(Object.keys(tier2.generated), ['treatment']);
+  assert.deepEqual(Object.keys(tier2.copied), ['placebo']);
+  assert.match(tier2.copied.placebo, /evals\/seven-steps-primer\/conditions\/placebo\/SKILL\.md$/);
+  assert.deepEqual(tier2.ablations, {}, 'the section ablations belong to the first suite`s registration');
+});
+
+test('an authored condition is in no plan, so nothing regenerates the text under test', () => {
+  for (const suiteDir of SUITES) {
+    const plan = suiteConditionPlan(suiteDir);
+    const derived = [...Object.keys(plan.generated), ...Object.keys(plan.copied), ...Object.keys(plan.ablations)];
+    assert.equal(derived.includes('run-oneliner'), false,
+      'the run one-liner is authored; generating it would overwrite the sentence being measured');
+    if (suiteDir === 'evals/seven-steps-primer')
+      assert.equal(derived.includes('placebo'), false, 'the first suite`s placebo is authored');
+  }
+});
+
+test('a suite the generator does not serve is refused, not silently skipped', () => {
+  assert.throws(() => suiteConditionPlan('evals/not-a-suite'), /is not a suite this generator serves/);
+  assert.throws(() => pathsFor('evals/not-a-suite'), /is not a suite this generator serves/);
+});
+
+test('the default paths are the first suite`s, unchanged, so the runner`s import still resolves', () => {
+  assert.deepEqual(paths, pathsFor('evals/seven-steps-primer'));
+  assert.match(paths.shippedSkill, /skills\/seven-steps-primer\/SKILL\.md$/);
+});
+
+/* ── The copied condition: drift against its SOURCE ────────────────────────── */
+
+/** A read that answers from a map, so a copy can be made to differ without touching disk. */
+const readFrom = (overrides) => async (path) => (path in overrides ? overrides[path] : readFile(path, 'utf8'));
+
+test('the committed tree has no drift in either suite', async () => {
+  for (const { suiteDir, drifted, reason } of await checkAll((p) => readFile(p, 'utf8')))
+    assert.equal(drifted, false, `${suiteDir}: ${reason}`);
+});
+
+test('a copied condition that differs from its source is drift, and the reason names both ends', async () => {
+  const where = pathsFor('evals/seven-steps-primer-defects');
+  const source = await readFile(where.copied.placebo.from, 'utf8');
+  const r = await check(readFrom({ [where.copied.placebo.to]: `${source}One more sentence.\n` }), where);
+  assert.equal(r.drifted, true, 'a second placebo is not the same placebo');
+  assert.match(r.reason, /^placebo: /);
+  assert.match(r.reason, /copied from .*evals\/seven-steps-primer\/conditions\/placebo\/SKILL\.md/);
+});
+
+test('a copy with no source, and a source with no copy, are both drift rather than agreement', async () => {
+  const where = pathsFor('evals/seven-steps-primer-defects');
+  const missing = async (path) => {
+    if (path === where.copied.placebo.from) throw new Error('ENOENT');
+    return readFile(path, 'utf8');
+  };
+  assert.match((await check(missing, where)).reason, /no source to copy from/);
+  const gone = async (path) => {
+    if (path === where.copied.placebo.to) throw new Error('ENOENT');
+    return readFile(path, 'utf8');
+  };
+  assert.match((await check(gone, where)).reason, /no copied condition at/);
+});
+
+test('generate writes a copied condition from its source byte for byte, composing nothing', async () => {
+  const where = pathsFor('evals/seven-steps-primer-defects');
+  const written = {};
+  const result = await generate((p) => readFile(p, 'utf8'), async (p, c) => { written[p] = c; }, where);
+  assert.deepEqual(Object.keys(result.copied), ['placebo']);
+  assert.equal(written[where.copied.placebo.to], await readFile(where.copied.placebo.from, 'utf8'),
+    'the copy is the source; a generator that edited it on the way through would be the drift');
+  assert.equal(written[where.treatmentMirror], stripModelInvocation(await readFile(where.shippedSkill, 'utf8')));
 });

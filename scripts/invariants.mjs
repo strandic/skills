@@ -43,6 +43,22 @@ export const NOISE_EPSILON = 1e-9;
 export const FLOOR_ERROR_MULTIPLIER = 2;
 
 /**
+ * The word list I10 is run over — DATA, not a rule. The repo owner authored these
+ * thirteen terms at gate 5 (`docs/plans/primer-evals/defect-injection/5-invariants.md`);
+ * the check itself takes its list from its caller and refuses an empty one, so nothing
+ * here decides what an instrument may say.
+ *
+ * It lives beside the check rather than in either caller because both callers need the
+ * same thirteen: the adversarial tests in `invariants.test.mjs`, and the walk over the
+ * real instrument in `graders.test.mjs`. Two copies of the owner's list would drift, and
+ * the half that drifted would be the half that stopped catching anything.
+ */
+export const METHOD_VOCABULARY = [
+  'recon', 'seam', 'spike', 'gate', 'true input', 'excuse', 'invariant',
+  'self-certify', 'primer', 'seven-steps', 'step 4', 'revert', 'proceed',
+];
+
+/**
  * I1 — a partial run is not publishable.
  * @param {MergedReport} report
  */

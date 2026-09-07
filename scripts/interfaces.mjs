@@ -185,6 +185,11 @@
  * directly under `evals/` and hold a `PRE-REGISTRATION.md`; anything else is refused
  * before a spend. The runner's module-level `paths` constant stops being the only
  * instance: every caller that took it by default takes the resolved suite instead.
+ *
+ * CORRECTED at step 6: the two halves of that rule are enforced in two places, because a
+ * pure function cannot stat a directory. The SHAPE is refused here; the missing
+ * `PRE-REGISTRATION.md` is refused by the entry point's first read, which happens before
+ * any preflight and before anything is spawned.
  */
 
 /**
@@ -379,6 +384,12 @@
  * @param {SweepResult[]} sweeps
  * @param {PreRegistration} preRegistration
  * @param {Provenance} provenance
+ * @param {{traceTexts?: Record<string, string|null>, traceFragments?: string[]}} [options]
+ *   CORRECTED at step 6: a fourth parameter, optional, so every existing call is
+ *   unchanged. `refusedCounts` on a groups row is I9's second half over the KEPT TRACES,
+ *   and a pure function cannot read a file — so the entry point reads each run's
+ *   `tracePath` and hands the texts in. A merge given none publishes no fence count for
+ *   that case, which I12 refuses: a fence nobody checked is not a fence that held.
  * @returns {MergedReport}
  *
  * Pure. Splits rows by {@link EvidenceKind} into two arrays so delta and
@@ -545,9 +556,15 @@
  * @param {string} serviceDir   the directory holding the service the script must start
  * @returns {Promise<{ fired: boolean, stderr: string }>}
  *
- * `bash <scriptPath>` with `serviceDir` as the working directory. Exit 1 is `fired`,
- * exit 0 is not, any other exit is a thrown error: a script that could not run has
- * said nothing about the defect. Real instance: {@link SpawnCapture} at the entry point.
+ * `bash <scriptPath> <serviceDir>`. Exit 1 is `fired`, exit 0 is not, any other exit is a
+ * thrown error: a script that could not run has said nothing about the defect. Real
+ * instance: {@link SpawnCapture} at the entry point.
+ *
+ * CORRECTED at step 6: the service is the script's ARGUMENT, not the process's working
+ * directory. {@link SpawnCapture} carries no working directory, and every committed
+ * script takes the service root as `$1` and defaults to its own ledger's copy — which is
+ * the default that cost recon an acceptance pass, so naming it explicitly is also the
+ * half that fails loudly when it is wrong.
  */
 
 /**
@@ -594,10 +611,16 @@
  * @returns {Promise<'PASS'|'FAIL'|'unclear'>}
  *
   * RESOLVED in recon (4-recon.md seam 4). Real instance: the pinned binary in print mode,
- * `-p --model <judge> --system-prompt <system> --output-format json`, the user prompt on
- * stdin; the reply's `result` is read as the harness reads it (PASS present and FAIL
- * absent), `is_error` is retried once and then `unclear`. About $0.075 per call in print
- * mode, seventeen times the harness's own judge rate, so it is priced apart from a sweep.
+ * `-p --model <judge> --system-prompt <system> --output-format json`, with the user
+ * prompt as the trailing argument; the reply's `result` is read as the harness reads it
+ * (PASS present and FAIL absent), `is_error` is retried once and then `unclear`. About
+ * $0.075 per call in print mode, seventeen times the harness's own judge rate, so it is
+ * priced apart from a sweep.
+ *
+ * CORRECTED at step 6: recon put the prompt on stdin, and {@link SpawnCapture} — the one
+ * handle every spawn here goes through — has no stdin. Recon also tried the argument
+ * form, which returned normally, so the caller takes that rather than widening the handle
+ * for one call site.
  */
 
 /**
