@@ -126,16 +126,19 @@ that comes out is better; that is the method's actual claim, and it is untested.
 per-run scatter and the twelve amendments are in
 `evals/seven-steps-primer/PRE-REGISTRATION.md`.
 
-**A second suite, not yet swept.**
+**A second suite, swept once.**
 [`evals/seven-steps-primer-defects/`](evals/seven-steps-primer-defects/) asks whether the
 method's step 4 — recon is a run, not a read — makes the agent name more planted defects
 in a small service than a same-shape placebo, a one-sentence instruction to run it, and no
 instruction. It has its own pre-registration, its own fixture with twelve planted defects,
 and its own claim ceiling; it shares no case, no record and no digest with the suite above.
-Its directions are registered against the method's interest: before any run, the evidence
-predicted the treatment would name *fewer* defects than the placebo's read-through. The
-reasoning is in `docs/plans/primer-evals/defect-injection/`. No sweep has been run, so
-there are no numbers to report yet.
+Its directions were registered against the method's interest: before any run, the evidence
+predicted the treatment would name *fewer* defects than the placebo's read-through. One
+sweep has been run
+([`RESULTS-2026-09-07-defects.md`](docs/plans/primer-evals/RESULTS-2026-09-07-defects.md)):
+the treatment named fewer than the placebo, as registered; as many as the one-liner, as
+registered; and no more than no instruction, which the registration predicted otherwise.
+The reasoning is in `docs/plans/primer-evals/defect-injection/`.
 
 ## Adding a skill
 
