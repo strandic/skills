@@ -37,7 +37,7 @@ import { homedir, constants as osConstants } from 'node:os';
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { check as checkDrift, paths as mirrorPaths } from './build-conditions.mjs';
+import { check as checkDrift, pathsFor as mirrorPathsFor } from './build-conditions.mjs';
 import { instrumentDigest, conditionDigest } from './instrument.mjs';
 import { parsePreRegistration } from './merge-results.mjs';
 
@@ -89,7 +89,12 @@ const isGated = (tool) => {
  * would exit 1 on every run; `judgeModel` is pinned away from the subject to keep
  * same-model self-preference out of the numbers (D2).
  */
-// TODO: `runs` stops defaulting from this constant — main supplies preRegistration.runsPerCase unless --runs (PlanSweep, 2-interfaces).
+/**
+ * `runs` here is the fallback for a caller with no registration in hand — a test, or a
+ * direct call to `parseArgv`. THE SWEEP does not use it: `main` reads `runsPerCase` out
+ * of the pre-registration and passes it as the default, because two unlinked copies of
+ * one number are how a sweep gets refused by I1c after it has been paid for.
+ */
 const DEFAULTS = {
   ablation: /** @type {'with-without'} */ ('with-without'),
   runs: 5,
@@ -126,9 +131,71 @@ export const suitePathsFor = (suiteDir) => ({
   resultsDir: `${suiteDir}/results`,
 });
 
-// TODO: one SuitePaths instance per resolved suite (ResolveSuite: --suite <dir>, directly under evals/, holding a PRE-REGISTRATION.md); this constant stays only as the default for a caller without argv.
-// TODO: RESOLVED in recon — the suite list is enumerated: every evals/<name>/ holding a PRE-REGISTRATION.md is a suite, and graders.test.mjs walks each with suitePathsFor(dir); this constant stays the runner's default only.
+/**
+ * The DEFAULT suite, for a caller that passes no argv. It is no longer the only
+ * instance: `resolveSuite` builds one per invocation from `--suite`, and every caller
+ * that used to take this constant by default takes the resolved suite instead.
+ *
+ * A suite is any `evals/<name>/` holding a `PRE-REGISTRATION.md`; the grader self-test
+ * enumerates them that way rather than being handed a list.
+ */
 export const paths = suitePathsFor('evals/seven-steps-primer');
+
+/**
+ * The suite `main` resolved, for the signal handler alone. A handler that calls
+ * `process.exit` gives no turn to a promise, so it cannot ask `main` anything; it has to
+ * be able to read which condition path is currently populated. The default keeps a
+ * signal arriving before `main` has resolved anything from throwing.
+ */
+let activeSuite = paths;
+
+/** Where every suite lives. One segment under it, and no deeper. */
+const SUITE_DIR = /^evals\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/**
+ * ResolveSuite — take `--suite <dir>` out of the argv and return that suite's paths.
+ *
+ * Pure, and deliberately so: the flag is read before anything is spawned, and the shape
+ * of the value is refused here rather than after a copy has been made. What this
+ * function cannot check is whether the directory holds a `PRE-REGISTRATION.md` — that is
+ * a read, and `main` does it as its first act, refusing before any spend. Both halves of
+ * the rule are enforced; only one of them is enforceable without touching the disk.
+ *
+ * The flag may appear anywhere, and what is left over is handed to the ordinary parser,
+ * which refuses `--suite` as its own business rather than ignoring a second copy.
+ *
+ * @param {string[]} argv
+ * @param {string} [root]  the repo root, so an absolute path can be made relative to it
+ * @returns {{suite: SuitePaths, rest: string[]}}
+ */
+export function resolveSuite(argv, root = repoRoot) {
+  const rest = [];
+  let dir = null;
+  for (let i = 0; i < (argv ?? []).length; i++) {
+    if (argv[i] !== '--suite') { rest.push(argv[i]); continue; }
+    const value = argv[++i] ?? bad('--suite needs a directory, e.g. --suite evals/seven-steps-primer');
+    if (dir !== null && dir !== value)
+      bad(`--suite given twice (${dir}, ${value}) — one invocation sweeps one suite, and the second ` +
+        'value would silently win');
+    dir = value;
+  }
+  if (dir === null) return { suite: paths, rest };
+
+  // Absolute in, relative out: SuitePaths is repo-relative because the harness writes its
+  // results relative to its own cwd, and the entry point chdirs to the repo root.
+  let normalised = String(dir).trim().replace(/\/+$/, '').replace(/^\.\//, '');
+  if (normalised.startsWith('/')) {
+    const prefix = `${root.replace(/\/+$/, '')}/`;
+    if (!normalised.startsWith(prefix))
+      bad(`--suite ${dir}: an absolute path outside this checkout (${root})`);
+    normalised = normalised.slice(prefix.length);
+  }
+  if (!SUITE_DIR.test(normalised))
+    bad(`--suite ${dir}: a suite is one directory directly under evals/ (evals/<name>) — ` +
+      `${JSON.stringify(normalised)} is not, and a suite path that resolves elsewhere would sweep ` +
+      'cases nobody registered');
+  return { suite: suitePathsFor(normalised), rest };
+}
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Pure — the command line.
@@ -160,6 +227,11 @@ export function buildEvalArgv(inv) {
     bad(`buildEvalArgv: runs ${JSON.stringify(inv.runs)} is not a run count`);
   if (typeof inv.threshold !== 'number' || !(inv.threshold > 0) || inv.threshold > 1)
     bad(`buildEvalArgv: threshold ${JSON.stringify(inv.threshold)} is not in (0, 1]`);
+  // A ceiling of zero trips on the first run and marks the document partial, which I1c
+  // then refuses — a whole invocation spent to learn the flag was mistyped. Refused here.
+  if (inv.maxCostUsd !== undefined && (typeof inv.maxCostUsd !== 'number' || !(inv.maxCostUsd > 0)))
+    bad(`buildEvalArgv: --max-cost-usd ${JSON.stringify(inv.maxCostUsd)} is not a positive number — it ` +
+      'is a runaway guard per invocation, and a ceiling of zero stops the first run');
   for (const field of ['subjectModel', 'judgeModel'])
     if (typeof inv[field] !== 'string' || inv[field] === '') bad(`buildEvalArgv: no ${field}`);
   if (inv.judgeModel === inv.subjectModel)
@@ -199,8 +271,14 @@ export function buildEvalArgv(inv) {
     inv.scaffold ? '--scaffold' : '--no-scaffold',
     // Keep the HTML report local. Publishing on every sweep is a side effect the suite
     // never asked for, and recon's verified invocation carried this.
-// TODO: append '--max-cost-usd', String(inv.maxCostUsd) when set (refuse <= 0 here, not in the harness) and '--keep-temp' when inv.keepTemp (BuildEvalArgv).
     '--no-publish',
+    // Both optional and both ABSENT by default, so every argv the Tier 1 suite ever built
+    // is byte-identical. `--max-cost-usd` is a ceiling per invocation and never a budget:
+    // when it trips the harness marks the document partial and I1c refuses the record.
+    // `--keep-temp` keeps each run's sandbox, which is the only way a regex grader over
+    // the trace leaves anything a human can read afterwards.
+    ...(inv.maxCostUsd === undefined ? [] : ['--max-cost-usd', String(inv.maxCostUsd)]),
+    ...(inv.keepTemp ? ['--keep-temp'] : []),
     // `--case <glob>` is ONE glob (harness-facts #44): the option is not variadic and a
     // repeated flag keeps only the last value. Four flags ran one case on 2026-09-03 and
     // the other three came back as "no result". So more than one is refused here, where
@@ -406,6 +484,57 @@ export function inlineList(value, where) {
   return inner.split(',').map((s) => s.trim().replace(/^['"]|['"]$/g, '')).filter((s) => s !== '');
 }
 
+/** The two pairs a registration refuses, and this reader refuses them too. */
+const IMPLIED_ABLATION = { delta: 'with-without', capability: 'none' };
+
+/**
+ * ReadDeclaredEvidence — derived from the mechanism by default, declared by exception.
+ *
+ * The derivation is sound and stays the default: a replayed transcript carries the
+ * plugin into BOTH arms, so a `history_file` case is single-arm capability evidence
+ * whatever anyone tagged it. But the mechanism is not the rule — it is the reason for
+ * the rule — and a case whose seed turn names no skill has a without-arm that means
+ * something. Such a case may say so itself, and only by saying BOTH fields: half a
+ * declaration is a derivation wearing a label, and the pair it half-declares would be
+ * decided by whichever field the code happened to read.
+ *
+ * The two contradictory pairs are refused whether declared or derived, which is the same
+ * rule `parsePreRegistration` applies to the registration: `evidence` splits the tables
+ * and `ablation` decides whether a without-arm is a baseline, so a case where they
+ * disagree makes those two answers contradict each other.
+ *
+ * @param {Record<string, string>} caseYaml  the flattened case.yaml, dotted keys
+ * @param {string} where
+ * @returns {{evidence: 'delta'|'capability', ablation: 'none'|'with-without', declared: boolean}}
+ */
+export function readDeclaredEvidence(caseYaml, where = 'case.yaml') {
+  const y = caseYaml ?? {};
+  const strip = (v) => (v === undefined ? undefined : String(v).replace(/^['"]|['"]$/g, '').trim());
+  const evidence = strip(y.evidence);
+  const ablation = strip(y.ablation);
+
+  if (evidence === undefined && ablation === undefined) {
+    const replay = y['context.history_file'] !== undefined;
+    return {
+      evidence: replay ? 'capability' : 'delta',
+      ablation: replay ? 'none' : 'with-without',
+      declared: false,
+    };
+  }
+  if (evidence === undefined || ablation === undefined)
+    bad(`${where}: declares ${evidence === undefined ? 'ablation' : 'evidence'} without the other — ` +
+      'both fields or neither, since half a declaration leaves the other half derived from a ' +
+      'mechanism the declaration exists to override');
+  if (!(evidence in IMPLIED_ABLATION))
+    bad(`${where}: evidence '${evidence}' is neither delta nor capability`);
+  if (ablation !== 'none' && ablation !== 'with-without')
+    bad(`${where}: ablation '${ablation}' is not a harness ablation`);
+  if (IMPLIED_ABLATION[evidence] !== ablation)
+    bad(`${where}: declares evidence '${evidence}' with ablation '${ablation}' — '${evidence}' evidence ` +
+      `is measured at ablation '${IMPLIED_ABLATION[evidence]}', and a case cannot be both`);
+  return { evidence, ablation, declared: true };
+}
+
 /**
  * One case's spec, from its `case.yaml` and its `prompt.md` frontmatter. The
  * frontmatter wins where both speak — that is the harness's own precedence, and the
@@ -429,14 +558,15 @@ export function readCaseSpec(dirName, caseYaml, promptMd) {
 
   const tags = inlineList(pick('tags'), `${where} tags`) ?? [];
   const allowedTools = inlineList(pick('allowed_tools'), `${where} allowed_tools`) ?? [];
-// TODO: ReadDeclaredEvidence — a top-level `evidence` + `ablation` pair in case.yaml overrides the derivation below and sets spec.declared; half a pair, delta+none and capability+with-without are refused.
-  const replay = y['context.history_file'] !== undefined;
+  const { evidence, ablation, declared } = readDeclaredEvidence(y, where);
 
   return {
     name: (y.name ?? dirName).replace(/^['"]|['"]$/g, ''),
     dir: dirName,
-    evidence: replay ? 'capability' : 'delta',
-    ablation: replay ? 'none' : 'with-without',
+    evidence,
+    ablation,
+    // Present only when the case declared the pair, so every existing case keeps its shape.
+    ...(declared ? { declared: true } : {}),
     tags,
     scored: !tags.includes(CONTROL_TAG),
     // `measures` is a line for the report and nothing in a case file carries it; the
@@ -963,16 +1093,25 @@ export function buildSweepRecord(combined, run) {
  * Pure — the operator's own arguments.
  * ──────────────────────────────────────────────────────────────────────────── */
 
-// TODO: usage gains --suite <dir>, --max-cost-usd <n>, --keep-temp; "the pre-registered count" for --runs must become literally true.
-const USAGE = `usage: node scripts/run-evals.mjs [--condition <id>]... [--runs <n>] [--smoke]
+const USAGE = `usage: node scripts/run-evals.mjs [--suite <dir>] [--condition <id>]...
+                                   [--runs <n>] [--smoke]
+                                   [--max-cost-usd <n>] [--keep-temp]
 
-  --condition <id>  A condition the pre-registration names (treatment | oneliner |
-                    placebo, plus any added by amendment). Repeatable, or
+  --suite <dir>     The suite to sweep: one directory directly under evals/, holding a
+                    PRE-REGISTRATION.md. Default: evals/seven-steps-primer.
+  --condition <id>  A condition the pre-registration names. Repeatable, or
                     comma-separated. Default: every registered one, in registered
                     order.
-  --runs <n>        Runs per case. Default ${DEFAULTS.runs} — the pre-registered count.
+  --runs <n>        Runs per case. Default: the suite's registered runsPerCase, which is
+                    the count I1c refuses a record for falling short of.
   --smoke           The cheap pilot: one scored case, one run. Do this before a sweep.
-                    Cannot be combined with --runs: it fixes the count at 1.`;
+                    Cannot be combined with --runs: it fixes the count at 1.
+  --max-cost-usd <n>  A runaway guard PER INVOCATION, never a budget: when it trips the
+                    harness marks the document partial and the record is void under I1c.
+                    Set it well above the invocation's expected spend.
+  --keep-temp       Keep every run's sandbox, workspace and trace. A regex grader over
+                    the trace leaves no evidence in the record, so a suite that grades
+                    the trace keeps the sandboxes. They are gigabytes; remove them after.`;
 
 /**
  * @param {string[]} argv
@@ -980,9 +1119,10 @@ const USAGE = `usage: node scripts/run-evals.mjs [--condition <id>]... [--runs <
  *   default is the three the suite shipped with; `main` passes the pre-registration's
  *   list, so a condition added by amendment is sweepable without touching this file.
  */
-// TODO: accept --max-cost-usd <n> (number > 0) and --keep-temp; --suite is consumed by ResolveSuite before this parser and is refused here as unknown.
-export function parseArgv(argv, known = CONDITION_IDS) {
-  const args = { conditions: /** @type {ConditionId[]} */ ([]), runs: DEFAULTS.runs, smoke: false, help: false };
+export function parseArgv(argv, known = CONDITION_IDS, defaultRuns = DEFAULTS.runs) {
+  if (!Number.isInteger(defaultRuns) || defaultRuns < 1)
+    bad(`parseArgv: default run count ${JSON.stringify(defaultRuns)} is not a run count`);
+  const args = { conditions: /** @type {ConditionId[]} */ ([]), runs: defaultRuns, smoke: false, help: false };
   // Both flags write `runs`, so whichever came last used to win silently — `--smoke
   // --runs 5` spent a full sweep believing it was a pilot. Remembered, then refused
   // after the loop, so the order they were typed in makes no difference.
@@ -1009,9 +1149,22 @@ export function parseArgv(argv, known = CONDITION_IDS) {
       if (!Number.isInteger(n) || n < 1) bad(`--runs needs a whole number ≥ 1\n${USAGE}`);
       args.runs = n;
       sawRuns = true;
-    } else bad(`unknown option ${a}\n${USAGE}`);
+    } else if (a === '--max-cost-usd') {
+      const n = Number(argv[++i]);
+      if (!Number.isFinite(n) || !(n > 0)) bad(`--max-cost-usd needs a positive number\n${USAGE}`);
+      args.maxCostUsd = n;
+    } else if (a === '--keep-temp') args.keepTemp = true;
+    else if (a === '--suite')
+      // Consumed by `resolveSuite` before this parser ever sees the argv. Reaching here
+      // means somebody called the parser with the raw argv, and silently ignoring the
+      // flag would sweep the default suite while the command line named another.
+      bad(`--suite is resolved before the option parser; pass the argv through resolveSuite first\n${USAGE}`);
+    else bad(`unknown option ${a}\n${USAGE}`);
   }
   if (args.smoke && sawRuns) bad(`--smoke fixes runs to 1; drop one of the flags\n${USAGE}`);
+  // Recorded, not merely applied: `main` refuses an explicit count below the registered
+  // one before it spends, rather than letting I1c refuse the record afterwards.
+  args.runsDeclared = sawRuns;
   // Sweep order is the declared order, not the order they were typed: the treatment
   // first means a broken condition costs one sweep rather than three.
   if (args.conditions.length === 0) args.conditions = [...known];
@@ -1057,11 +1210,11 @@ export function parseArgv(argv, known = CONDITION_IDS) {
  * assemble is a refusal before the first sweep rather than after two.
  *
  * @param {CaseSpec[]} cases  every discovered case, control cases included
- * @param {{conditions: ConditionId[], runs: number, smoke: boolean}} args
+ * @param {{conditions: ConditionId[], runs: number, smoke: boolean,
+ *          maxCostUsd?: number, keepTemp?: boolean}} args
  * @param {SuitePaths} [suitePaths]
  * @returns {SweepPlan}
  */
-// TODO: args gains maxCostUsd and keepTemp; both are copied onto every invocation (see the overrides below).
 export function planSweep(cases, args, suitePaths = paths) {
   if (!args || !Array.isArray(args.conditions) || args.conditions.length === 0)
     bad('planSweep: no condition to sweep');
@@ -1109,9 +1262,11 @@ export function planSweep(cases, args, suitePaths = paths) {
       condition,
       invocations: groups.flatMap(invocationsOf).map(({ ablation, cases: names, scoped }) => {
         const inv = invocationFor(condition, suitePaths, all, {
-// TODO: ...maxCostUsd: args.maxCostUsd, keepTemp: args.keepTemp — absent when unset so every Tier 1 argv is byte-identical.
           runs: args.runs,
           ablation,
+          // Absent when unset, so every argv the Tier 1 suite ever built is unchanged.
+          ...(args.maxCostUsd === undefined ? {} : { maxCostUsd: args.maxCostUsd }),
+          ...(args.keepTemp ? { keepTemp: true } : {}),
           ...(scoped ? { caseGlobs: names } : {}),
         });
         return { ablation, cases: names, inv, argv: buildEvalArgv(inv) };
@@ -1418,26 +1573,32 @@ export async function preflightAuth(spawnCapture, evalCommand) {
   return { ok: true };
 }
 
-// TODO: ResolveSuite(argv, repoRoot) first; thread the resolved SuitePaths into discoverCases, planSweep, selectCondition, writeDriftRecord, both digests and the results path; default args.runs from preRegistration.runsPerCase; pass --keep-temp and --max-cost-usd through; refuse a registration whose runsPerCase disagrees with an explicit --runs that is smaller (I1c would refuse the record after the spend).
 export async function main(argv) {
   // Help is answered before the registration is read, so it works in a tree with no
   // pre-registration. Only a `--help` in flag position counts: `--runs --help` is a
   // bad run count, and parseArgv says so below.
-  const inFlagPosition = (i) => i === 0 || !['--condition', '--runs'].includes(argv[i - 1]);
+  const inFlagPosition = (i) =>
+    i === 0 || !['--condition', '--runs', '--suite', '--max-cost-usd'].includes(argv[i - 1]);
   if (argv.some((a, i) => (a === '--help' || a === '-h') && inFlagPosition(i))) {
     console.log(USAGE);
     return 0;
   }
 
+  // The suite first, before anything is read or spawned: every path below comes from it,
+  // and the default is the one suite the runner has always swept.
+  const { suite, rest } = resolveSuite(argv);
+  activeSuite = suite;
+
   // Relative suite paths and the harness's own `./<eval dir>/results/<timestamp>/`
   // both mean "from the repo root", so make that true rather than hope it is.
-  process.chdir(paths.repoRoot);
+  process.chdir(suite.repoRoot);
 
   // The conditions are the REGISTERED ones, read from the same json block the merger
   // reads, so the runner and the merger cannot disagree about what a condition is. A
   // condition added by amendment is sweepable the moment the registration names it.
-  const preRegistrationText = await readTextFile(join(paths.suiteDir, 'PRE-REGISTRATION.md'))
-    .catch(() => bad(`no ${paths.suiteDir}/PRE-REGISTRATION.md — the runner sweeps registered conditions only`));
+  const preRegistrationText = await readTextFile(join(suite.suiteDir, 'PRE-REGISTRATION.md'))
+    .catch(() => bad(`no ${suite.suiteDir}/PRE-REGISTRATION.md — a suite is a directory under evals/ ` +
+      'that carries one, and the runner sweeps registered conditions only'));
   let preRegistration;
   try {
     preRegistration = parsePreRegistration(preRegistrationText);
@@ -1445,7 +1606,14 @@ export async function main(argv) {
     // The merger's refusal, in the runner's voice: a message, not a stack.
     bad(`refusing to sweep: ${e.message}`);
   }
-  const args = parseArgv(argv, preRegistration.conditions);
+  // The run count comes from the registration, not from a code constant: `runsPerCase` is
+  // what I1c refuses a record for falling short of, and two unlinked copies of one number
+  // are how a sweep gets refused after it has been paid for.
+  const args = parseArgv(rest, preRegistration.conditions, preRegistration.runsPerCase);
+  if (args.runsDeclared && !args.smoke && args.runs < preRegistration.runsPerCase)
+    bad(`--runs ${args.runs} is fewer than the registered ${preRegistration.runsPerCase} — I1c would ` +
+      'refuse the record as truncated, after the sweep had been paid for. Use --smoke for a pilot, or ' +
+      'amend the registration');
 
   const pre = await preflightCli(spawnCapture, () => evalCommandFrom(process.env), homedir());
   if (!pre.ok) {
@@ -1458,12 +1626,12 @@ export async function main(argv) {
     return 1;
   }
 
-  const cases = await discoverCases(readTextFile, listDirectory, paths);
+  const cases = await discoverCases(readTextFile, listDirectory, suite);
   // The whole run is decided here, before anything is read or spawned: the groups, the
   // per-condition invocations, their argv, and the files that must exist first. Every
   // refusal it can raise (a stray ablation, a selector that reaches the control case, an
   // unbuildable command line) therefore costs nothing.
-  const plan = planSweep(cases, args);
+  const plan = planSweep(cases, args, suite);
 
   for (const check of plan.preChecks)
     await readTextFile(check.path).catch(() => bad(`no ${check.path} — ${check.why}`));
@@ -1472,21 +1640,22 @@ export async function main(argv) {
   // sweeping anyway would spend a rate-limit window measuring a version of the skill
   // that no longer exists. The record is written either way — the merger reads its
   // absence as drift, and a refusal you cannot inspect is worse than none.
+  const mirrorPaths = mirrorPathsFor(suite.suiteDir);
   const drift = await checkDrift(readTextFile, mirrorPaths);
   // Once per invocation, and the same value on drift.json and on every sweep record: it
   // is the digest that lets the merger tell three sweeps of one instrument from three
   // sweeps of three.
-  const instrumentSha = await instrumentDigest(paths.suiteDir);
-  await writeDriftRecord(writeTextFile, paths, buildDriftRecord(drift, clock(), instrumentSha));
+  const instrumentSha = await instrumentDigest(suite.suiteDir);
+  await writeDriftRecord(writeTextFile, suite, buildDriftRecord(drift, clock(), instrumentSha));
   if (drift.drifted) {
-    console.error(`DRIFT: the treatment mirror is not the shipped skill minus the flag`);
+    console.error(`DRIFT: a condition of ${suite.suiteDir} is not what it is derived from`);
     console.error(`  ${drift.reason}`);
     console.error('  regenerate with: node scripts/build-conditions.mjs generate');
     console.error('  refusing to sweep — I2 voids a run whose treatment condition has drifted');
     return 1;
   }
 
-  console.error(`suite ${paths.suiteDir} — ${plan.scored.length} scored case(s)` +
+  console.error(`suite ${suite.suiteDir} — ${plan.scored.length} scored case(s)` +
     (plan.excluded.length > 0 ? `, excluding ${plan.excluded.join(', ')}` : ''));
   console.error(`drift: none — ${mirrorPaths.treatmentMirror.replace(`${repoRoot}/`, '')} is current`);
   console.error(`instrument: ${instrumentSha.slice(0, 12)}… (every case, grader, transcript and fixture; ` +
@@ -1503,11 +1672,11 @@ export async function main(argv) {
     console.error(`\nsweep ${index + 1}/${plan.sweeps.length} · ${condition} · ` +
       `${args.runs} run(s) · ${DEFAULTS.subjectModel}/${DEFAULTS.judgeModel} · ` +
       `${invocations.length} invocation(s)`);
-    await selectCondition(copyDirectory, paths, condition, preRegistration.conditions);
+    await selectCondition(copyDirectory, suite, condition, preRegistration.conditions);
     // Taken from the source directory, which is what was just copied — the half of the
     // instrument only this sweep measures against.
-    const conditionSha = await conditionDigest(paths.suiteDir, condition);
-    console.error(`  ${paths.conditionUnderTest} ← conditions/${condition} (${conditionSha.slice(0, 12)}…)`);
+    const conditionSha = await conditionDigest(suite.suiteDir, condition);
+    console.error(`  ${suite.conditionUnderTest} ← conditions/${condition} (${conditionSha.slice(0, 12)}…)`);
 
     const evalCommand = () => evalCommandFrom(process.env);
     /** @type {{ablation: 'with-without'|'none', cases: string[], argv: string[], result: SweepResult}[]} */
@@ -1535,7 +1704,7 @@ export async function main(argv) {
       instrumentSha,
       conditionSha,
     });
-    const out = join(paths.resultsDir, `${condition}.json`);
+    const out = join(suite.resultsDir, `${condition}.json`);
     await writeTextFile(out, `${JSON.stringify(record, null, 2)}\n`);
     console.error(`  exit ${record.exitCode} · ${record.document ? 'document kept' : 'NO DOCUMENT'} → ${out}`);
     // A document lost at COMBINE time (a missing part, a schema mismatch, invocations that
@@ -1555,8 +1724,8 @@ export async function main(argv) {
       if (stop.hint) console.error(`  ${stop.hint}`);
       console.error('  stopping rather than sweeping the remaining conditions against a run that ' +
         'has already stopped being evidence');
-      await removeDirectory(paths.conditionUnderTest);
-      console.error(`  removed ${paths.conditionUnderTest}`);
+      await removeDirectory(suite.conditionUnderTest);
+      console.error(`  removed ${suite.conditionUnderTest}`);
       // 128+N for a signal, 2 for a partial: the shell sees what the record says.
       return processExitCode(records);
     }
@@ -1566,7 +1735,7 @@ export async function main(argv) {
     console.error(`\n${failed} sweep(s) produced no comparable result; merge-results will refuse them`);
     return processExitCode(records);
   }
-  console.error(`\nmerge with: node scripts/merge-results.mjs ${paths.resultsDir}`);
+  console.error(`\nmerge with: node scripts/merge-results.mjs ${suite.resultsDir}`);
   return 0;
 }
 
@@ -1589,7 +1758,7 @@ if (invokedDirectly) {
       try {
         // Absolute: `main` chdirs to the repo root, but a signal can arrive before it has,
         // and a relative path would then name something else (or nothing).
-        rmSync(join(paths.repoRoot, paths.conditionUnderTest), { recursive: true, force: true });
+        rmSync(join(activeSuite.repoRoot, activeSuite.conditionUnderTest), { recursive: true, force: true });
       } catch {
         // Nothing left to remove, or nothing we can do about it while exiting.
       }

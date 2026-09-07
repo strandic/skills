@@ -137,7 +137,6 @@ export function parseSweepRecord(json, expectedCondition) {
  * @param {string} markdown
  * @returns {PreRegistration}
  */
-// TODO: parse cases[].groups (GraderGroup[]: kind graders|difference; names unique per case, no `#`; a difference names two graders-groups on the same case) and cases[].contrasts ('case' default | 'groups'); refuse groups without contrasts:'groups' and vice versa.
 export function parsePreRegistration(markdown) {
   if (typeof markdown !== 'string' || markdown.trim() === '')
     bad('PRE-REGISTRATION.md is missing or empty — there is nothing registered to compare against');
@@ -188,10 +187,30 @@ export function parsePreRegistration(markdown) {
     if (!Array.isArray(s.tags)) bad(`${at('cases')}: ${s.name} has no tags array`);
     if (typeof s.scored !== 'boolean') bad(`${at('cases')}: ${s.name} has no scored flag`);
     if (typeof s.measures !== 'string') bad(`${at('cases')}: ${s.name} has no measures line`);
+    if (s.name.includes('#'))
+      bad(`${at('cases')}: '${s.name}' contains '#', which is the character a group direction key ` +
+        'splits on — a case name that carries one makes `<case>#<group>/<control>` ambiguous');
+    validateGroups(s, at);
+  }
+  // A difference group names two OTHER groups of the same case, so the references are
+  // resolved after every name is known: a forward reference is legal, a dangling one is not.
+  for (const s of pre.cases) {
+    const byName = new Map((s.groups ?? []).map((g) => [g.name, g]));
+    for (const g of s.groups ?? []) {
+      if (g.kind !== 'difference') continue;
+      for (const side of ['minuend', 'subtrahend']) {
+        const target = byName.get(g[side]);
+        if (!target)
+          bad(`${at('cases')}: ${s.name} group '${g.name}' ${side} '${g[side]}' names no group on this case`);
+        if (target.kind !== 'graders')
+          bad(`${at('cases')}: ${s.name} group '${g.name}' ${side} '${g[side]}' is a ${target.kind} group — ` +
+            'a difference is taken between two grader groups, so a difference of differences is refused');
+      }
+    }
   }
 
-// TODO: completeness per key kind — a case with contrasts 'groups' needs `<case>#<group>/<control>` for every group and every control, and must carry NO `<case>/<control>` key; a 'case' case is unchanged.
   const controls = ['none', ...pre.conditions.filter((c) => c !== 'treatment')];
+  const specOf = new Map(pre.cases.map((s) => [s.name, s]));
   if (!pre.expectedDirection || typeof pre.expectedDirection !== 'object')
     bad(`${at('expectedDirection')}: missing`);
   for (const [key, value] of Object.entries(pre.expectedDirection)) {
@@ -199,8 +218,25 @@ export function parsePreRegistration(markdown) {
       bad(`${at('expectedDirection')}: ${key} = ${JSON.stringify(value)} — a direction is a sign ` +
         `(-1 | 0 | 1), never a predicted score`);
     const slash = key.lastIndexOf('/');
-    const [caseName, control] = [key.slice(0, slash), key.slice(slash + 1)];
+    const [subject, control] = [key.slice(0, slash), key.slice(slash + 1)];
+    // `#` cannot appear in a case or a group name, so the split is unambiguous and the
+    // two key kinds cannot be confused for one another.
+    const hash = subject.indexOf('#');
+    const caseName = hash < 0 ? subject : subject.slice(0, hash);
+    const groupName = hash < 0 ? null : subject.slice(hash + 1);
     if (!names.has(caseName)) bad(`${at('expectedDirection')}: ${key} names no registered case`);
+    const spec = specOf.get(caseName);
+    if (groupName === null && (spec.contrasts ?? 'case') === 'groups')
+      bad(`${at('expectedDirection')}: ${key} is a case-level direction on '${caseName}', which is ` +
+        "registered contrasts: 'groups' — its harness score is printed and never contrasted, so a " +
+        'direction for it would be a prediction about a number nothing compares');
+    if (groupName !== null) {
+      if ((spec.contrasts ?? 'case') !== 'groups')
+        bad(`${at('expectedDirection')}: ${key} names a group of '${caseName}', which is registered ` +
+          `contrasts: '${spec.contrasts ?? 'case'}'`);
+      if (!(spec.groups ?? []).some((g) => g.name === groupName))
+        bad(`${at('expectedDirection')}: ${key} names no group registered on '${caseName}'`);
+    }
     if (!controls.includes(control)) bad(`${at('expectedDirection')}: ${key} names no registered control`);
   }
   // Complete, not only well-formed: a condition added to the list without a direction for
@@ -210,6 +246,20 @@ export function parsePreRegistration(markdown) {
   // merger will try to build.
   for (const s of pre.cases) {
     if (s.evidence !== 'delta' || s.scored === false || (s.tags ?? []).includes('control')) continue;
+    // Completeness is per key KIND. A `case` case needs one direction per control, as it
+    // always has. A `groups` case needs one per group per control instead — the same set
+    // of contrasts the merger will try to build, and no more.
+    if ((s.contrasts ?? 'case') === 'groups') {
+      for (const g of s.groups) {
+        for (const control of controls) {
+          const key = `${s.name}#${g.name}/${control}`;
+          if (!(key in pre.expectedDirection))
+            bad(`${at('expectedDirection')}: no direction registered for ${key} — every group of a ` +
+              `delta case needs one per control, and '${control}' is a registered control`);
+        }
+      }
+      continue;
+    }
     for (const control of controls) {
       const key = `${s.name}/${control}`;
       if (!(key in pre.expectedDirection))
@@ -229,7 +279,81 @@ export function parsePreRegistration(markdown) {
   if (pre.publishAllConditions !== true)
     bad(`${at('publishAllConditions')}: must be literal true — the undertaking to publish every ` +
       `condition whatever it shows is not a toggle`);
+
+  // The second floor component's multiplier is REGISTERED, not chosen while the numbers
+  // are being read. It is required of a registration that carries a groups case, because
+  // that is the registration whose floors use it, and it must equal the constant the
+  // merger and I11 share: two copies of one number are how a marked contrast and the check
+  // that verifies the mark come to disagree.
+  const anyGroups = pre.cases.some((s) => (s.contrasts ?? 'case') === 'groups');
+  if (pre.floorErrorMultiplier === undefined) {
+    if (anyGroups)
+      bad(`${at('floorErrorMultiplier')}: missing — a registration with a grader group registers the ` +
+        'multiplier its floors are built from');
+  } else {
+    if (typeof pre.floorErrorMultiplier !== 'number' || !(pre.floorErrorMultiplier > 0))
+      bad(`${at('floorErrorMultiplier')}: ${JSON.stringify(pre.floorErrorMultiplier)} is not a positive number`);
+    if (pre.floorErrorMultiplier !== inv.FLOOR_ERROR_MULTIPLIER)
+      bad(`${at('floorErrorMultiplier')}: registered ${pre.floorErrorMultiplier}, the merger and I11 use ` +
+        `${inv.FLOOR_ERROR_MULTIPLIER} — the floor a contrast is marked against and the floor the check ` +
+        'reads would be two different numbers');
+  }
   return pre;
+}
+
+/**
+ * The group half of {@link parsePreRegistration}, per case. Split out because it is the
+ * one part of the registration with a shape of its own: two kinds of group in one union,
+ * names that become half of a direction key, and a difference whose sides are resolved
+ * afterwards by the caller.
+ *
+ * @param {any} s   one registered case
+ * @param {(field: string) => string} at
+ */
+function validateGroups(s, at) {
+  const contrasts = s.contrasts ?? 'case';
+  if (contrasts !== 'case' && contrasts !== 'groups')
+    bad(`${at('cases')}: ${s.name} contrasts ${JSON.stringify(s.contrasts)} is neither 'case' nor 'groups'`);
+  if (s.groups !== undefined && !Array.isArray(s.groups))
+    bad(`${at('cases')}: ${s.name} groups is not an array`);
+  const groups = s.groups ?? [];
+  // The two halves of one decision, refused when they disagree: a case that registers
+  // groups and keeps its case-level contrasts would be contrasted twice, and a case that
+  // says `groups` and names none would be contrasted nowhere.
+  if (contrasts === 'groups' && groups.length === 0)
+    bad(`${at('cases')}: ${s.name} is registered contrasts: 'groups' but names no group — the ` +
+      'registered quantity would be nothing at all');
+  if (contrasts !== 'groups' && groups.length > 0)
+    bad(`${at('cases')}: ${s.name} names groups but is registered contrasts: '${contrasts}' — a group ` +
+      'with no registered direction is a number nothing predicted');
+  const seen = new Set();
+  for (const g of groups) {
+    if (typeof g?.name !== 'string' || g.name === '') bad(`${at('cases')}: ${s.name} has a group with no name`);
+    if (/[#/]/.test(g.name))
+      bad(`${at('cases')}: ${s.name} group '${g.name}' contains '#' or '/', the two characters a ` +
+        'direction key splits on');
+    if (seen.has(g.name)) bad(`${at('cases')}: ${s.name} group '${g.name}' declared twice`);
+    seen.add(g.name);
+    if (g.kind === 'graders') {
+      if (!Array.isArray(g.graders) || g.graders.length === 0)
+        bad(`${at('cases')}: ${s.name} group '${g.name}' names no grader — an empty group scores every ` +
+          'run as nothing and reports it as a measurement');
+      for (const name of g.graders)
+        if (typeof name !== 'string' || name === '')
+          bad(`${at('cases')}: ${s.name} group '${g.name}' has a grader name that is not a name`);
+      if (new Set(g.graders).size !== g.graders.length)
+        bad(`${at('cases')}: ${s.name} group '${g.name}' names a grader twice — it would carry double ` +
+          'weight in the group score and in no other');
+    } else if (g.kind === 'difference') {
+      for (const side of ['minuend', 'subtrahend'])
+        if (typeof g[side] !== 'string' || g[side] === '')
+          bad(`${at('cases')}: ${s.name} group '${g.name}' has no ${side}`);
+      if (g.minuend === g.subtrahend)
+        bad(`${at('cases')}: ${s.name} group '${g.name}' subtracts a group from itself, which is zero ` +
+          'on every run by construction');
+    } else bad(`${at('cases')}: ${s.name} group '${g.name}' kind ${JSON.stringify(g.kind)} is neither ` +
+      "'graders' nor 'difference'");
+  }
 }
 
 /**
@@ -289,9 +413,6 @@ const findCase = (doc, caseName) => doc.cases.find((c) => c.name === caseName);
  * @param {string} caseName
  * @returns {{ with: number[], without: number[] }}
  */
-// TODO: ExtractGroupRunScores beside this — per run, weight of the named graders that passed over weight of the named graders scored (withOnly out of both); null for a run with no scored named grader or skippedPaidGraders; refuse a grader name the case lacks.
-// TODO: ComputeDifferenceRunScores — position by position, null where either side is null, refuse unequal lengths.
-// TODO: CountRuns — runs present, runs with non-null error, runs excluded (skippedPaidGraders), per arm.
 export function extractRunScores(doc, caseName) {
   const c = findCase(doc, caseName);
   if (!c) bad(`case '${caseName}' is not in this document`);
@@ -306,6 +427,186 @@ export function extractRunScores(doc, caseName) {
 
 /** Mean of a non-empty list, or null. Rounded nowhere — rounding belongs to the formatter. */
 const mean = (xs) => (xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length);
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Pure — grader groups.
+ *
+ * A group is a named subset of a case's graders, scored per run the way the harness
+ * scores a case. Nothing here needs a new sweep: the record already keeps every
+ * per-run, per-grader verdict, and these functions only read them in a different order.
+ *
+ * NULLS CARRY MEANING throughout. A run that scored no grader in a group, and a run
+ * whose paid graders a cost ceiling skipped, is null in its position — never dropped,
+ * never zero. That is how "excluded, not scored zero" becomes something the arithmetic
+ * cannot get wrong by accident, and it is why {@link countRuns} has something to count.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * ExtractGroupRunScores — every run's score on one grader group, in run order.
+ *
+ * The harness's own arithmetic, restricted to the named graders: the weight of those
+ * that passed over the weight of those that were scored. A `withOnly` grader is out of
+ * both halves, because the harness has demoted it to an indicator and excluded it from
+ * its own score; counting it here would make a group score that no other number in the
+ * document agrees with.
+ *
+ * A grader name the case does not carry is REFUSED rather than ignored. A group that
+ * silently scores eleven of its twelve graders reports a number that looks exactly like
+ * a group that scored twelve, and the twelfth is the one that was renamed.
+ *
+ * @param {HarnessDocument} doc
+ * @param {string} caseName
+ * @param {{kind: string, name: string, graders: string[]}} group
+ * @returns {{ with: (number|null)[], without: (number|null)[] }}
+ */
+export function extractGroupRunScores(doc, caseName, group) {
+  const c = findCase(doc, caseName);
+  if (!c) bad(`case '${caseName}' is not in this document`);
+  if (group?.kind !== 'graders')
+    bad(`extractGroupRunScores: group '${group?.name}' is a ${group?.kind} group — only a graders group ` +
+      'is scored from the document; a difference is computed from two of these');
+  const names = new Set(group.graders);
+  const runs = [...(c.arms.with ?? []), ...(c.arms.without ?? [])];
+  const present = new Set(runs.flatMap((r) => (r?.graders ?? []).map((g) => g.name)));
+  // Only when the document actually graded something: a case whose arms are empty has
+  // no grader names to disagree with, and the empty arm is reported by the run counts.
+  if (present.size > 0)
+    for (const name of group.graders)
+      if (!present.has(name))
+        bad(`group '${group.name}': case '${caseName}' carries no grader '${name}' — a group that ` +
+          'quietly scores fewer graders than it names reports a number nothing distinguishes from a ' +
+          'complete one');
+
+  const scores = (arm) => (arm ?? []).map((r) => {
+    // A cost ceiling that skipped the paid graders leaves the run scored on a different
+    // grader set from every other run. It is excluded, which is a null, not a zero.
+    if (r?.skippedPaidGraders === true) return null;
+    let passedWeight = 0;
+    let scoredWeight = 0;
+    for (const g of r?.graders ?? []) {
+      if (!names.has(g?.name)) continue;
+      if (g.withOnly === true || g.scored === false) continue;
+      const weight = typeof g.weight === 'number' ? g.weight : 1;
+      scoredWeight += weight;
+      if (g.passed === true) passedWeight += weight;
+    }
+    return scoredWeight === 0 ? null : passedWeight / scoredWeight;
+  });
+  return { with: scores(c.arms.with), without: scores(c.arms.without) };
+}
+
+/**
+ * ComputeDifferenceRunScores — one group's score minus another's, ON THE SAME RUN.
+ *
+ * The difference is taken per run rather than between two table cells, so "the advantage
+ * on A over and above any advantage on B" is a quantity with its own scatter and its own
+ * floor. Arrays of different length are refused: the two groups were scored on the same
+ * runs or they were not, and pairing them by position otherwise would subtract one run
+ * from another.
+ *
+ * @param {(number|null)[]} minuend
+ * @param {(number|null)[]} subtrahend
+ * @returns {(number|null)[]}
+ */
+export function computeDifferenceRunScores(minuend, subtrahend) {
+  if (!Array.isArray(minuend) || !Array.isArray(subtrahend))
+    bad('computeDifferenceRunScores: both sides must be arrays of per-run scores');
+  if (minuend.length !== subtrahend.length)
+    bad(`computeDifferenceRunScores: ${minuend.length} runs against ${subtrahend.length} — the two ` +
+      'groups were not scored on the same runs, and pairing them by position would subtract one run ' +
+      'from another');
+  return minuend.map((a, i) => {
+    const b = subtrahend[i];
+    return a === null || a === undefined || b === null || b === undefined ? null : a - b;
+  });
+}
+
+/** A count per arm; `without` is omitted for an arm the document does not carry. */
+const armCount = (withValue, withoutValue) =>
+  (withoutValue === null ? { with: withValue } : { with: withValue, without: withoutValue });
+
+/**
+ * CountRuns — runs present, runs that errored, runs excluded from every group score.
+ *
+ * All three are registered reported figures (D4). The header's `runsPerCase` is what was
+ * promised, not what ran; a run with a non-null `error` reads as "found nothing" on a
+ * presence-graded case; and a run whose paid graders were skipped is excluded rather than
+ * scored zero. None of those is visible in a mean, so each is printed beside it.
+ *
+ * `groupRunScores` is not the source of any count — it is the cross-check that the group
+ * arrays and the document describe the same runs.
+ *
+ * @param {HarnessDocument} doc
+ * @param {string} caseName
+ * @param {(number|null)[][]} [groupRunScores]  one with-arm array per group
+ * @returns {{ runCounts: object, errorCounts: object, excludedCounts: object }}
+ */
+export function countRuns(doc, caseName, groupRunScores = []) {
+  const c = findCase(doc, caseName);
+  if (!c) bad(`case '${caseName}' is not in this document`);
+  const withRuns = c.arms.with ?? [];
+  const withoutRuns = c.arms.without;
+  for (const [i, arr] of (groupRunScores ?? []).entries())
+    if (Array.isArray(arr) && arr.length !== withRuns.length)
+      bad(`countRuns: group ${i + 1} carries ${arr.length} with-arm scores for ${withRuns.length} runs`);
+  const count = (runs, predicate) => (runs ?? []).filter(predicate).length;
+  const both = (predicate) =>
+    armCount(count(withRuns, predicate), withoutRuns === undefined ? null : count(withoutRuns, predicate));
+  return {
+    runCounts: both(() => true),
+    errorCounts: both((r) => r?.error !== null && r?.error !== undefined),
+    excludedCounts: both((r) => r?.skippedPaidGraders === true),
+  };
+}
+
+/**
+ * ComputeGroupFloor — the smallest difference this instrument resolves for one contrast.
+ *
+ * The larger of two quantities, per the registration. First, the range of the group's
+ * `none` means, which is Tier 1's rule; it does not fall as runs are added. Second, twice
+ * the standard error of the contrast — the standard deviation pooled over the two cells
+ * entering it, times sqrt(1/nT + 1/nC); it does. The second exists because the first is
+ * degenerate when every no-skill run scores the same, which recon made likely, and
+ * because with one scored case the first is a single three-sample range.
+ *
+ * Every part is returned beside the floor, so a reader can recompute it rather than
+ * taking it. NaN where a quantity was not measurable: an unmeasured floor must never
+ * arrive as 0, which is a measurement claiming there is no noise.
+ *
+ * @param {{noneMeans: number[], treatmentRuns: number[], controlRuns: number[]}} parts
+ */
+export function computeGroupFloor(parts) {
+  const noneMeans = (parts?.noneMeans ?? []).filter((n) => Number.isFinite(n));
+  const treatmentRuns = (parts?.treatmentRuns ?? []).filter((n) => Number.isFinite(n));
+  const controlRuns = (parts?.controlRuns ?? []).filter((n) => Number.isFinite(n));
+  const noneRange = noneMeans.length >= 2 ? Math.max(...noneMeans) - Math.min(...noneMeans) : NaN;
+
+  const nT = treatmentRuns.length;
+  const nC = controlRuns.length;
+  const sumSquares = (xs) => {
+    const m = xs.reduce((a, b) => a + b, 0) / xs.length;
+    return xs.reduce((a, b) => a + (b - m) * (b - m), 0);
+  };
+  // The classic pooled estimator. Fewer than two runs between the cells leaves no degrees
+  // of freedom, and a spread invented out of one observation is not a spread.
+  const df = nT + nC - 2;
+  const pooledSd = nT > 0 && nC > 0 && df > 0
+    ? Math.sqrt((sumSquares(treatmentRuns) + sumSquares(controlRuns)) / df)
+    : NaN;
+  const errorBound = Number.isFinite(pooledSd)
+    ? inv.FLOOR_ERROR_MULTIPLIER * pooledSd * Math.sqrt(1 / nT + 1 / nC)
+    : NaN;
+
+  const candidates = [noneRange, errorBound].filter((n) => Number.isFinite(n));
+  return {
+    noneRange,
+    errorBound,
+    pooledSd,
+    treatmentRuns: nT,
+    controlRuns: nC,
+    floor: candidates.length === 0 ? NaN : Math.max(...candidates),
+  };
+}
 
 /**
  * ComputeContrasts — treatment minus control, one per registered control.
@@ -326,7 +627,6 @@ const mean = (xs) => (xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / x
  * @param {string} caseName
  * @returns {Contrast[]}
  */
-// TODO: ComputeGroupContrasts beside this — one Contrast per control under `<case>#<group>/<control>`, each with the floor ComputeGroupFloor built for it and its parts; a zero floor on any contrast returns no contrasts and unmeasurable:true; a case registered contrasts:'groups' never reaches this function.
 export function computeContrasts(conditionScores, baselineScores, preRegistration, caseName) {
   const treatment = conditionScores.treatment;
   if (treatment === null || treatment === undefined) return [];
@@ -358,6 +658,98 @@ export function computeContrasts(conditionScores, baselineScores, preRegistratio
 }
 
 /**
+ * ComputeGroupContrasts — the same rule, one group at a time, with a floor per contrast.
+ *
+ * Three things differ from the case-level function, and each of them is why this one
+ * exists rather than a flag on that one:
+ *
+ *   - the direction is read under `<case>#<group>/<control>`, and a missing key throws
+ *     here as it throws there. A case registered `contrasts: 'groups'` forms no
+ *     case-level pair at all, so the throw the plan's reviewers warned about — the
+ *     merger demanding a direction for a mixed harness score nobody registered — cannot
+ *     fire;
+ *   - the floor is built for THIS contrast, from the runs entering it, because the
+ *     control's run count differs between `none` (the without-arm columns of every
+ *     sweep, taken together, since that is what its mean is over) and a named condition;
+ *   - a floor at or below NOISE_EPSILON is not a measurement. Recon: identical runs give
+ *     2e-16, never 0. The group's contrasts are then withheld and it is returned
+ *     unmeasurable, which is a state the report shows rather than a number it prints.
+ *
+ * A floor that could not be computed at all is NOT unmeasurable — it is a contrast with
+ * no floor, which I11 refuses. "We could not measure the noise" and "the noise is below
+ * what this instrument resolves" are different sentences and only one of them is a
+ * finding about the run.
+ *
+ * @param {string} caseName
+ * @param {string} groupName
+ * @param {Record<ConditionId, number|null>} groupScores        per condition, the with-arm mean
+ * @param {Record<ConditionId, (number|null)[]>} groupRunScores per condition, the with-arm runs
+ * @param {number[]} groupBaselineScores              the group's `none` mean per sweep
+ * @param {(number|null)[][]} groupBaselineRunScores  the group's `none` runs per sweep
+ * @param {PreRegistration} preRegistration
+ * @returns {{contrasts: Contrast[], unmeasurable: boolean}}
+ */
+export function computeGroupContrasts(caseName, groupName, groupScores, groupRunScores,
+  groupBaselineScores, groupBaselineRunScores, preRegistration) {
+  const treatment = groupScores?.treatment;
+  if (treatment === null || treatment === undefined) return { contrasts: [], unmeasurable: false };
+  const controls = ['none', ...preRegistration.conditions.filter((c) => c !== 'treatment')];
+  const finite = (xs) => (xs ?? []).filter((n) => Number.isFinite(n));
+  const noneMeans = finite(groupBaselineScores);
+  /** @type {Contrast[]} */
+  const out = [];
+  let unmeasurable = false;
+
+  for (const control of controls) {
+    const score = control === 'none' ? mean(noneMeans) : groupScores[control] ?? null;
+    // As at case level: a NAMED control with no score is a hole, not a smaller table.
+    if (score === null && control !== 'none')
+      bad(`${caseName}#${groupName}/${control}: the '${control}' condition has no score for this group — ` +
+        'a contrast against a control that did not run is not a contrast');
+    if (score === null) continue;
+    const key = `${caseName}#${groupName}/${control}`;
+    const expected = preRegistration.expectedDirection?.[key];
+    if (expected !== -1 && expected !== 0 && expected !== 1)
+      bad(`${key}: no registered expected direction — a contrast whose direction is decided after ` +
+        `the numbers exist is not a prediction`);
+    // For `none` the runs are every sweep's without-arm together: that is the sample its
+    // mean was taken over, so it is the sample its standard error is taken over too.
+    const controlRuns = control === 'none'
+      ? finite((groupBaselineRunScores ?? []).flat())
+      : finite(groupRunScores?.[control]);
+    const parts = computeGroupFloor({
+      noneMeans,
+      treatmentRuns: finite(groupRunScores?.treatment),
+      controlRuns,
+    });
+    const value = treatment - score;
+    /** @type {Contrast} */
+    const contrast = {
+      treatment: 'treatment',
+      control,
+      value,
+      expected,
+      group: groupName,
+      floor: parts.floor,
+      floorParts: {
+        noneRange: parts.noneRange,
+        errorBound: parts.errorBound,
+        pooledSd: parts.pooledSd,
+        treatmentRuns: parts.treatmentRuns,
+        controlRuns: parts.controlRuns,
+      },
+      belowNoiseFloor: Number.isFinite(parts.floor)
+        ? Math.abs(value) <= parts.floor + inv.NOISE_EPSILON
+        : false,
+    };
+    if (Number.isFinite(parts.floor) && parts.floor <= inv.NOISE_EPSILON) unmeasurable = true;
+    out.push(contrast);
+  }
+  if (unmeasurable) return { contrasts: [], unmeasurable: true };
+  return { contrasts: out, unmeasurable: false };
+}
+
+/**
  * ComputeBaselineSpread — the noise floor, measured rather than assumed.
  *
  * Each sweep produces its own stock-Claude column against identical cases, so within
@@ -373,7 +765,6 @@ export function computeContrasts(conditionScores, baselineScores, preRegistratio
  * @param {number[][]} perCaseBaselines
  * @returns {number}
  */
-// TODO: ComputeGroupFloor beside this — noneRange = max−min of the group's none means (NaN below two); errorBound = FLOOR_ERROR_MULTIPLIER × pooled SD over the two cells × sqrt(1/nT + 1/nC), nC being the three without-arm columns together for `none`; floor = the larger of the two that are numbers.
 export function computeBaselineSpread(perCaseBaselines) {
   const spreads = (perCaseBaselines ?? [])
     .filter((col) => Array.isArray(col) && col.length >= 2)
@@ -396,9 +787,16 @@ export function computeBaselineSpread(perCaseBaselines) {
  * @param {{deltaRows: MergedCaseRow[], capabilityRows?: MergedCaseRow[]}} rows
  * @returns {number}
  */
-// TODO: the report-wide spread still comes from case-level delta rows only; when every delta row is contrasts:'groups' it is absent by design and I1b's group form applies instead of refusing.
 export function noiseFloorOf(rows) {
-  return computeBaselineSpread((rows?.deltaRows ?? []).map((r) => r.baselineScores));
+  // Only CASE-LEVEL delta rows feed the report-wide spread. A row whose case is
+  // registered `contrasts: 'groups'` carries its floors on its groups, one per contrast,
+  // and its baseline column is the group's business rather than the report's. A report
+  // in which every delta row is a groups row therefore has no report-wide spread AT ALL,
+  // which is absence by design: `checkReport` skips I1b there with its reason and runs
+  // I11 instead, rather than refusing a report for a number nothing was going to use.
+  return computeBaselineSpread(
+    (rows?.deltaRows ?? []).filter((r) => (r.groupContrasts ?? null) === null).map((r) => r.baselineScores)
+  );
 }
 
 /**
@@ -431,6 +829,173 @@ export function markNoiseFloor(rows, spread) {
 }
 
 /**
+ * The group half of {@link mergeSweeps}, for a case registered `contrasts: 'groups'`.
+ *
+ * Everything it fills is derived from the sweep documents and the registration, and
+ * nothing here decides a direction: the directions were registered, and a group with no
+ * registered key throws in {@link computeGroupContrasts} rather than defaulting.
+ *
+ * @param {MergedCaseRow} row
+ * @param {CaseSpec} spec
+ * @param {Map<ConditionId, HarnessDocument>} docs
+ * @param {PreRegistration} preRegistration
+ * @param {{traceTexts?: Record<string, string|null>, traceFragments?: string[]}} options
+ */
+function fillGroupFields(row, spec, docs, preRegistration, options) {
+  const finite = (xs) => (xs ?? []).filter((n) => Number.isFinite(n));
+  row.groupScores = {};
+  row.groupRunScores = {};
+  row.groupBaselineScores = {};
+  row.groupBaselineRunScores = {};
+  row.groupContrasts = {};
+  row.unmeasurableGroups = [];
+
+  /** condition → group name → {with, without}, nulls kept, so a difference can pair them. */
+  /** @type {Record<string, Record<string, {with: (number|null)[], without: (number|null)[]}>>} */
+  const perCondition = {};
+  for (const [condition, doc] of docs) {
+    if (!findCase(doc, spec.name)) continue;
+    const byGroup = {};
+    for (const g of spec.groups) {
+      // B4's rule, applied to a group: the refusal is real, but it is REPORTED rather
+      // than thrown. A throw here aborts before any invariant runs, so an operator
+      // merging a sweep taken before a grader existed would get one message and lose
+      // I1c, I11, I12 and the rest of the list with it. The group's cell is left empty
+      // instead, which reaches I11 as a group with no contrasts and no unmeasurable mark
+      // — a refusal, with the reason beside it and every other check still heard.
+      try {
+        if (g.kind === 'graders') byGroup[g.name] = extractGroupRunScores(doc, spec.name, g);
+        else {
+          for (const side of [g.minuend, g.subtrahend])
+            if (byGroup[side] === undefined)
+              bad(`group '${g.name}': '${side}' was not scored, so their difference is not either`);
+          byGroup[g.name] = {
+            with: computeDifferenceRunScores(byGroup[g.minuend].with, byGroup[g.subtrahend].with),
+            without: computeDifferenceRunScores(byGroup[g.minuend].without, byGroup[g.subtrahend].without),
+          };
+        }
+      } catch (e) {
+        row.advisories.push(`${condition}: group '${g.name}' could not be scored — ${e.message}`);
+      }
+    }
+    perCondition[condition] = byGroup;
+  }
+
+  for (const g of spec.groups) {
+    row.groupScores[g.name] = {};
+    row.groupRunScores[g.name] = {};
+    row.groupBaselineScores[g.name] = [];
+    row.groupBaselineRunScores[g.name] = [];
+    for (const condition of preRegistration.conditions) {
+      const scored = perCondition[condition]?.[g.name];
+      const withRuns = finite(scored?.with);
+      row.groupScores[g.name][condition] = mean(withRuns);
+      row.groupRunScores[g.name][condition] = withRuns;
+      const withoutRuns = finite(scored?.without);
+      // One entry per SWEEP that produced a without-arm, kept apart: their range is the
+      // first floor component, and their runs pooled are the second.
+      if (withoutRuns.length > 0) {
+        row.groupBaselineScores[g.name].push(mean(withoutRuns));
+        row.groupBaselineRunScores[g.name].push(withoutRuns);
+      } else if (scored !== undefined) {
+        row.advisories.push(`${condition}: no without-arm score for group '${g.name}', so this sweep ` +
+          'contributes no baseline to it');
+      }
+    }
+    const { contrasts, unmeasurable } = computeGroupContrasts(
+      spec.name, g.name, row.groupScores[g.name], row.groupRunScores[g.name],
+      row.groupBaselineScores[g.name], row.groupBaselineRunScores[g.name], preRegistration
+    );
+    row.groupContrasts[g.name] = contrasts;
+    if (unmeasurable) {
+      row.unmeasurableGroups.push(g.name);
+      row.advisories.push(`group '${g.name}': its floor is at or below ${inv.NOISE_EPSILON}, which is not ` +
+        'a measurement — the contrasts are withheld and the group is marked unmeasurable');
+    }
+  }
+
+  // The four counts. Three come from the documents; the fourth comes from the traces the
+  // sweep kept, and is a published figure rather than a filter: a run whose trace names
+  // the fence is counted and flagged, never dropped (I9, ruled at gate 4).
+  row.runCounts = {};
+  row.errorCounts = {};
+  row.excludedCounts = {};
+  for (const [condition, doc] of docs) {
+    if (!findCase(doc, spec.name)) continue;
+    const perGroup = spec.groups
+      .map((g) => perCondition[condition][g.name]?.with)
+      .filter((xs) => Array.isArray(xs));
+    const counts = countRuns(doc, spec.name, perGroup);
+    row.runCounts[condition] = counts.runCounts;
+    row.errorCounts[condition] = counts.errorCounts;
+    row.excludedCounts[condition] = counts.excludedCounts;
+  }
+
+  const traceTexts = options?.traceTexts;
+  if (traceTexts === undefined) {
+    row.advisories.push('no traces were supplied to the merge, so the fence check did not run and no ' +
+      'refused-run count is published');
+  } else {
+    const traces = [];
+    for (const [condition, doc] of docs) {
+      const c = findCase(doc, spec.name);
+      if (!c) continue;
+      for (const arm of ['with', 'without'])
+        (c.arms[arm] ?? []).forEach((r, i) => {
+          const path = r?.tracePath ?? '';
+          const text = path === '' ? undefined : traceTexts[path];
+          traces.push({ condition, arm, run: i + 1, text: text ?? undefined });
+        });
+    }
+    const flags = inv.i9TraceFlags(traces, options.traceFragments ?? FENCE_FRAGMENTS);
+    row.refusedCounts = flags.refusedCounts;
+    for (const f of flags.flagged) row.advisories.push(`fence: ${f}`);
+    for (const v of flags.violations) row.advisories.push(`fence: ${v}`);
+    // A cell one of whose traces could not be read has an UNKNOWN refused count, not a
+    // count of zero. The unknown is published as the absence of the number, which I12
+    // refuses — absence read as agreement is the failure this whole suite is built
+    // against, and a fence nobody could check is not a fence that held.
+    for (const t of traces) {
+      if (typeof t.text === 'string') continue;
+      const cell = row.refusedCounts[t.condition];
+      if (cell === undefined) continue;
+      if (t.arm === 'with') delete row.refusedCounts[t.condition];
+      else delete cell.without;
+    }
+  }
+
+  // Every grader the case scored that no group names: the guards and the manipulation
+  // checks. Reported with their numbers and no held-or-failed verdict (D4).
+  const named = new Set(spec.groups.flatMap((g) => g.graders ?? []));
+  row.manipulationChecks = {};
+  for (const [condition, doc] of docs) {
+    const c = findCase(doc, spec.name);
+    if (!c) continue;
+    for (const r of c.arms.with ?? [])
+      for (const g of r?.graders ?? []) {
+        if (named.has(g.name)) continue;
+        row.manipulationChecks[g.name] ??= {};
+        const seen = row.manipulationChecks[g.name];
+        seen[condition] ??= { passed: 0, of: 0 };
+        seen[condition].of += 1;
+        if (g.passed === true) seen[condition].passed += 1;
+      }
+  }
+  for (const [name, byCondition] of Object.entries(row.manipulationChecks))
+    for (const condition of preRegistration.conditions)
+      byCondition[condition] = byCondition[condition] === undefined
+        ? null
+        : byCondition[condition].passed / byCondition[condition].of;
+}
+
+/**
+ * The fence, as fragments rather than roots (I9's second half). The condition under test
+ * is a directory inside the repository that every with-arm trace may legitimately name,
+ * so a rule that refused any repository path would flag every with-arm run.
+ */
+export const FENCE_FRAGMENTS = ['/defects/', 'skills/seven-steps-primer', 'fixtures/notesvc/'];
+
+/**
  * MergeSweeps — three sweeps into one comparison.
  *
  * Rows are pushed into two arrays as they are built. Not one list and a filter: the
@@ -438,13 +1003,21 @@ export function markNoiseFloor(rows, spread) {
  * load-bearing distinction, and a filter is one forgotten predicate away from a
  * headline that averages a 0.65-against-nothing into a delta.
  *
+ * A case registered `contrasts: 'groups'` takes a different path through the loop below:
+ * its harness score is still read into `conditionScores`, because it is printed, but no
+ * case-level pair is formed from it and the registered quantities are its groups.
+ *
  * @param {SweepResult[]|SweepRecord[]} sweeps
  * @param {PreRegistration} preRegistration
  * @param {Provenance} provenance
+ * @param {{traceTexts?: Record<string, string|null>, traceFragments?: string[]}} [options]
+ *   `traceTexts` maps a run's `tracePath` to the trace as read from disk — null when the
+ *   file is not there. It is a parameter rather than a read because everything above the
+ *   entry point is pure. Without it a groups case gets no `refusedCounts`, and I12
+ *   refuses the report: a fence nobody checked is not a fence that held.
  * @returns {MergedReport}
  */
-// TODO: for spec.contrasts === 'groups': row.contrasts stays [], no case-level pair is formed, and groupScores / groupRunScores / groupBaselineScores / groupBaselineRunScores / groupContrasts / runCounts / errorCounts / excludedCounts are filled; the harness score is still read into conditionScores for printing.
-export function mergeSweeps(sweeps, preRegistration, provenance) {
+export function mergeSweeps(sweeps, preRegistration, provenance, options = {}) {
   if (!Array.isArray(sweeps) || sweeps.length === 0) bad('no sweeps to merge');
   /** @type {Map<ConditionId, HarnessDocument>} */
   const docs = new Map();
@@ -561,7 +1134,9 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
       for (const a of c.advisories ?? []) row.advisories.push(`${condition}: ${a}`);
     }
 
-    if (spec.evidence === 'delta' && comparable)
+    if ((spec.contrasts ?? 'case') === 'groups')
+      fillGroupFields(row, spec, docs, preRegistration, options);
+    else if (spec.evidence === 'delta' && comparable)
       row.contrasts = computeContrasts(row.conditionScores, row.baselineScores, preRegistration, spec.name);
 
     if (spec.evidence === 'delta') rows.delta.push(row);
@@ -633,13 +1208,19 @@ export function mergeSweeps(sweeps, preRegistration, provenance) {
  *   one is missing.
  * @returns {{ ok: boolean, violations: string[] }}
  */
-// TODO: hand the group form of I1b the expected group count from the registration; skip the report-wide I1b, with the reason, when no case-level delta contrast exists.
 export function checkReport(report, preRegistration, ctx) {
   const scored = preRegistration.cases.filter(
     (s) => !(s.tags ?? []).includes('control') && s.scored !== false
   );
   const expectedDelta = scored.filter((s) => s.evidence === 'delta').length;
   const expectedCapability = scored.filter((s) => s.evidence === 'capability').length;
+  // Which floor rule applies is decided by the REGISTRATION, not by what the report
+  // happens to carry: a report that lost its contrasts must fail I1b, not skip it.
+  const groupCases = scored.filter((s) => (s.contrasts ?? 'case') === 'groups');
+  const expectedGroups = groupCases.reduce((n, s) => n + (s.groups ?? []).length, 0);
+  const caseLevelDelta = scored.some((s) => s.evidence === 'delta' && (s.contrasts ?? 'case') !== 'groups');
+  /** Checks not run, each with the reason. A skip nobody can read is a check nobody ran. */
+  const skipped = [];
   const registered = {
     preRegistrationSha: ctx.committedPreRegistrationSha,
     subjectModel: preRegistration.subjectModel,
@@ -653,7 +1234,18 @@ export function checkReport(report, preRegistration, ctx) {
     // that failed scores 0 and is indistinguishable from a run that did badly.
     ...(ctx.sweeps ?? []).map((s, i) => [`I1c/${s.condition ?? i}`,
       inv.i1cNoFailedRuns(s.document, preRegistration.runsPerCase)]),
-    ['I1b', inv.i1bNoiseFloorMarked(report)],
+    // I1b is the REPORT-WIDE floor, and it is measured from case-level delta rows. When
+    // every delta case is registered `contrasts: 'groups'` there is no such row, the
+    // spread is absent by design, and I1b would refuse a report for a number nothing was
+    // going to use. It is skipped WITH ITS REASON and I11 holds the same rule per group.
+    ...(caseLevelDelta ? [['I1b', inv.i1bNoiseFloorMarked(report)]] : []),
+    // The group form: one floor per contrast, judged against itself. Wired only for a
+    // registration that has groups, so a suite without them is unchanged.
+    ...(groupCases.length > 0 ? [
+      ['I11', inv.i11GroupFloorMarked(report, expectedGroups)],
+      ['I12', inv.i12CountsPublished(report, preRegistration.runsPerCase, preRegistration.conditions)],
+      ['I13', inv.i13GroupsCarryContrasts(preRegistration, report)],
+    ] : []),
     ['I2', inv.i2RunNotVoid(report, registered, ctx.drift, ctx.preRegistrationDirty)],
     // Per SWEEP RECORD, like I1c: the digest is something only the runner knows, so it
     // rides on the envelope rather than on the merged report. I2 cannot see any of it.
@@ -669,10 +1261,16 @@ export function checkReport(report, preRegistration, ctx) {
     ['I8', inv.i8PreRegistrationFrozen(
       ctx.committedPreRegistrationSha, report?.provenance?.preRegistrationSha, ctx.preRegistrationDirty)],
   ];
+  if (!caseLevelDelta)
+    skipped.push('I1b: no case-level delta contrast is registered, so the report-wide noise floor is ' +
+      'absent by design; I11 judges each group contrast against its own floor instead');
+  if (groupCases.length === 0)
+    skipped.push('I11, I12, I13: no case is registered with grader groups');
+
   const violations = [];
   for (const [id, result] of checks)
     for (const v of result.violations) violations.push(`${id}: ${v}`);
-  return { ok: violations.length === 0, violations };
+  return { ok: violations.length === 0, violations, skipped };
 }
 
 /* ────────────────────────────────────────────────────────────────────────────
@@ -683,6 +1281,99 @@ const f2 = (n) => (n === null || n === undefined || Number.isNaN(n) ? '—' : n.
 const signed = (n) => (n >= 0 ? `+${n.toFixed(2)}` : n.toFixed(2));
 /** A registered direction is typeset as a sign, never as a score: `+1`, not `1.00`. */
 const direction = (d) => (d > 0 ? '+1' : d < 0 ? '-1' : '0');
+
+/**
+ * The grader-group half of {@link formatComparison}: one section per group, its floor
+ * printed with the parts it was built from, and the four counts beside the scores.
+ *
+ * Nothing here is a summary. Every number a reader sees can be recomputed from the
+ * record and the registration, which is why the floor arrives with `noneRange`,
+ * `errorBound`, `pooledSd` and the two run counts rather than as a bare figure.
+ *
+ * @param {MergedReport} report
+ * @param {ConditionId[]} conditions
+ * @returns {string[]}
+ */
+function formatGroups(report, conditions) {
+  const rows = (report.deltaRows ?? []).filter((r) => r.groupContrasts);
+  if (rows.length === 0) return [];
+  const out = ['## Grader groups', ''];
+  out.push('The registered quantity for a case that carries no case-level contrast. A group is scored ' +
+    'per run the way the harness scores a case — the weight of its graders that passed over the weight ' +
+    'of its graders that were scored — and the mean is taken over runs, never over graders.', '');
+
+  for (const r of rows) {
+    const counts = (kind, condition, arm) => {
+      const c = r[kind]?.[condition];
+      if (!c) return '—';
+      return arm === 'without' ? (typeof c.without === 'number' ? String(c.without) : '—') : String(c.with);
+    };
+    for (const [name, contrasts] of Object.entries(r.groupContrasts)) {
+      const unmeasurable = (r.unmeasurableGroups ?? []).includes(name);
+      out.push(`### \`${r.case}\` · group \`${name}\``, '');
+      out.push('| condition | score | runs | errored | excluded | refused |');
+      out.push('|---|---|---|---|---|---|');
+      for (const c of conditions)
+        out.push(`| ${c} | ${f2(r.groupScores?.[name]?.[c])} | ${counts('runCounts', c, 'with')} | ` +
+          `${counts('errorCounts', c, 'with')} | ${counts('excludedCounts', c, 'with')} | ` +
+          `${counts('refusedCounts', c, 'with')} |`);
+      const baselines = r.groupBaselineScores?.[name] ?? [];
+      out.push(`| none (per sweep) | ${baselines.map((n) => f2(n)).join(' · ') || '—'} | ` +
+        `${conditions.map((c) => counts('runCounts', c, 'without')).join(' · ')} | ` +
+        `${conditions.map((c) => counts('errorCounts', c, 'without')).join(' · ')} | ` +
+        `${conditions.map((c) => counts('excludedCounts', c, 'without')).join(' · ')} | ` +
+        `${conditions.map((c) => counts('refusedCounts', c, 'without')).join(' · ')} |`);
+      out.push('');
+      out.push('Runs present, runs that errored, runs excluded because a cost ceiling skipped their paid ' +
+        'graders, and runs whose kept trace named the fence. All four are registered reported figures: an ' +
+        'errored run counts and is not replaced, and a refused run counts and is not dropped.', '');
+
+      if (unmeasurable) {
+        out.push(`**unmeasurable.** This group's floor came out at or below ${inv.NOISE_EPSILON}, which is ` +
+          'not a measurement of noise but the absence of one. Its contrasts are withheld: the scores above ' +
+          'stand, and no difference between them is published as a number.', '');
+        continue;
+      }
+      out.push('| vs | Δ | registered direction | floor | none range | 2×SE | pooled SD | runs T | runs C | note |');
+      out.push('|---|---|---|---|---|---|---|---|---|---|');
+      for (const c of contrasts) {
+        const parts = c.floorParts ?? {};
+        out.push(`| ${c.control} | ${signed(c.value)} | ${direction(c.expected)} | ${f2(c.floor)} | ` +
+          `${f2(parts.noneRange)} | ${f2(parts.errorBound)} | ${f2(parts.pooledSd)} | ` +
+          `${parts.treatmentRuns ?? '—'} | ${parts.controlRuns ?? '—'} | ` +
+          `${c.belowNoiseFloor ? 'at or below this contrast\'s floor' : ''} |`);
+      }
+      out.push('');
+      out.push('The floor is per contrast: the larger of the range of the `none` means and ' +
+        `${inv.FLOOR_ERROR_MULTIPLIER} × the standard error of the contrast, with the standard deviation ` +
+        'pooled over the two cells entering it. Both parts are printed so the floor can be recomputed ' +
+        'rather than taken. A contrast at or below its own floor is published and marked, never a finding.', '');
+      out.push('| condition | runs |');
+      out.push('|---|---|');
+      for (const c of conditions)
+        out.push(`| ${c} | ${(r.groupRunScores?.[name]?.[c] ?? []).map((n) => f2(n)).join(' · ') || '—'} |`);
+      for (const [i, runs] of (r.groupBaselineRunScores?.[name] ?? []).entries())
+        out.push(`| none (sweep ${i + 1}) | ${runs.map((n) => f2(n)).join(' · ') || '—'} |`);
+      out.push('');
+    }
+
+    const checks = Object.entries(r.manipulationChecks ?? {});
+    if (checks.length > 0) {
+      out.push(`### \`${r.case}\` · manipulation checks`, '');
+      out.push('Graders the case scored that no registered group names: the guards, and any grader that ' +
+        'measures whether the run produced the observable at all. They are reported with their numbers ' +
+        'and no held-or-failed verdict — they measure compliance with an instruction, which is a ' +
+        'behaviour, and the trace they read includes the reply, so they are not independent of the ' +
+        'group above.', '');
+      out.push(`| grader | ${conditions.join(' | ')} |`);
+      out.push(`|---|${conditions.map(() => '---').join('|')}|`);
+      for (const [grader, byCondition] of checks)
+        out.push(`| \`${grader}\` | ${conditions.map((c) => f2(byCondition[c])).join(' | ')} |`);
+      out.push('');
+    }
+  }
+  return out;
+}
 
 /**
  * FormatComparison — delta and capability under separate headings, the noise floor
@@ -702,7 +1393,6 @@ const direction = (d) => (d > 0 ? '+1' : d < 0 ? '-1' : '0');
  * @param {MergedReport} report
  * @returns {string}
  */
-// TODO: per group — a score table (conditions + none), a contrast table with floor and its parts, the word "unmeasurable" where a zero-floor group's contrasts would be; the three counts beside the group scores; a manipulation-check section for graders in no registered group (surfaced-*); no contrast column and a note for a contrasts:'groups' case.
 export function formatComparison(report) {
   const p = report.provenance ?? {};
   const conditions = Object.keys(report.deltaRows[0]?.conditionScores ?? report.capabilityRows[0]?.conditionScores ?? {});
@@ -743,6 +1433,11 @@ export function formatComparison(report) {
     out.push('The `none` column is stock Claude Code, measured once per sweep against identical cases and ' +
       'averaged here. The averaging is only for this cell — the columns themselves are kept apart below, ' +
       'because their spread is the noise floor.', '');
+    for (const r of report.deltaRows.filter((x) => x.groupContrasts))
+      out.push(`\`${r.case}\` is registered as carrying no case-level contrast, so it has no contrast ` +
+        'column below. The score above is the harness\'s own, which averages every grader on the case, ' +
+        'guards included; it is printed and not registered. The registered quantities are its grader ' +
+        'groups, below.', '');
     out.push('### Contrasts — treatment minus control', '');
     out.push('| case | vs | Δ | registered direction | note |');
     out.push('|---|---|---|---|---|');
@@ -769,6 +1464,8 @@ export function formatComparison(report) {
       out.push(`| \`${r.case}\` | ${conditions.map((c) => f2(r.conditionScores[c])).join(' | ')} |`);
     out.push('');
   }
+
+  out.push(...formatGroups(report, conditions));
 
   out.push('## Per-run scatter', '');
   out.push('Means are printed above; these are what they were taken from. A method that works two runs in ' +
@@ -1033,7 +1730,23 @@ async function main(argv) {
   const { digest: workingDigest, dirty } = await makePreRegistrationDigest(readTextFile, git)(preRegPath);
   const memoisedDigest = async () => ({ digest: workingDigest, dirty });
   const provenance = await buildProvenance(revParse, memoisedDigest, clock, sweeps, preRegistration, preRegPath);
-  const report = mergeSweeps(sweeps, preRegistration, provenance);
+
+  // The kept traces, read once and handed in, so everything above this line stays pure.
+  // Only a registration with a grader group needs them — the fence count is published on
+  // a group row — and a run whose trace cannot be read produces no count, which I12
+  // refuses rather than reading as a clean run.
+  /** @type {Record<string, string|null>|undefined} */
+  let traceTexts;
+  if (preRegistration.cases.some((c) => (c.contrasts ?? 'case') === 'groups')) {
+    traceTexts = {};
+    for (const s of sweeps)
+      for (const c of s.document.cases ?? [])
+        for (const arm of ['with', 'without'])
+          for (const r of c.arms?.[arm] ?? [])
+            if (typeof r?.tracePath === 'string' && r.tracePath !== '' && !(r.tracePath in traceTexts))
+              traceTexts[r.tracePath] = await readTextFile(r.tracePath).catch(() => null);
+  }
+  const report = mergeSweeps(sweeps, preRegistration, provenance, { traceTexts });
 
   // Taken now, over the tree being merged from — so a grader, fixture or condition edited
   // between the sweeps and this merge is caught by I2b rather than published.
@@ -1050,9 +1763,22 @@ async function main(argv) {
     conditionShas: conditions.shas,
     conditionShaErrors: conditions.errors,
   });
+  for (const reason of check.skipped ?? []) process.stderr.write(`not run — ${reason}\n`);
   if (!check.ok) {
     process.stderr.write('refusing to emit a report — invariants violated:\n');
     for (const v of check.violations) process.stderr.write(`  ${v}\n`);
+    // The advisories go with them. A violation says WHICH rule refused; an advisory
+    // often says why — a group that could not be scored, a sweep that produced no
+    // baseline, a trace that could not be read — and on a refusal the report that would
+    // have carried them is never written.
+    const notes = [
+      ...report.advisories,
+      ...[...report.deltaRows, ...report.capabilityRows].flatMap((r) => r.advisories.map((a) => `${r.case}: ${a}`)),
+    ];
+    if (notes.length > 0) {
+      process.stderr.write('advisories:\n');
+      for (const n of notes) process.stderr.write(`  ${n}\n`);
+    }
     process.exitCode = 1;
     return;
   }

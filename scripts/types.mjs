@@ -222,6 +222,12 @@
  * @property {string}     subjectModel   pinned so a model rollout never reads as a regression
  * @property {string}     judgeModel     pinned, and not the subject model
  * @property {number}     runsPerCase
+ * @property {number}     [floorErrorMultiplier]  how many standard errors of a contrast the
+ *                                       second floor component is. Registered rather than
+ *                                       chosen at merge time, and checked against
+ *                                       `FLOOR_ERROR_MULTIPLIER` when the merge runs.
+ *                                       Required of a registration that carries a groups
+ *                                       case, absent from one that does not
  * @property {string}     claudeVersion  the CLI version the predictions were made against;
  *                                       I2 voids a run whose report disagrees
  * @property {true}       publishAllConditions literal `true` — the undertaking to publish
@@ -436,6 +442,23 @@
  *                                       runs left out of every group score because their
  *                                       paid graders were skipped by a cost ceiling. Never
  *                                       scored as zero
+ * @property {Record<ConditionId, ArmCounts>} [refusedCounts]
+ *                                       runs whose kept trace named a fence fragment (I9's
+ *                                       second half), per condition and arm. Ruled at gate
+ *                                       4: such a run is counted and flagged, never
+ *                                       dropped, so this is a published figure and not a
+ *                                       filter. A run whose trace could not be read
+ *                                       produces no count, which I12 refuses
+ * @property {string[]} [unmeasurableGroups]
+ *                                       the groups whose floor came out at or below
+ *                                       NOISE_EPSILON. Their contrasts are withheld and the
+ *                                       report prints the word rather than a number (I11)
+ * @property {Record<string, Record<ConditionId, number|null>>} [manipulationChecks]
+ *                                       grader name → condition → the fraction of scored
+ *                                       with-arm runs that passed it, for every grader the
+ *                                       case scored that no registered group names. These
+ *                                       are reported with their numbers and no held-or-
+ *                                       failed verdict (D4)
  */
 
 /**

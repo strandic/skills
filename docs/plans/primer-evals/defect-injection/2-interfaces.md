@@ -120,3 +120,22 @@ they are not mistaken for settled:
 
 None. Every new signature is typed with the step-1 shapes or with an inline object
 type small enough to live at its one use. Gate 1 does not re-open.
+
+## Corrected at step 6
+
+Four signatures did not survive contact with the handles they were given. Each correction
+is a narrowing, and each is in the register with its reasoning.
+
+| Signature | Declared | Built |
+|---|---|---|
+| `MergeSweeps` | three parameters, pure | a fourth, optional: `{traceTexts, traceFragments}`. The merger must fill `refusedCounts` from the kept traces, and a pure function cannot read them. The entry point reads them and hands them in; a merge with none publishes no fence count, and I12 refuses it. |
+| `AskJudge` | the user prompt on stdin, as recon ran it | the user prompt as the trailing argument. `SpawnCapture` — the handle every spawn in this repository goes through — takes a command, arguments and an environment, and has no stdin. Recon tried the argument form too and it returned normally. |
+| `RunDetectScript` | `serviceDir` as the working directory | `serviceDir` as the script's argument. `SpawnCapture` carries no working directory, and every committed script takes the service root as `$1`, defaulting to its own ledger's copy. The argument is the half that fails loudly when it is wrong. |
+| `ResolveSuite` | pure, and the directory "must hold a `PRE-REGISTRATION.md`" | pure over the SHAPE; the file's existence is refused by `main`'s first read, before any spend. A pure function cannot stat a directory. Both halves of the rule hold; they are enforced in two places. |
+
+One clause was added rather than changed. `ComputeGroupContrasts` says a floor at or below
+`NOISE_EPSILON` makes the group unmeasurable; it did not say what a floor that could not be
+computed at all does. It returns a contrast with no floor, which I11 refuses — "we could
+not measure the noise" is not "the noise is below what this instrument resolves", and
+`0-plan.md` D4 already says a missing floor refuses the merge.
+

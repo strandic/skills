@@ -12,4 +12,6 @@ The instrument-readiness test the plan requires (the Skill tool result carrying 
 body in every with-arm recon trace and in no without-arm trace) is read from the kept
 traces at step 4, not from this grader.
 
-<!-- TODO: keep `arm` unset so the harness demotes it; confirm in recon that the record shows withOnly:true / scored:false in the with arm and no entry in the without arm, as the Tier 1 records do. -->
+`arm` is deliberately unset, so the harness demotes it. Recon confirmed the demotion on
+this case: the with-arm record carries it as `withOnly: true, scored: false`, and the
+without-arm record does not list it at all (`4-recon.md`, seam 2).

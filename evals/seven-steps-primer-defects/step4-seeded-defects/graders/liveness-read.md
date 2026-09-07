@@ -12,4 +12,6 @@ done-report, and a hand-back pattern would fail it.
 Excluded from every registered group. It is scored by the harness in both arms, so it
 moves the harness's own case score; that score is printed and not registered.
 
-<!-- TODO: unpatterned (no input_match), so it carries no probes; confirm the ratchet in graders.test.mjs counts it as unpatterned for this suite. -->
+It carries no `input_match`, so there is no pattern for a probe to test and none is
+committed. `graders.test.mjs` counts it among this suite's unpatterned graders, and holds
+every unpatterned grader to being unpatterned by TYPE rather than by a dropped key.

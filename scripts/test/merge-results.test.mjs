@@ -13,7 +13,6 @@
  *
  * `node --test scripts/test/*.test.mjs`
  */
-// TODO: tests for parsePreRegistration groups/contrasts/keys, ExtractGroupRunScores (withOnly out, null for unscored and skippedPaidGraders, unknown name refused), ComputeDifferenceRunScores, CountRuns, ComputeGroupFloor (noneRange, errorBound, none nC pooled over three columns, zero → unmeasurable), ComputeGroupContrasts (keys, missing direction throws, floor on each), mergeSweeps group fields, formatComparison group tables and the no-contrast note.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as m from '../merge-results.mjs';
@@ -1008,4 +1007,549 @@ test('parseArgv takes a results directory in and a report path out', () => {
 test('parseArgv refuses an invocation with no results directory', () => {
   throws(() => m.parseArgv([]), 'usage:');
   throws(() => m.parseArgv(['--nope']), 'unknown option');
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Grader groups — the registered quantity for a case that carries no case-level
+ * contrast.
+ *
+ * Everything below is hand-built, like the fixtures above, and for the same reason: a
+ * judgement about a number has to be assertable without paying for a run to produce
+ * one. The shapes are recon's — per-run, per-grader verdicts with `weight`, `withOnly`
+ * and `scored`, exactly as the records carry them.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * One run, with a verdict per grader. `1` passed, `0` failed; an object carries a
+ * `weight` or the `withOnly` demotion the harness applies to a plugin-fired indicator.
+ */
+const gRun = (verdicts, extra = {}) => {
+  const graders = Object.entries(verdicts).map(([name, v]) => {
+    const spec = typeof v === 'object' ? v : { passed: v };
+    const withOnly = spec.withOnly === true;
+    return {
+      name,
+      passed: spec.passed === 1,
+      weight: spec.weight ?? 1,
+      explanation: 'judged',
+      withOnly,
+      scored: !withOnly,
+    };
+  });
+  const scored = graders.filter((g) => g.scored);
+  const total = scored.reduce((a, g) => a + g.weight, 0);
+  return {
+    score: total === 0 ? 0 : scored.filter((g) => g.passed).reduce((a, g) => a + g.weight, 0) / total,
+    passed: false, turns: 4, costUsd: 0.01, judgeCostUsd: 0.002,
+    error: null, skippedPaidGraders: false, tracePath: `/tmp/trace-${Math.random().toString(36).slice(2)}.jsonl`,
+    graders,
+    ...extra,
+  };
+};
+
+/** A one-case document whose arms are lists of {@link gRun}s. */
+const gDoc = (withRuns, withoutRuns, over = {}) => ({
+  schemaVersion: 1,
+  claudeVersion: '2.1.250',
+  startedAt: '2026-09-08T10:00:00.000Z',
+  costUsd: 0.6,
+  partial: false,
+  suite: { ablation: 'with-without', threshold: 0.6, modelOverride: 'sonnet', judgeModel: 'opus' },
+  cases: [{
+    name: 'defects', dir: 'evals/x/defects',
+    arms: { with: withRuns, ...(withoutRuns ? { without: withoutRuns } : {}) },
+    aggregates: { score: 0, passRate: 0 },
+  }],
+  ...over,
+});
+
+const gSweep = (condition, document) => ({
+  condition, exitCode: 0, document, stderrTail: '', argvs: [['plugin', 'eval']],
+  startedAt: document.startedAt, instrumentSha: INSTRUMENT, conditionSha: OWN(condition),
+  ablations: { defects: 'with-without' },
+});
+
+const GROUP_CONDITIONS = ['treatment', 'placebo', 'run-oneliner'];
+
+/** Two grader groups and the difference between them, over three conditions. */
+const GPRE = () => ({
+  conditions: [...GROUP_CONDITIONS],
+  cases: [{
+    name: 'defects', evidence: 'delta', ablation: 'with-without', tags: ['outcome', 'scored'],
+    scored: true, measures: 'the fraction of the reported-* graders that pass',
+    contrasts: 'groups',
+    groups: [
+      { kind: 'graders', name: 'reported', graders: ['r1', 'r2'] },
+      { kind: 'graders', name: 'hard', graders: ['r3'] },
+      { kind: 'difference', name: 'gap', minuend: 'reported', subtrahend: 'hard' },
+    ],
+  }, {
+    // I7 needs one, and the real suite's is the same case with the mutating tools not
+    // granted. It reaches no table, so no sweep has to carry it.
+    name: 'read-only', evidence: 'capability', ablation: 'none', tags: ['control', 'diagnostic'],
+    scored: false, measures: 'diagnostic only',
+  }],
+  expectedDirection: Object.fromEntries(
+    ['reported', 'hard', 'gap'].flatMap((g) =>
+      ['none', 'placebo', 'run-oneliner'].map((c) => [`defects#${g}/${c}`, 1]))
+  ),
+  floorErrorMultiplier: 2,
+  threshold: 0.6,
+  subjectModel: 'sonnet',
+  judgeModel: 'opus',
+  runsPerCase: 2,
+  claudeVersion: '2.1.250',
+  publishAllConditions: true,
+});
+
+/** Three sweeps whose numbers give every group a floor above the epsilon. */
+const gSweeps = () => [
+  gSweep('treatment', gDoc(
+    [gRun({ r1: 1, r2: 0, r3: 1, guard: 1 }), gRun({ r1: 1, r2: 1, r3: 0, guard: 1 })],
+    [gRun({ r1: 0, r2: 0, r3: 0, guard: 1 }), gRun({ r1: 1, r2: 0, r3: 0, guard: 0 })])),
+  gSweep('placebo', gDoc(
+    [gRun({ r1: 1, r2: 0, r3: 0, guard: 0 }), gRun({ r1: 0, r2: 0, r3: 0, guard: 0 })],
+    [gRun({ r1: 0, r2: 0, r3: 0, guard: 0 }), gRun({ r1: 0, r2: 0, r3: 0, guard: 0 })])),
+  gSweep('run-oneliner', gDoc(
+    [gRun({ r1: 1, r2: 0, r3: 1, guard: 1 }), gRun({ r1: 1, r2: 0, r3: 1, guard: 1 })],
+    [gRun({ r1: 1, r2: 0, r3: 1, guard: 1 }), gRun({ r1: 0, r2: 0, r3: 1, guard: 0 })])),
+];
+
+/** Every trace the fixture sweeps name, all clean, so the fence check has something to look at. */
+const gTraces = (sweeps, text = 'a clean trace') => Object.fromEntries(
+  sweeps.flatMap((s) => s.document.cases.flatMap((c) =>
+    [...(c.arms.with ?? []), ...(c.arms.without ?? [])].map((r) => [r.tracePath, text])))
+);
+
+const gProv = { ...PROV, runsPerCase: 2 };
+const gMerged = (sweeps = gSweeps(), pre = GPRE(), options = { traceTexts: gTraces(sweeps) }) =>
+  m.mergeSweeps(sweeps, pre, structuredClone(gProv), options);
+const gCtx = (sweeps, over = {}) => ({
+  sweeps,
+  drift: { drifted: false, reason: '', checkedAt: '2026-09-08T09:00:00.000Z', instrumentSha: INSTRUMENT },
+  committedPreRegistrationSha: 'aaa',
+  preRegistrationDirty: false,
+  instrumentSha: INSTRUMENT,
+  conditionShas: OWN_SHAS(GROUP_CONDITIONS),
+  ...over,
+});
+
+const gPreRegMd = (pre) => `# Pre-registration\n\n\`\`\`json\n${JSON.stringify(pre, null, 2)}\n\`\`\`\n`;
+const parseG = (mutate = (p) => p) => m.parsePreRegistration(gPreRegMd(mutate(GPRE())));
+
+/* ── The registration: groups, contrasts and the two key kinds ─────────────── */
+
+test('parsePreRegistration accepts a case that registers groups and no case-level contrast', () => {
+  const pre = parseG();
+  assert.equal(pre.cases[0].contrasts, 'groups');
+  assert.deepEqual(pre.cases[0].groups.map((g) => g.name), ['reported', 'hard', 'gap']);
+  assert.equal(pre.floorErrorMultiplier, inv.FLOOR_ERROR_MULTIPLIER);
+});
+
+test('parsePreRegistration refuses groups without contrasts:groups, and contrasts:groups without groups', () => {
+  throws(() => parseG((p) => { delete p.cases[0].contrasts; return p; }),
+    'names groups but is registered');
+  throws(() => parseG((p) => { p.cases[0].groups = []; return p; }),
+    'names no group');
+  throws(() => parseG((p) => { p.cases[0].contrasts = 'both'; return p; }),
+    "neither 'case' nor 'groups'");
+});
+
+test('parsePreRegistration refuses a group name carrying the character a direction key splits on', () => {
+  throws(() => parseG((p) => { p.cases[0].groups[0].name = 'rep#orted'; return p; }), "contains '#' or '/'");
+  throws(() => parseG((p) => { p.cases[0].name = 'def#ects'; return p; }), "contains '#'");
+});
+
+test('parsePreRegistration refuses two groups with one name, and a group naming one grader twice', () => {
+  throws(() => parseG((p) => { p.cases[0].groups[1].name = 'reported'; return p; }), "declared twice");
+  throws(() => parseG((p) => { p.cases[0].groups[0].graders = ['r1', 'r1']; return p; }), 'names a grader twice');
+});
+
+test('parsePreRegistration refuses a group that names no grader — it would score every run as nothing', () => {
+  throws(() => parseG((p) => { p.cases[0].groups[0].graders = []; return p; }), 'names no grader');
+  throws(() => parseG((p) => { delete p.cases[0].groups[0].graders; return p; }), 'names no grader');
+  throws(() => parseG((p) => { p.cases[0].groups[0].kind = 'average'; return p; }),
+    "neither 'graders' nor 'difference'");
+});
+
+test('a difference names two grader groups of the same case, and nothing else', () => {
+  throws(() => parseG((p) => { p.cases[0].groups[2].minuend = 'absent'; return p; }), 'names no group on this case');
+  throws(() => parseG((p) => { p.cases[0].groups[2].subtrahend = 'gap'; return p; }), 'a difference of differences');
+  throws(() => parseG((p) => { p.cases[0].groups[2].subtrahend = 'reported'; return p; }),
+    'subtracts a group from itself');
+  throws(() => parseG((p) => { delete p.cases[0].groups[2].minuend; return p; }), 'has no minuend');
+});
+
+test('a groups case needs a direction per group per control, and none for itself', () => {
+  throws(() => parseG((p) => { delete p.expectedDirection['defects#reported/placebo']; return p; }),
+    'no direction registered for defects#reported/placebo');
+  throws(() => parseG((p) => { p.expectedDirection['defects/placebo'] = 1; return p; }),
+    'is a case-level direction on');
+});
+
+test('a direction key naming an unregistered group, or a group of a case-level case, is refused', () => {
+  throws(() => parseG((p) => { p.expectedDirection['defects#nope/none'] = 1; return p; }),
+    'names no group registered on');
+  throws(() => m.parsePreRegistration(PREREG_MD.replace('"gate/none"', '"gate#g/none"')),
+    'names a group of');
+});
+
+test('the floor multiplier is registered, and a registration that disagrees with the code is refused', () => {
+  throws(() => parseG((p) => { delete p.floorErrorMultiplier; return p; }), 'missing');
+  throws(() => parseG((p) => { p.floorErrorMultiplier = 3; return p; }),
+    'would be two different numbers');
+  throws(() => parseG((p) => { p.floorErrorMultiplier = 0; return p; }), 'not a positive number');
+  // A registration with no groups needs none, which is why the Tier 1 file still parses.
+  assert.equal(m.parsePreRegistration(PREREG_MD).floorErrorMultiplier, undefined);
+});
+
+/* ── ExtractGroupRunScores ─────────────────────────────────────────────────── */
+
+const groupOf = (pre, name) => pre.cases[0].groups.find((g) => g.name === name);
+
+test('a group score is the harness`s own arithmetic over the named graders, weights included', () => {
+  const doc = gDoc([gRun({ r1: 1, r2: 0, r3: 1 }), gRun({ r1: { passed: 1, weight: 3 }, r2: 0, r3: 0 })]);
+  const scores = m.extractGroupRunScores(doc, 'defects', { kind: 'graders', name: 'reported', graders: ['r1', 'r2'] });
+  assert.deepEqual(scores.with, [0.5, 0.75]);
+  assert.deepEqual(scores.without, []);
+});
+
+test('a withOnly grader is out of both halves, because the harness has already excluded it', () => {
+  const doc = gDoc([gRun({ r1: 1, r2: { passed: 0, withOnly: true } })]);
+  const scores = m.extractGroupRunScores(doc, 'defects', { kind: 'graders', name: 'g', graders: ['r1', 'r2'] });
+  assert.deepEqual(scores.with, [1], 'counting a demoted indicator would make a number no other agrees with');
+});
+
+test('a run with no scored grader in the group is null, and so is one whose paid graders were skipped', () => {
+  const doc = gDoc([
+    gRun({ r1: { passed: 1, withOnly: true } }),
+    gRun({ r1: 1 }, { skippedPaidGraders: true }),
+    gRun({ r1: 1 }),
+  ]);
+  const scores = m.extractGroupRunScores(doc, 'defects', { kind: 'graders', name: 'g', graders: ['r1'] });
+  assert.deepEqual(scores.with, [null, null, 1],
+    'null in position, never dropped and never zero, so the caller can count it');
+});
+
+test('a grader name the case does not carry is refused, not quietly scored as fewer graders', () => {
+  const doc = gDoc([gRun({ r1: 1 })]);
+  throws(() => m.extractGroupRunScores(doc, 'defects', { kind: 'graders', name: 'g', graders: ['r1', 'renamed'] }),
+    "carries no grader 'renamed'");
+  throws(() => m.extractGroupRunScores(doc, 'absent', { kind: 'graders', name: 'g', graders: ['r1'] }),
+    "case 'absent' is not in this document");
+  throws(() => m.extractGroupRunScores(doc, 'defects', { kind: 'difference', name: 'd' }),
+    'only a graders group is scored from the document');
+});
+
+test('a case whose arms are empty has no grader names to disagree with, and its counts say so', () => {
+  const doc = gDoc([]);
+  const scores = m.extractGroupRunScores(doc, 'defects', { kind: 'graders', name: 'g', graders: ['r1'] });
+  assert.deepEqual(scores.with, []);
+  assert.deepEqual(m.countRuns(doc, 'defects').runCounts, { with: 0 });
+});
+
+/* ── ComputeDifferenceRunScores ────────────────────────────────────────────── */
+
+test('a difference is taken per run, and is null wherever either side is', () => {
+  assert.deepEqual(m.computeDifferenceRunScores([1, 0.5, null, 0.25], [0.5, 0.5, 0.5, null]),
+    [0.5, 0, null, null]);
+});
+
+test('two groups scored on different numbers of runs are refused rather than paired by position', () => {
+  throws(() => m.computeDifferenceRunScores([1, 0], [1]), 'the two groups were not scored on the same runs');
+  throws(() => m.computeDifferenceRunScores(null, [1]), 'both sides must be arrays');
+});
+
+/* ── CountRuns ─────────────────────────────────────────────────────────────── */
+
+test('the counts are runs present, runs that errored and runs a cost ceiling excluded, per arm', () => {
+  const doc = gDoc(
+    [gRun({ r1: 1 }), gRun({ r1: 0 }, { error: 'timed out' }), gRun({ r1: 1 }, { skippedPaidGraders: true })],
+    [gRun({ r1: 0 }), gRun({ r1: 0 }, { error: 'session limit' })]);
+  const counts = m.countRuns(doc, 'defects');
+  assert.deepEqual(counts.runCounts, { with: 3, without: 2 });
+  assert.deepEqual(counts.errorCounts, { with: 1, without: 1 });
+  assert.deepEqual(counts.excludedCounts, { with: 1, without: 0 });
+});
+
+test('a single-arm case carries no without count, rather than a zero that reads as an empty arm', () => {
+  const counts = m.countRuns(gDoc([gRun({ r1: 1 })]), 'defects');
+  assert.deepEqual(counts.runCounts, { with: 1 });
+  assert.equal('without' in counts.errorCounts, false);
+});
+
+test('countRuns refuses a group array that describes a different number of runs', () => {
+  throws(() => m.countRuns(gDoc([gRun({ r1: 1 })]), 'defects', [[0.5, 0.5]]),
+    'carries 2 with-arm scores for 1 runs');
+});
+
+/* ── ComputeGroupFloor ─────────────────────────────────────────────────────── */
+
+test('the floor is the larger of the none range and twice the standard error of the contrast', () => {
+  const parts = m.computeGroupFloor({
+    noneMeans: [0, 0.1, 0.25],
+    treatmentRuns: [1, 1, 1, 1],
+    controlRuns: [1, 1, 1, 1],
+  });
+  assert.equal(parts.noneRange, 0.25);
+  assert.equal(parts.pooledSd, 0, 'identical runs have no spread');
+  assert.equal(parts.errorBound, 0);
+  assert.equal(parts.floor, 0.25, 'the none range wins when the cells are degenerate');
+
+  const spread = m.computeGroupFloor({ noneMeans: [0.5, 0.5], treatmentRuns: [0, 1], controlRuns: [0, 1] });
+  close(spread.noneRange, 0);
+  close(spread.pooledSd, Math.sqrt((0.5 + 0.5) / 2));
+  close(spread.errorBound, inv.FLOOR_ERROR_MULTIPLIER * spread.pooledSd * Math.sqrt(1 / 2 + 1 / 2));
+  assert.equal(spread.floor, spread.errorBound, 'the error bound wins when the none columns agree');
+});
+
+test('the floor`s parts carry the two run counts, so a reader can recompute it', () => {
+  const parts = m.computeGroupFloor({ noneMeans: [0, 1], treatmentRuns: [1, 0, 1], controlRuns: [0, 0, 1, 1, 0, 1] });
+  assert.equal(parts.treatmentRuns, 3);
+  assert.equal(parts.controlRuns, 6, 'for `none` that is the without-arm columns of every sweep together');
+  assert.equal(parts.floor, Math.max(parts.noneRange, parts.errorBound));
+});
+
+test('a floor that was never measured is NaN, never zero — zero would claim there is no noise', () => {
+  const nothing = m.computeGroupFloor({ noneMeans: [], treatmentRuns: [], controlRuns: [] });
+  assert.ok(Number.isNaN(nothing.noneRange));
+  assert.ok(Number.isNaN(nothing.errorBound));
+  assert.ok(Number.isNaN(nothing.floor));
+  const oneEach = m.computeGroupFloor({ noneMeans: [0.5], treatmentRuns: [1], controlRuns: [0] });
+  assert.ok(Number.isNaN(oneEach.noneRange), 'one none column is not a range');
+  assert.ok(Number.isNaN(oneEach.pooledSd), 'two runs between the cells leave no degrees of freedom');
+});
+
+/* ── ComputeGroupContrasts ─────────────────────────────────────────────────── */
+
+const gArgs = (over = {}) => ({
+  groupScores: { treatment: 0.75, placebo: 0.25, 'run-oneliner': 0.5 },
+  groupRunScores: { treatment: [0.5, 1], placebo: [0.5, 0], 'run-oneliner': [0.5, 0.5] },
+  groupBaselineScores: [0.25, 0, 0.25],
+  groupBaselineRunScores: [[0, 0.5], [0, 0], [0.5, 0]],
+  pre: GPRE(),
+  ...over,
+});
+
+const contrastsOf = (over = {}) => {
+  const a = gArgs(over);
+  return m.computeGroupContrasts('defects', 'reported', a.groupScores, a.groupRunScores,
+    a.groupBaselineScores, a.groupBaselineRunScores, a.pre);
+};
+
+test('a group contrast is built per control, each with the floor it was judged against', () => {
+  const { contrasts, unmeasurable } = contrastsOf();
+  assert.equal(unmeasurable, false);
+  assert.deepEqual(contrasts.map((c) => c.control), ['none', 'placebo', 'run-oneliner']);
+  for (const c of contrasts) {
+    assert.equal(c.group, 'reported');
+    assert.ok(Number.isFinite(c.floor), `${c.control}: no floor`);
+    assert.equal(c.floor, Math.max(c.floorParts.noneRange, c.floorParts.errorBound));
+    assert.equal(typeof c.belowNoiseFloor, 'boolean');
+  }
+  assert.equal(contrasts[0].floorParts.controlRuns, 6, 'the `none` cell is the three without columns together');
+  assert.equal(contrasts[1].floorParts.controlRuns, 2, 'a named control is its own cell');
+});
+
+test('a direction is read from the registration under its own key, never inferred', () => {
+  const pre = GPRE();
+  delete pre.expectedDirection['defects#reported/placebo'];
+  throws(() => contrastsOf({ pre }), 'no registered expected direction');
+});
+
+test('a named control with no score is a hole in the comparison, not a smaller table', () => {
+  throws(() => contrastsOf({ groupScores: { treatment: 0.5, placebo: null, 'run-oneliner': 0.5 } }),
+    'has no score for this group');
+});
+
+test('a treatment with no score contrasts nothing, and says so without throwing', () => {
+  const r = contrastsOf({ groupScores: { treatment: null, placebo: 0.25, 'run-oneliner': 0.5 } });
+  assert.deepEqual(r, { contrasts: [], unmeasurable: false });
+});
+
+test('a floor at or below the epsilon withholds the whole group and marks it unmeasurable', () => {
+  const r = contrastsOf({
+    groupBaselineScores: [0, 0, 0],
+    groupBaselineRunScores: [[0, 0], [0, 0], [0, 0]],
+    groupRunScores: { treatment: [0.5, 0.5], placebo: [0, 0], 'run-oneliner': [0.5, 0.5] },
+  });
+  assert.equal(r.unmeasurable, true, 'identical runs give a floor of 2e-16, which is not a measurement');
+  assert.deepEqual(r.contrasts, [], 'a state the report shows, rather than a number it prints');
+});
+
+test('a floor that could not be computed at all is a contrast with no floor, which I11 refuses', () => {
+  const r = contrastsOf({
+    groupBaselineScores: [],
+    groupBaselineRunScores: [],
+    groupRunScores: { treatment: [0.5], placebo: [0], 'run-oneliner': [0.5] },
+    groupScores: { treatment: 0.5, placebo: 0, 'run-oneliner': 0.5 },
+  });
+  assert.equal(r.unmeasurable, false, '"we could not measure the noise" is not "the noise is below the floor"');
+  assert.ok(r.contrasts.every((c) => Number.isNaN(c.floor)));
+  const report = { deltaRows: [{ case: 'defects', groupContrasts: { reported: r.contrasts }, unmeasurableGroups: [] }] };
+  assert.equal(inv.i11GroupFloorMarked(report, 1).ok, false);
+});
+
+/* ── MergeSweeps, over a groups case ───────────────────────────────────────── */
+
+test('a groups case forms no case-level pair, and its harness score is still printed', () => {
+  const report = gMerged();
+  const row = report.deltaRows[0];
+  assert.deepEqual(row.contrasts, [], 'the mixed harness score is registered as carrying no contrast');
+  assert.equal(typeof row.conditionScores.treatment, 'number', 'it is still read, because it is printed');
+  assert.deepEqual(Object.keys(row.groupContrasts), ['reported', 'hard', 'gap']);
+  assert.equal(report.baselineSpread, undefined,
+    'the report-wide floor is absent by design when every delta row carries its floors per group');
+});
+
+test('every group field is filled from the record, and a difference row is the per-run difference', () => {
+  const row = gMerged().deltaRows[0];
+  assert.deepEqual(row.groupRunScores.reported.treatment, [0.5, 1]);
+  assert.deepEqual(row.groupRunScores.hard.treatment, [1, 0]);
+  assert.deepEqual(row.groupRunScores.gap.treatment, [-0.5, 1],
+    'the difference is taken on the same run, not between two table cells');
+  assert.equal(row.groupScores.reported.treatment, 0.75);
+  assert.deepEqual(row.groupBaselineScores.reported, [0.25, 0, 0.25],
+    'one entry per sweep, kept apart, because their range is the first floor component');
+  assert.deepEqual(row.groupBaselineRunScores.reported[0], [0, 0.5]);
+});
+
+test('the four counts are on the row, per condition and arm', () => {
+  const row = gMerged().deltaRows[0];
+  for (const kind of ['runCounts', 'errorCounts', 'excludedCounts', 'refusedCounts'])
+    for (const condition of GROUP_CONDITIONS)
+      assert.ok(row[kind][condition], `${kind} missing for ${condition}`);
+  assert.deepEqual(row.runCounts.treatment, { with: 2, without: 2 });
+  assert.deepEqual(row.errorCounts.treatment, { with: 0, without: 0 });
+  assert.deepEqual(row.refusedCounts.treatment, { with: 0, without: 0 });
+});
+
+test('a trace naming the fence counts the run and flags it — the score stands (gate 4)', () => {
+  const sweeps = gSweeps();
+  const traces = gTraces(sweeps);
+  const [flagged] = Object.keys(traces);
+  traces[flagged] = 'ls /repo/evals/x/fixtures/notesvc-seeded/defects/echo-bypass';
+  const report = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv), { traceTexts: traces });
+  const row = report.deltaRows[0];
+  assert.equal(row.refusedCounts.treatment.with, 1, 'counted, not dropped: dropping it biases the sample');
+  assert.equal(row.groupRunScores.reported.treatment.length, 2, 'and its score still stands');
+  assert.match(row.advisories.join(' '), /fence: treatment\/with\/1: names \/defects\//);
+});
+
+test('a trace that could not be read is a violation, not a clean run', () => {
+  const sweeps = gSweeps();
+  const traces = gTraces(sweeps);
+  for (const path of Object.keys(traces)) if (path === sweeps[0].document.cases[0].arms.with[0].tracePath) traces[path] = null;
+  const report = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv), { traceTexts: traces });
+  assert.match(report.deltaRows[0].advisories.join(' '), /no trace text/);
+  const check = m.checkReport(report, GPRE(), gCtx(sweeps));
+  assert.equal(check.ok, false);
+});
+
+test('a merge handed no traces at all publishes no fence count, and I12 refuses the report', () => {
+  const sweeps = gSweeps();
+  const report = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv));
+  assert.equal(report.deltaRows[0].refusedCounts, undefined);
+  assert.match(report.deltaRows[0].advisories.join(' '), /the fence check did not run/);
+  const check = m.checkReport(report, GPRE(), gCtx(sweeps));
+  assert.match(check.violations.join(' '), /I12: defects: no refusedCounts/);
+});
+
+test('a sweep taken before a grader existed is reported rather than thrown, so every check is still heard', () => {
+  const sweeps = gSweeps();
+  // The recon shape: the record predates the twelve `reported-*` graders the group names.
+  sweeps[0].document.cases[0].arms.with = [gRun({ guard: 1 }), gRun({ guard: 1 })];
+  sweeps[0].document.cases[0].arms.without = [gRun({ guard: 1 }), gRun({ guard: 1 })];
+  const report = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv), { traceTexts: gTraces(sweeps) });
+  assert.match(report.deltaRows[0].advisories.join(' '), /group 'reported' could not be scored/);
+  const check = m.checkReport(report, GPRE(), gCtx(sweeps));
+  assert.equal(check.ok, false);
+  assert.match(check.violations.join(' '), /I11: defects#reported: no contrasts and not marked unmeasurable/);
+  // A throw would have ended the merge at the first missing grader. Every group is named
+  // instead, and the whole invariant list still ran.
+  for (const group of ['reported', 'hard', 'gap'])
+    assert.match(check.violations.join(' '), new RegExp(`defects#${group}`));
+  assert.equal(m.checkReport(report, GPRE(), gCtx(sweeps, { drift: { drifted: true, reason: 'x' } }))
+    .violations.some((v) => v.startsWith('I2:')), true, 'and a later check still speaks');
+});
+
+test('the ungrouped graders become the manipulation checks, with a number and no verdict', () => {
+  const row = gMerged().deltaRows[0];
+  assert.deepEqual(Object.keys(row.manipulationChecks), ['guard']);
+  assert.equal(row.manipulationChecks.guard.treatment, 1);
+  assert.equal(row.manipulationChecks.guard.placebo, 0);
+});
+
+/* ── CheckReport, over a groups case ───────────────────────────────────────── */
+
+test('a clean groups report passes every invariant — the positive control the refusals rest on', () => {
+  const sweeps = gSweeps();
+  const check = m.checkReport(gMerged(sweeps), GPRE(), gCtx(sweeps));
+  assert.deepEqual(check.violations, [], 'without this, a merger that refused everything would score full marks');
+});
+
+test('the report-wide I1b is skipped with its reason, and I11 holds the same rule per group', () => {
+  const sweeps = gSweeps();
+  const check = m.checkReport(gMerged(sweeps), GPRE(), gCtx(sweeps));
+  assert.match(check.skipped.join(' '), /I1b: no case-level delta contrast is registered/);
+  assert.equal(check.violations.some((v) => v.startsWith('I1b')), false);
+  // And the other way round: a registration with no groups skips the group checks.
+  const tier1 = m.checkReport(merged(), pre(), ctx());
+  assert.match(tier1.skipped.join(' '), /I11, I12, I13: no case is registered with grader groups/);
+  assert.equal(tier1.violations.some((v) => /^I1[123]/.test(v)), false);
+});
+
+test('I13 refuses a report that carries a case-level contrast on a groups case', () => {
+  const sweeps = gSweeps();
+  const report = gMerged(sweeps);
+  report.deltaRows[0].contrasts = [{ treatment: 'treatment', control: 'placebo', value: 0.5, expected: 1 }];
+  const check = m.checkReport(report, GPRE(), gCtx(sweeps));
+  assert.match(check.violations.join(' '), /I13: defects: report carries case-level contrasts/);
+});
+
+test('I11 refuses a group whose contrast lost its floor mark', () => {
+  const sweeps = gSweeps();
+  const report = gMerged(sweeps);
+  for (const c of report.deltaRows[0].groupContrasts.reported) { c.value = 0; c.belowNoiseFloor = false; }
+  const check = m.checkReport(report, GPRE(), gCtx(sweeps));
+  assert.match(check.violations.join(' '), /but not marked belowNoiseFloor/);
+});
+
+test('I12 refuses a report whose run counts fall short of the registered count', () => {
+  const sweeps = gSweeps();
+  const report = gMerged(sweeps);
+  report.deltaRows[0].runCounts.placebo = { with: 1, without: 2 };
+  const check = m.checkReport(report, GPRE(), gCtx(sweeps));
+  assert.match(check.violations.join(' '), /I12: defects: placebo\/with has 1 runs, 2 registered/);
+});
+
+/* ── FormatComparison, over a groups case ──────────────────────────────────── */
+
+test('formatComparison prints a table per group, its floor with the parts it was built from', () => {
+  const text = m.formatComparison(gMerged());
+  assert.match(text, /## Grader groups/);
+  assert.match(text, /### `defects` · group `reported`/);
+  assert.match(text, /### `defects` · group `gap`/);
+  assert.match(text, /\| vs \| Δ \| registered direction \| floor \| none range \| 2×SE \| pooled SD \| runs T \| runs C \| note \|/);
+  assert.match(text, /\| condition \| score \| runs \| errored \| excluded \| refused \|/);
+});
+
+test('formatComparison says a groups case carries no contrast column, rather than leaving a gap', () => {
+  const text = m.formatComparison(gMerged());
+  assert.match(text, /`defects` is registered as carrying no case-level contrast/);
+});
+
+test('formatComparison prints the word unmeasurable where a withheld group`s contrasts would be', () => {
+  const report = gMerged();
+  report.deltaRows[0].groupContrasts.hard = [];
+  report.deltaRows[0].unmeasurableGroups = ['hard'];
+  const text = m.formatComparison(report);
+  assert.match(text, /\*\*unmeasurable\.\*\* This group's floor came out at or below/);
+});
+
+test('formatComparison prints the manipulation checks apart, with no held-or-failed verdict', () => {
+  const text = m.formatComparison(gMerged());
+  assert.match(text, /### `defects` · manipulation checks/);
+  assert.match(text, /and no held-or-failed verdict/);
+  assert.match(text, /\| `guard` \| 1\.00 \| 0\.00 \| 1\.00 \|/);
 });

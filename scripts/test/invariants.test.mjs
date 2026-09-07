@@ -309,7 +309,7 @@ test('I1c catches a grader that threw — a broken instrument is not a verdict',
   // in the harness's arithmetic, so it depresses the score having measured nothing.
   const doc = { cases: [{ name: 'a', arms: { with: [
     { score: 0, error: null, graders: [
-      { name: 'ok', passed: true, explanation: 'matched TODO' },
+      { name: 'ok', passed: true, explanation: 'matched the marker' },
       { name: 'rubric', passed: false, explanation: 'grader threw: judge call failed: Failed to authenticate' },
     ] },
     runOk(1),
@@ -579,7 +579,8 @@ test('I9 trace flags do not read a missing trace as clean', () => {
 
 /* ── I10 — the owner's word list, whole words only ─────────────────────────── */
 
-const WORDS = ['recon', 'seam', 'spike', 'gate', 'true input', 'excuse', 'invariant', 'self-certify', 'primer', 'seven-steps', 'step 4', 'revert', 'proceed'];
+/** The owner's thirteen, from the module that both callers read, so neither copy drifts. */
+const WORDS = inv.METHOD_VOCABULARY;
 
 test('I10 catches a criterion written from the skill', () => {
   caught(inv.i10InstrumentVocabulary([{ path: 'criteria.md', text: 'Score 1 if the recon report names the seam.' }], WORDS), 'contains "recon"');

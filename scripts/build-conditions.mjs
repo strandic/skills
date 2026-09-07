@@ -70,13 +70,74 @@ export const ABLATIONS = {
   ] },
 };
 
-// TODO: SuiteConditionPlan — one plan per suite: seven-steps-primer (generated treatment + ABLATIONS) and seven-steps-primer-defects (generated treatment; placebo COPIED from the first suite's; run-oneliner authored, never generated).
-export const paths = {
-  shippedSkill: join(repoRoot, 'skills/seven-steps-primer/SKILL.md'),
-  treatmentMirror: join(repoRoot, 'evals/seven-steps-primer/conditions/treatment/SKILL.md'),
-  ablations: Object.fromEntries(Object.keys(ABLATIONS).map((id) =>
-    [id, join(repoRoot, `evals/seven-steps-primer/conditions/${id}/SKILL.md`)])),
-};
+/** The shipped skill every generated condition mirrors. One copy of this path. */
+const SHIPPED_SKILL = join(repoRoot, 'skills/seven-steps-primer/SKILL.md');
+
+/** Every suite this generator serves, in the order the report prints them. */
+export const SUITES = ['evals/seven-steps-primer', 'evals/seven-steps-primer-defects'];
+
+const conditionPath = (suiteDir, id) => join(repoRoot, suiteDir, 'conditions', id, 'SKILL.md');
+
+/**
+ * SuiteConditionPlan — what each condition directory of a suite is derived from.
+ *
+ * Three kinds, and a condition is in at most one of them:
+ *
+ *   - `generated` — a mirror of the shipped skill with the flag stripped;
+ *   - `ablations` — the same, minus one declared cut;
+ *   - `copied` — another suite's condition, which it must equal byte for byte.
+ *
+ * Everything else is AUTHORED and appears in none of them: the placebo of the first
+ * suite, and the run one-liner of the second. An authored condition is written once and
+ * left alone; regenerating it would overwrite the text under test.
+ *
+ * The second suite's placebo is copied rather than authored again, and drift-checked
+ * against its source, so the placebo cannot quietly become two placebos — the whole
+ * value of "same shape, different content" rests on the two suites' placebos being the
+ * same document.
+ *
+ * @param {string} suiteDir
+ * @returns {{generated: Record<string,string>, copied: Record<string,string>,
+ *            ablations: Record<string,string>}}
+ */
+export function suiteConditionPlan(suiteDir) {
+  if (suiteDir === 'evals/seven-steps-primer')
+    return {
+      generated: { treatment: SHIPPED_SKILL },
+      copied: {},
+      ablations: Object.fromEntries(Object.keys(ABLATIONS).map((id) => [id, SHIPPED_SKILL])),
+    };
+  if (suiteDir === 'evals/seven-steps-primer-defects')
+    return {
+      generated: { treatment: SHIPPED_SKILL },
+      copied: { placebo: conditionPath('evals/seven-steps-primer', 'placebo') },
+      ablations: {},
+    };
+  throw new Error(`suiteConditionPlan: '${suiteDir}' is not a suite this generator serves ` +
+    `(${SUITES.join(', ')}) — a suite whose conditions nothing generates has no drift check`);
+}
+
+/**
+ * The plan as the paths `generate` and `check` work in: absolute, one entry per file
+ * they write or compare. `copied` carries both ends, because a copy that has diverged
+ * from its source has to name the source to be fixable.
+ *
+ * @param {string} suiteDir
+ */
+export function pathsFor(suiteDir) {
+  const plan = suiteConditionPlan(suiteDir);
+  return {
+    suiteDir,
+    shippedSkill: plan.generated.treatment ?? SHIPPED_SKILL,
+    treatmentMirror: conditionPath(suiteDir, 'treatment'),
+    ablations: Object.fromEntries(Object.keys(plan.ablations).map((id) => [id, conditionPath(suiteDir, id)])),
+    copied: Object.fromEntries(Object.entries(plan.copied).map(([id, from]) =>
+      [id, { from, to: conditionPath(suiteDir, id) }])),
+  };
+}
+
+/** The default suite's paths, kept as an export because the runner imports this one. */
+export const paths = pathsFor('evals/seven-steps-primer');
 
 /* ── Pure ──────────────────────────────────────────────────────────────────── */
 
@@ -270,7 +331,6 @@ export async function buildAblation(read, where, id) {
  * @param {{shippedSkill: string, treatmentMirror: string, ablations?: Record<string,string>}} where
  * @returns {Promise<{bytes: number, stripped: boolean, ablations: Record<string, number>}>}
  */
-// TODO: iterate every suite's plan; write copied conditions from their source byte for byte.
 export async function generate(read, write, where) {
   const { generated, stripped } = await buildTreatment(read, where);
   await write(where.treatmentMirror, generated);
@@ -280,7 +340,16 @@ export async function generate(read, write, where) {
     await write(path, text);
     ablations[id] = Buffer.byteLength(text);
   }
-  return { bytes: Buffer.byteLength(generated), stripped, ablations };
+  // A copied condition is written from its source byte for byte. Nothing is composed
+  // here: the copy exists so two suites cannot drift apart, and a generator that edited
+  // it on the way through would be the drift.
+  const copied = {};
+  for (const [id, { from, to }] of Object.entries(where.copied ?? {})) {
+    const text = await read(from);
+    await write(to, text);
+    copied[id] = Buffer.byteLength(text);
+  }
+  return { bytes: Buffer.byteLength(generated), stripped, ablations, copied };
 }
 
 /**
@@ -291,7 +360,6 @@ export async function generate(read, write, where) {
  * @param {{shippedSkill: string, treatmentMirror: string}} where
  * @returns {Promise<{drifted: boolean, reason: string, stripped: boolean}>}
  */
-// TODO: iterate every suite's plan; a copied condition that differs from its source is drift, named by suite and id.
 export async function check(read, where) {
   const { generated, stripped } = await buildTreatment(read, where);
   let committed;
@@ -319,7 +387,41 @@ export async function check(read, where) {
     const d = detectDrift(expected, onDisk);
     if (d.drifted) return { drifted: true, reason: `${id}: ${d.reason}`, stripped };
   }
+  // Then each copy against the file it was copied FROM. Same comparison, different
+  // source: a copied placebo that has diverged is a second placebo, and the claim "the
+  // same document under two suites" would be false while every other check passed.
+  for (const [id, { from, to }] of Object.entries(where.copied ?? {})) {
+    let source;
+    try {
+      source = await read(from);
+    } catch {
+      return { drifted: true, reason: `${id}: no source to copy from at ${from}`, stripped };
+    }
+    let onDisk;
+    try {
+      onDisk = await read(to);
+    } catch {
+      return { drifted: true, reason: `${id}: no copied condition at ${to}`, stripped };
+    }
+    const d = detectDrift(source, onDisk);
+    if (d.drifted) return { drifted: true, reason: `${id}: ${d.reason} (copied from ${from})`, stripped };
+  }
   return { drifted: false, reason: '', stripped };
+}
+
+/**
+ * `check`, over every suite, so one command answers for the whole tree. Each result is
+ * named by its suite: a drift report that does not say which suite drifted sends the
+ * reader to regenerate the wrong one.
+ *
+ * @param {ReadTextFile} read
+ * @param {string[]} [suites]
+ * @returns {Promise<{suiteDir: string, drifted: boolean, reason: string, stripped: boolean}[]>}
+ */
+export async function checkAll(read, suites = SUITES) {
+  const out = [];
+  for (const suiteDir of suites) out.push({ suiteDir, ...(await check(read, pathsFor(suiteDir))) });
+  return out;
 }
 
 /* ── Entry point ───────────────────────────────────────────────────────────── */
@@ -337,7 +439,6 @@ const show = (path) => relative(repoRoot, path);
  * @param {string[]} argv
  * @returns {Promise<number>} process exit code
  */
-// TODO: report per suite.
 export async function main(argv) {
   const mode = argv.length === 0 ? 'check' : argv[0];
   if (argv.length > 1 || (mode !== 'generate' && mode !== 'check')) {
@@ -345,27 +446,47 @@ export async function main(argv) {
     return 1;
   }
 
+  // Per suite, and named per suite: one command answers for the whole tree, and a
+  // report that does not say which suite drifted sends the reader to regenerate the
+  // wrong one.
   if (mode === 'generate') {
-    const { bytes, stripped, ablations } = await generate(readTextFile, writeTextFile, paths);
-    if (!stripped) console.error(NO_FLAG);
-    console.log(`wrote ${show(paths.treatmentMirror)} — ${bytes} bytes, flag ${stripped ? 'stripped' : 'absent'}`);
-    for (const [id, n] of Object.entries(ablations))
-      console.log(`wrote ${show(paths.ablations[id])} — ${n} bytes, minus ` +
-        (ABLATIONS[id].section ? JSON.stringify(ABLATIONS[id].section) : `${ABLATIONS[id].lines.length} lines`));
+    for (const suiteDir of SUITES) {
+      const where = pathsFor(suiteDir);
+      const { bytes, stripped, ablations, copied } = await generate(readTextFile, writeTextFile, where);
+      if (!stripped) console.error(`${suiteDir}: ${NO_FLAG}`);
+      console.log(`${suiteDir}: wrote ${show(where.treatmentMirror)} — ${bytes} bytes, flag ` +
+        `${stripped ? 'stripped' : 'absent'}`);
+      for (const [id, n] of Object.entries(ablations))
+        console.log(`${suiteDir}: wrote ${show(where.ablations[id])} — ${n} bytes, minus ` +
+          (ABLATIONS[id].section ? JSON.stringify(ABLATIONS[id].section) : `${ABLATIONS[id].lines.length} lines`));
+      for (const [id, n] of Object.entries(copied))
+        console.log(`${suiteDir}: wrote ${show(where.copied[id].to)} — ${n} bytes, copied byte for byte ` +
+          `from ${show(where.copied[id].from)}`);
+    }
     return 0;
   }
 
-  const { drifted, reason, stripped } = await check(readTextFile, paths);
-  if (!stripped) console.error(NO_FLAG);
-  if (!drifted) {
-    console.log(`no drift — ${show(paths.treatmentMirror)} is ${show(paths.shippedSkill)} minus the flag` +
-      (Object.keys(paths.ablations).length ? `, and ${Object.keys(paths.ablations).join(', ')} each minus its declared cut` : ''));
-    return 0;
+  let failed = 0;
+  for (const { suiteDir, drifted, reason, stripped } of await checkAll(readTextFile)) {
+    const where = pathsFor(suiteDir);
+    if (!stripped) console.error(`${suiteDir}: ${NO_FLAG}`);
+    if (!drifted) {
+      const derived = [
+        `${show(where.treatmentMirror)} is ${show(where.shippedSkill)} minus the flag`,
+        ...(Object.keys(where.ablations).length
+          ? [`${Object.keys(where.ablations).join(', ')} each minus its declared cut`] : []),
+        ...(Object.keys(where.copied).length
+          ? [`${Object.keys(where.copied).join(', ')} byte for byte from its source suite`] : []),
+      ];
+      console.log(`${suiteDir}: no drift — ${derived.join(', and ')}`);
+      continue;
+    }
+    failed += 1;
+    console.error(`${suiteDir}: DRIFT — a generated or copied condition is not what it is derived from`);
+    console.error(`  ${reason}`);
   }
-  console.error(`DRIFT: a generated condition is not ${show(paths.shippedSkill)} minus what it should be`);
-  console.error(`  ${reason}`);
-  console.error('  regenerate with: node scripts/build-conditions.mjs generate');
-  return 1;
+  if (failed > 0) console.error('  regenerate with: node scripts/build-conditions.mjs generate');
+  return failed > 0 ? 1 : 0;
 }
 
 const invokedDirectly =
