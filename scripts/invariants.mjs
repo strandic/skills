@@ -32,8 +32,15 @@ const fail = (violations) => ({ ok: violations.length === 0, violations });
  * contrast that TIES the floor is inside it, not above it: the floor is the smallest
  * difference this instrument can resolve, and a difference equal to it resolves nothing.
  */
-// TODO: export FLOOR_ERROR_MULTIPLIER = 2 beside this — fixed by the registration; ComputeGroupFloor reads it here so marker and checker cannot drift.
 export const NOISE_EPSILON = 1e-9;
+
+/**
+ * The second floor component's multiplier: a group contrast's floor is at least this
+ * many standard errors of the contrast. Fixed by the registration
+ * (`floorErrorMultiplier`), defined once here so `computeGroupFloor` in the merger and
+ * {@link i11GroupFloorMarked} read the same number.
+ */
+export const FLOOR_ERROR_MULTIPLIER = 2;
 
 /**
  * I1 — a partial run is not publishable.
@@ -53,7 +60,6 @@ export function i1PublishableOnlyWhenComplete(report) {
  * The comparison is `<= spread + NOISE_EPSILON`, not `<`: see {@link NOISE_EPSILON}.
  * @param {MergedReport} report
  */
-// TODO: group form — every group contrast with |value| <= its own floor + NOISE_EPSILON carries belowNoiseFloor; a group whose floor is 0 has no contrasts and is marked unmeasurable; the expected group count comes from the caller and an empty group set is refused; the report-wide check below is skipped (with the reason) rather than failed when no case-level delta contrast exists.
 export function i1bNoiseFloorMarked(report) {
   const v = [];
   const spread = report?.baselineSpread;
@@ -466,7 +472,6 @@ export function i5GradersHaveCompleteProbes(probes, graderIds) {
  * @param {{name: string, graders: {type: string, tool?: string, target?: any}[]}[]} cases
  * @param {string[]} absenceCaseNames  cases that make an absence claim
  */
-// TODO: unchanged; a suite that registers no absence case (the defects suite) is not run through this — its test skips with the reason instead of passing an empty list.
 export function i6AbsenceClaimsHaveContentEvidence(cases, absenceCaseNames) {
   const v = [];
   if (!Array.isArray(absenceCaseNames) || absenceCaseNames.length === 0)
@@ -511,7 +516,6 @@ export function i7ControlNeverInHeadline(report, specs) {
  * @param {string} reportSha     digest recorded in the report
  * @param {boolean} dirty
  */
-// TODO: proposals for step 5, authored by the human, signatures in interfaces.mjs — CheckAuthoringIsolation (I9: transcripts vs forbidden roots, digests returned), CheckTraceIsolation (I9: traces vs forbidden fragments, never roots), CheckInstrumentVocabulary (I10: files vs a word list); each refuses an empty input.
 export function i8PreRegistrationFrozen(committedSha, reportSha, dirty) {
   const v = [];
   if (!committedSha || !reportSha) return fail(['a pre-registration digest is missing on one side']);
@@ -519,3 +523,197 @@ export function i8PreRegistrationFrozen(committedSha, reportSha, dirty) {
   if (committedSha !== reportSha) v.push(`pre-registration changed: report ${reportSha} != committed ${committedSha}`);
   return fail(v);
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * The second feature's invariants (I9 to I13). Rules authored by the repo owner at gate
+ * 5 of docs/plans/primer-evals/defect-injection/5-invariants.md; wired and attacked here.
+ * Every one is a pure predicate over data the caller hands in, and every one refuses
+ * the empty input that would let it pass without looking.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * I9, first half — an instrument's authors stayed inside the fence.
+ *
+ * A transcript that names a path under any forbidden root, or runs git, voids the
+ * instrument it produced. The digests are returned so the ledger can record them.
+ *
+ * `git` is matched as a command word, not as a substring: a `find … -not -path '*\/.git\/*'`
+ * exclusion is not a git run, and the designer wrote exactly that.
+ *
+ * @param {{ role: string, text: string }[]} transcripts
+ * @param {string[]} forbiddenRoots  absolute paths; the repository checkout at least
+ * @param {(text: string) => string} digest  sha256 over the text, injected so this stays pure
+ * @returns {{ ok: boolean, violations: string[], digests: Record<string, string> }}
+ */
+export function i9AuthoringIsolation(transcripts, forbiddenRoots, digest) {
+  const v = [];
+  if (!Array.isArray(transcripts) || transcripts.length === 0)
+    return { ...fail(['no authoring transcripts — an isolation nobody was subject to is not isolation']), digests: {} };
+  if (!Array.isArray(forbiddenRoots) || forbiddenRoots.length === 0)
+    return { ...fail(['no forbidden roots named — a fence with no line is not a fence']), digests: {} };
+  if (typeof digest !== 'function') return { ...fail(['no digest function supplied']), digests: {} };
+  const digests = {};
+  for (const tr of transcripts) {
+    if (typeof tr?.text !== 'string' || tr.text === '') { v.push(`${tr?.role ?? '?'}: empty transcript`); continue; }
+    digests[tr.role] = digest(tr.text);
+    for (const root of forbiddenRoots)
+      if (tr.text.includes(root)) v.push(`${tr.role}: names a path under ${root}`);
+    if (/(^|[\s;&|(`'"])git\s+(?!-not\b)[a-z]/m.test(tr.text)) v.push(`${tr.role}: runs git`);
+  }
+  return { ...fail(v), digests };
+}
+
+/**
+ * I9, second half — a sweep run whose trace names the ledger, the shipped skill or the
+ * clean fixture is COUNTED, flagged and published, never dropped (ruled at gate 4).
+ *
+ * Fragments, not roots: the condition under test is a directory inside the repository
+ * that every with-arm trace may legitimately name.
+ *
+ * @param {{ condition: string, arm: 'with'|'without', run: number, text: string }[]} traces
+ * @param {string[]} fragments
+ * @returns {{ ok: boolean, violations: string[], flagged: string[],
+ *             refusedCounts: Record<string, {with: number, without: number}> }}
+ */
+export function i9TraceFlags(traces, fragments) {
+  if (!Array.isArray(traces) || traces.length === 0)
+    return { ...fail(['no traces to check — vacuous pass refused']), flagged: [], refusedCounts: {} };
+  if (!Array.isArray(fragments) || fragments.length === 0)
+    return { ...fail(['no fragments named — a check that looks for nothing finds nothing']), flagged: [], refusedCounts: {} };
+  const flagged = [];
+  const refusedCounts = {};
+  for (const tr of traces) {
+    if (typeof tr?.text !== 'string') { flagged.push(`${tr?.condition}/${tr?.arm}/${tr?.run}: no trace text`); continue; }
+    refusedCounts[tr.condition] ??= { with: 0, without: 0 };
+    const hit = fragments.find((f) => tr.text.includes(f));
+    if (hit !== undefined) {
+      flagged.push(`${tr.condition}/${tr.arm}/${tr.run}: names ${hit}`);
+      refusedCounts[tr.condition][tr.arm] += 1;
+    }
+  }
+  // Flags are not violations: the run stands. `ok` is about the check having looked.
+  return { ok: true, violations: [], flagged, refusedCounts };
+}
+
+/**
+ * I10 — no method vocabulary in an instrument or a brief. Lexical, whole-word,
+ * case-insensitive, over a word list the owner authored. It catches a grader written
+ * from the skill's text; it cannot catch a brief that states the hypothesis in other
+ * words, and the plan says so.
+ *
+ * @param {{ path: string, text: string }[]} files
+ * @param {string[]} words
+ */
+export function i10InstrumentVocabulary(files, words) {
+  const v = [];
+  if (!Array.isArray(files) || files.length === 0) return fail(['no instrument files — vacuous pass refused']);
+  if (!Array.isArray(words) || words.length === 0) return fail(['no word list — the owner has not authored one']);
+  const escape = (w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const patterns = words.map((w) => [w, new RegExp(`(^|[^A-Za-z0-9-])${escape(w)}(?![A-Za-z0-9-])`, 'i')]);
+  for (const f of files) {
+    if (typeof f?.text !== 'string') { v.push(`${f?.path ?? '?'}: no text`); continue; }
+    for (const [w, re] of patterns) if (re.test(f.text)) v.push(`${f.path}: contains "${w}"`);
+  }
+  return fail(v);
+}
+
+/**
+ * I11 — the group form of I1b. Every group contrast carries `belowNoiseFloor` judged
+ * against ITS OWN floor; a group whose floor is at or below NOISE_EPSILON has no
+ * contrasts and is marked unmeasurable; the expected group count comes from the caller.
+ * The report-wide I1b is the caller's business: it is skipped with its reason, not
+ * failed, when no case-level delta contrast exists.
+ *
+ * @param {MergedReport} report
+ * @param {number} expectedGroups  how many (case, group) pairs the registration names
+ */
+export function i11GroupFloorMarked(report, expectedGroups) {
+  const v = [];
+  if (!Number.isInteger(expectedGroups) || expectedGroups < 1)
+    return fail(['no expected group count supplied — completeness cannot be established']);
+  let seen = 0;
+  for (const row of report?.deltaRows ?? []) {
+    const groups = row.groupContrasts ?? {};
+    const unmeasurable = new Set(row.unmeasurableGroups ?? []);
+    for (const [name, contrasts] of Object.entries(groups)) {
+      seen += 1;
+      if (unmeasurable.has(name)) {
+        if ((contrasts ?? []).length > 0) v.push(`${row.case}#${name}: marked unmeasurable but carries contrasts`);
+        continue;
+      }
+      if (!Array.isArray(contrasts) || contrasts.length === 0) { v.push(`${row.case}#${name}: no contrasts and not marked unmeasurable`); continue; }
+      for (const c of contrasts) {
+        if (typeof c.floor !== 'number' || Number.isNaN(c.floor)) { v.push(`${row.case}#${name}/${c.control}: no floor`); continue; }
+        if (c.floor <= NOISE_EPSILON) { v.push(`${row.case}#${name}/${c.control}: floor ${c.floor} is not a measurement; the group must be unmeasurable`); continue; }
+        if (Math.abs(c.value) <= c.floor + NOISE_EPSILON && c.belowNoiseFloor !== true)
+          v.push(`${row.case}#${name}/${c.control}: |${c.value}| <= floor ${c.floor} but not marked belowNoiseFloor`);
+      }
+    }
+    for (const name of unmeasurable) if (!(name in groups)) v.push(`${row.case}#${name}: unmeasurable but absent from groupContrasts`);
+  }
+  if (seen === 0) v.push('no group contrasts in the report — vacuous pass refused');
+  else if (seen !== expectedGroups) v.push(`${seen} (case, group) pairs in the report, ${expectedGroups} registered`);
+  return fail(v);
+}
+
+/**
+ * I12 — the four counts are published for every scored case, condition and arm, as
+ * numbers, and the runs present are at least the registered count.
+ *
+ * @param {MergedReport} report
+ * @param {number} runsPerCase
+ * @param {string[]} conditions  the registered condition ids
+ */
+export function i12CountsPublished(report, runsPerCase, conditions) {
+  const v = [];
+  if (!Number.isInteger(runsPerCase) || runsPerCase < 1) return fail(['no runsPerCase supplied']);
+  if (!Array.isArray(conditions) || conditions.length === 0) return fail(['no conditions supplied']);
+  const rows = [...(report?.deltaRows ?? []), ...(report?.capabilityRows ?? [])];
+  if (rows.length === 0) return fail(['no rows to check — vacuous pass refused']);
+  for (const row of rows) {
+    for (const kind of ['runCounts', 'errorCounts', 'excludedCounts', 'refusedCounts']) {
+      const counts = row[kind];
+      if (!counts || typeof counts !== 'object') { v.push(`${row.case}: no ${kind}`); continue; }
+      for (const condition of conditions) {
+        const c = counts[condition];
+        if (!c || typeof c.with !== 'number') { v.push(`${row.case}: ${kind} missing for ${condition}/with`); continue; }
+        if (row.evidence === 'delta' && typeof c.without !== 'number') v.push(`${row.case}: ${kind} missing for ${condition}/without`);
+        if (kind === 'runCounts' && c.with < runsPerCase) v.push(`${row.case}: ${condition}/with has ${c.with} runs, ${runsPerCase} registered`);
+        if (kind === 'runCounts' && row.evidence === 'delta' && typeof c.without === 'number' && c.without < runsPerCase)
+          v.push(`${row.case}: ${condition}/without has ${c.without} runs, ${runsPerCase} registered`);
+      }
+    }
+  }
+  return fail(v);
+}
+
+/**
+ * I13 — a case registered `contrasts: 'groups'` carries no case-level contrast, names
+ * at least one group, has a direction for every group against every control, and has
+ * no case-level direction key.
+ *
+ * @param {{ conditions: string[], cases: CaseSpec[], expectedDirection: Record<string, number> }} preRegistration
+ * @param {MergedReport} [report]  when given, its rows for such cases must carry no case-level contrasts
+ */
+export function i13GroupsCarryContrasts(preRegistration, report) {
+  const v = [];
+  const cases = preRegistration?.cases;
+  if (!Array.isArray(cases) || cases.length === 0) return fail(['no registered cases — vacuous pass refused']);
+  const groupCases = cases.filter((c) => c.contrasts === 'groups');
+  if (groupCases.length === 0) return fail(['no case registered with contrasts: groups — nothing for this check to hold']);
+  const controls = ['none', ...(preRegistration.conditions ?? []).filter((c) => c !== 'treatment')];
+  const keys = Object.keys(preRegistration.expectedDirection ?? {});
+  for (const c of groupCases) {
+    const groups = c.groups ?? [];
+    if (groups.length === 0) v.push(`${c.name}: contrasts is 'groups' but no group is registered`);
+    for (const g of groups)
+      for (const control of controls)
+        if (!keys.includes(`${c.name}#${g.name}/${control}`)) v.push(`${c.name}#${g.name}/${control}: no registered direction`);
+    for (const control of controls)
+      if (keys.includes(`${c.name}/${control}`)) v.push(`${c.name}/${control}: a case-level direction on a groups case`);
+    for (const row of report?.deltaRows ?? [])
+      if (row.case === c.name && (row.contrasts ?? []).length > 0) v.push(`${c.name}: report carries case-level contrasts`);
+  }
+  return fail(v);
+}
+

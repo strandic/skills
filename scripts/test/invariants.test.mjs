@@ -8,7 +8,6 @@
  *
  * `node --test scripts/test/*.test.mjs`
  */
-// TODO: tests for the group form of I1b (marked, unmeasurable, empty refused, report-wide skipped with reason), FLOOR_ERROR_MULTIPLIER exported, and the three step-5 proposals once the human authors them (vacuity and absence-as-agreement pair for each).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as inv from '../invariants.mjs';
@@ -527,3 +526,162 @@ test('I8 refuses a missing digest rather than treating absence as agreement', ()
   caught(inv.i8PreRegistrationFrozen('', 'aaa', false), 'missing');
   caught(inv.i8PreRegistrationFrozen('aaa', '', false), 'missing');
 });
+
+/* ── I9 — authoring isolation, and trace flags that count rather than drop ──── */
+
+const sha = (s) => `d-${s.length}`;
+
+test('I9 voids an instrument whose author read a path under a forbidden root', () => {
+  caught(inv.i9AuthoringIsolation([{ role: 'designer', text: 'cat /repo/skills/seven-steps-primer/SKILL.md' }], ['/repo'], sha), 'names a path under /repo');
+});
+
+test('I9 voids an instrument whose author ran git', () => {
+  caught(inv.i9AuthoringIsolation([{ role: 'designer', text: 'cd /scratch && git log' }], ['/repo'], sha), 'runs git');
+});
+
+test('I9 does not read a `find … -not -path .git` exclusion as a git run — the designer wrote exactly that', () => {
+  const r = inv.i9AuthoringIsolation([{ role: 'designer', text: "find /scratch -not -path '*/.git/*'" }], ['/repo'], sha);
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.digests, { designer: sha("find /scratch -not -path '*/.git/*'") });
+});
+
+test('I9 refuses an empty transcript list instead of certifying an isolation nobody was subject to', () => {
+  caught(inv.i9AuthoringIsolation([], ['/repo'], sha), 'nobody was subject');
+});
+
+test('I9 refuses an empty fence — no roots is not "no breach"', () => {
+  caught(inv.i9AuthoringIsolation([{ role: 'd', text: 'ls' }], [], sha), 'no forbidden roots');
+});
+
+test('I9 refuses a transcript with no text rather than reading silence as clean', () => {
+  caught(inv.i9AuthoringIsolation([{ role: 'd', text: '' }], ['/repo'], sha), 'empty transcript');
+});
+
+test('I9 trace flags count a run that names the ledger, and the run still stands', () => {
+  const r = inv.i9TraceFlags([
+    { condition: 'placebo', arm: 'with', run: 1, text: 'find / -iname x → /repo/evals/seven-steps-primer/defects/…' },
+    { condition: 'placebo', arm: 'without', run: 1, text: 'node --test' },
+  ], ['/defects/', 'skills/seven-steps-primer']);
+  assert.equal(r.ok, true, 'a flag is not a violation');
+  assert.equal(r.flagged.length, 1);
+  assert.deepEqual(r.refusedCounts, { placebo: { with: 1, without: 0 } });
+});
+
+test('I9 trace flags refuse an empty trace list and an empty fragment list', () => {
+  caught(inv.i9TraceFlags([], ['/defects/']), 'vacuous');
+  caught(inv.i9TraceFlags([{ condition: 'c', arm: 'with', run: 1, text: 'x' }], []), 'looks for nothing');
+});
+
+test('I9 trace flags do not read a missing trace as clean', () => {
+  const r = inv.i9TraceFlags([{ condition: 'c', arm: 'with', run: 1 }], ['/defects/']);
+  assert.ok(r.flagged.some((f) => f.includes('no trace text')));
+});
+
+/* ── I10 — the owner's word list, whole words only ─────────────────────────── */
+
+const WORDS = ['recon', 'seam', 'spike', 'gate', 'true input', 'excuse', 'invariant', 'self-certify', 'primer', 'seven-steps', 'step 4', 'revert', 'proceed'];
+
+test('I10 catches a criterion written from the skill', () => {
+  caught(inv.i10InstrumentVocabulary([{ path: 'criteria.md', text: 'Score 1 if the recon report names the seam.' }], WORDS), 'contains "recon"');
+});
+
+test('I10 matches whole words and phrases, not substrings — "gateway" is not "gate", "true input" is', () => {
+  assert.equal(inv.i10InstrumentVocabulary([{ path: 'a', text: 'The gateway refuses it.' }], WORDS).ok, true);
+  caught(inv.i10InstrumentVocabulary([{ path: 'a', text: 'Drive it at the true   input.' }], WORDS), 'true input');
+});
+
+test('I10 refuses an empty file list and an empty word list', () => {
+  caught(inv.i10InstrumentVocabulary([], WORDS), 'vacuous');
+  caught(inv.i10InstrumentVocabulary([{ path: 'a', text: 'x' }], []), 'not authored');
+});
+
+test('I10 does not read a file with no text as clean', () => {
+  caught(inv.i10InstrumentVocabulary([{ path: 'a' }], WORDS), 'no text');
+});
+
+/* ── I11 — the group form of the noise floor ───────────────────────────────── */
+
+const groupRow = (contrasts, unmeasurable = []) => ({ case: 'c', evidence: 'delta', contrasts: [], groupContrasts: { reported: contrasts }, unmeasurableGroups: unmeasurable });
+const gc = (value, floor, marked) => ({ treatment: 'treatment', control: 'placebo', value, expected: -1, group: 'reported', floor, belowNoiseFloor: marked });
+
+test('I11 catches a group contrast inside its own floor that is not marked', () => {
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([gc(0.05, 0.18, undefined)])] }, 1), 'belowNoiseFloor');
+});
+
+test('I11 passes a marked sub-floor contrast and an unmarked one above the floor', () => {
+  assert.equal(inv.i11GroupFloorMarked({ deltaRows: [groupRow([gc(0.05, 0.18, true), gc(0.4, 0.18, false)])] }, 1).ok, true);
+});
+
+test('I11 treats a floor at or below epsilon as not a measurement — the group must be unmeasurable', () => {
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([gc(0.1, 2e-16, false)])] }, 1), 'not a measurement');
+  assert.equal(inv.i11GroupFloorMarked({ deltaRows: [groupRow([], ['reported'])] }, 1).ok, true);
+});
+
+test('I11 catches an unmeasurable group that still carries contrasts, and a group with neither', () => {
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([gc(0.1, 0.2, false)], ['reported'])] }, 1), 'marked unmeasurable but carries');
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([])] }, 1), 'no contrasts and not marked');
+});
+
+test('I11 refuses an empty group set and a count that disagrees with the registration', () => {
+  caught(inv.i11GroupFloorMarked({ deltaRows: [{ case: 'c', evidence: 'delta', groupContrasts: {} }] }, 1), 'vacuous');
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([gc(0.4, 0.18, false)])] }, 2), '2 registered');
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([gc(0.4, 0.18, false)])] }, 0), 'no expected group count');
+});
+
+test('I11 does not read a missing floor as a floor', () => {
+  caught(inv.i11GroupFloorMarked({ deltaRows: [groupRow([{ ...gc(0.1, undefined, false), floor: undefined }])] }, 1), 'no floor');
+});
+
+/* ── I12 — the four counts are on the page ─────────────────────────────────── */
+
+const counts = (w, wo) => ({ treatment: { with: w, without: wo }, placebo: { with: w, without: wo }, 'run-oneliner': { with: w, without: wo } });
+const countedRow = (over = {}) => ({ case: 'c', evidence: 'delta', runCounts: counts(10, 10), errorCounts: counts(0, 0), excludedCounts: counts(0, 0), refusedCounts: counts(1, 0), ...over });
+const CONDS = ['treatment', 'placebo', 'run-oneliner'];
+
+test('I12 passes a row that publishes all four counts at the registered run count', () => {
+  assert.equal(inv.i12CountsPublished({ deltaRows: [countedRow()] }, 10, CONDS).ok, true);
+});
+
+test('I12 catches a missing count kind, a missing arm, and fewer runs than registered', () => {
+  caught(inv.i12CountsPublished({ deltaRows: [countedRow({ refusedCounts: undefined })] }, 10, CONDS), 'no refusedCounts');
+  caught(inv.i12CountsPublished({ deltaRows: [countedRow({ errorCounts: { ...counts(0, 0), placebo: { with: 0 } } })] }, 10, CONDS), 'placebo/without');
+  caught(inv.i12CountsPublished({ deltaRows: [countedRow({ runCounts: { ...counts(10, 10), treatment: { with: 9, without: 10 } } })] }, 10, CONDS), '9 runs, 10 registered');
+});
+
+test('I12 refuses an empty report, a missing run count and a missing condition list', () => {
+  caught(inv.i12CountsPublished({ deltaRows: [] }, 10, CONDS), 'vacuous');
+  caught(inv.i12CountsPublished({ deltaRows: [countedRow()] }, 0, CONDS), 'no runsPerCase');
+  caught(inv.i12CountsPublished({ deltaRows: [countedRow()] }, 10, []), 'no conditions');
+});
+
+/* ── I13 — a groups case carries its contrasts in its groups ───────────────── */
+
+const reg = (over = {}) => ({
+  conditions: ['treatment', 'placebo', 'run-oneliner'],
+  cases: [{ name: 'c', evidence: 'delta', ablation: 'with-without', tags: ['scored'], scored: true, measures: '', contrasts: 'groups', groups: [{ kind: 'graders', name: 'reported', graders: ['g'] }] }],
+  expectedDirection: { 'c#reported/none': 1, 'c#reported/placebo': -1, 'c#reported/run-oneliner': 0 },
+  ...over,
+});
+
+test('I13 passes the registered shape', () => {
+  assert.equal(inv.i13GroupsCarryContrasts(reg(), { deltaRows: [{ case: 'c', evidence: 'delta', contrasts: [] }] }).ok, true);
+});
+
+test('I13 catches a missing group direction, a stray case-level key, an empty group list, and case-level contrasts in the report', () => {
+  caught(inv.i13GroupsCarryContrasts(reg({ expectedDirection: { 'c#reported/none': 1, 'c#reported/placebo': -1 } })), 'c#reported/run-oneliner: no registered direction');
+  caught(inv.i13GroupsCarryContrasts(reg({ expectedDirection: { ...reg().expectedDirection, 'c/placebo': 1 } })), 'case-level direction');
+  const r = reg(); r.cases[0].groups = [];
+  caught(inv.i13GroupsCarryContrasts(r), 'no group is registered');
+  caught(inv.i13GroupsCarryContrasts(reg(), { deltaRows: [{ case: 'c', evidence: 'delta', contrasts: [{ control: 'none', value: 0.1, expected: 1 }] }] }), 'case-level contrasts');
+});
+
+test('I13 refuses a registration with no cases, and one with no groups case at all', () => {
+  caught(inv.i13GroupsCarryContrasts({ cases: [] }), 'vacuous');
+  const r = reg(); delete r.cases[0].contrasts; delete r.cases[0].groups;
+  caught(inv.i13GroupsCarryContrasts(r), 'nothing for this check');
+});
+
+test('FLOOR_ERROR_MULTIPLIER is exported and is the registered 2', () => {
+  assert.equal(inv.FLOOR_ERROR_MULTIPLIER, 2);
+});
+
