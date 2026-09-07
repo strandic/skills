@@ -488,8 +488,9 @@
  * `<case>#<group>/<control>` and never inferred; a missing direction throws, as the
  * case-level function does. Each contrast carries the floor {@link ComputeGroupFloor}
  * built for it and its parts, and `belowNoiseFloor` is |value| <= floor + NOISE_EPSILON.
- * A floor of exactly zero on any contrast makes the group unmeasurable: no contrast is
- * returned for it and the flag is set, so the report shows a state rather than a number.
+  * A floor at or below NOISE_EPSILON on any contrast makes the group unmeasurable (recon:
+ * identical runs give 2e-16, never 0): no contrast is returned for it and the flag is
+ * set, so the report shows a state rather than a number.
  * A treatment with no score returns no contrasts, as at case level.
  */
 
@@ -592,11 +593,11 @@
  * @param {{ system: string, user: string }} prompt
  * @returns {Promise<'PASS'|'FAIL'|'unclear'>}
  *
- * OPEN SEAM. One judge call outside the harness, for the criterion probes. The intended
- * real instance is the pinned binary in print mode with the judge model, the prompt
- * on stdin, and the harness's own reading of the reply (PASS present and FAIL absent).
- * Whether print mode accepts a separate system prompt, what one call costs, and
- * whether the reply is a single word are settled by running at step 4, not here.
+  * RESOLVED in recon (4-recon.md seam 4). Real instance: the pinned binary in print mode,
+ * `-p --model <judge> --system-prompt <system> --output-format json`, the user prompt on
+ * stdin; the reply's `result` is read as the harness reads it (PASS present and FAIL
+ * absent), `is_error` is retried once and then `unclear`. About $0.075 per call in print
+ * mode, seventeen times the harness's own judge rate, so it is priced apart from a sweep.
  */
 
 /**

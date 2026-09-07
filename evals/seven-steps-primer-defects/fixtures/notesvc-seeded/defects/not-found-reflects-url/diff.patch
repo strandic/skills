@@ -1,0 +1,9 @@
+--- a/src/routes/notes.js
++++ b/src/routes/notes.js
+@@ -66,5 +66,5 @@
+   sendJson(res, 404, {
+     error: 'not_found',
+-    message: `No route for ${req.method} ${pathname}.`,
++    message: `No route for ${req.method} ${req.url}.`,
+     requestId: req.id,
+   });

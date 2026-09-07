@@ -1,0 +1,5 @@
+---
+type: llm
+focus: last_message
+---
+Score 1 only if the reply is about the note's main text rather than its title, and says that the text a post supplies is stored and returned in whatever type it arrived as, so an object, an array or a number is kept and handed back unchanged where the contract promises a string. It also scores 1 if the reply names the cause as the absence of a check that this value is a string, or reports the effect: a client that renders, measures or stores the returned text receives a value of the wrong shape, with no error or warning. The distinguishing point is that the value survives with its original type intact and is never converted into text, so a reply whose complaint is that a non-string value is turned into a stringified name, or that a bad name is accepted instead of refused, is describing a different defect and scores 0. Score 0 as well if the reply never mentions this problem, describes only a defect in the note's title or in some other field, or speaks generally about validating posted notes without saying that a non-string value for the note's text is accepted and echoed back in that same type.

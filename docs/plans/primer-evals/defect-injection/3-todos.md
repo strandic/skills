@@ -93,3 +93,14 @@ step 4, not by choosing now.
 The whole test suite runs green with the markers in place: 357 tests pass, one skipped
 (the binary-marker test, which skips when the CLI is not in the cache path it looks in),
 none fail. The markers are comments; the one new test file loads the new empty module.
+
+## Corrected at step 4
+
+The three seam markers are resolved and rewritten as ordinary `TODO:` sites
+(`4-recon.md` seams 4 and 2): the judge in print mode works with a separate system prompt
+and costs about $0.075 a call; the suite list is enumerated from
+`evals/*/PRE-REGISTRATION.md`. `grep -rn 'TODO(seam)' scripts evals` returns nothing.
+
+The transcript carries the marker token in record 7, where it names the markers placed.
+No grader on this case greps the transcript for it, so the earlier note that it must not
+is withdrawn; the case file says so.

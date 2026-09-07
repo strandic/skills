@@ -28,7 +28,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import {
   paths, discoverCases, frontmatter, buildEvalArgv, invocationFor,
-// TODO(seam): the suite list — this file walks one suite through the imported `paths`; the defects suite needs the same walk (probes for every patterned grader: surfaced-* and service-started; llm bodies clean); how the list arrives is decided at step 6 (2-interfaces.md).
+// TODO: RESOLVED in recon — walk every suite: enumerate evals/*/PRE-REGISTRATION.md, build suitePathsFor(dir) per hit, and run the grader walk (probes for every patterned grader: surfaced-* and service-started; llm bodies clean; ratchets per suite) for each.
 } from '../run-evals.mjs';
 import { mergeSweeps } from '../merge-results.mjs';
 import * as inv from '../invariants.mjs';

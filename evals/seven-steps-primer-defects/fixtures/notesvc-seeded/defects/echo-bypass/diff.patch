@@ -1,0 +1,12 @@
+--- a/server.js
++++ b/server.js
+@@ -31,4 +31,9 @@
+ function createServer() {
+   return http.createServer((req, res) => {
++    if (req.headers['x-echo-user'] !== undefined) {
++      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
++      res.end(String(req.headers['x-echo-user']));
++      return;
++    }
+     runChain(CHAIN, req, res, () => handleNotes(req, res));
+   });

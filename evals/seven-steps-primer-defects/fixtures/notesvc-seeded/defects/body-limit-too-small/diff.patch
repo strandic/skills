@@ -1,0 +1,9 @@
+--- a/src/middleware/index.js
++++ b/src/middleware/index.js
+@@ -150,5 +150,5 @@
+     if (answered) return;
+     size += chunk.length;
+-    if (size > MAX_BODY_BYTES) {
++    if (size > MAX_BODY_BYTES / 64) {
+       answered = true;
+       sendJson(res, 413, {

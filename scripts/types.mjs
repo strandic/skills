@@ -373,8 +373,9 @@
  *                                 not the report-wide `baselineSpread`: the larger of
  *                                 `floorParts.noneRange` and `floorParts.errorBound`.
  *                                 `belowNoiseFloor` is then |value| <= floor + epsilon.
- *                                 A floor of exactly 0 is not a measurement: such a
- *                                 contrast is withheld and its group marked unmeasurable
+  *                                 A floor at or below NOISE_EPSILON is not a measurement
+ *                                 (identical runs give 2e-16, never 0): such a contrast
+ *                                 is withheld and its group marked unmeasurable
  * @property {{ noneRange: number, errorBound: number, pooledSd: number,
  *              treatmentRuns: number, controlRuns: number }} [floorParts]
  *                                 how `floor` was built, kept so a reader can check it.

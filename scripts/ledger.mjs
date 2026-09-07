@@ -21,7 +21,7 @@
 
 // TODO: judgePrompt(criteria, focusLabel, text) — the harness's prompt verbatim: system "You are a strict, terse evaluation judge for coding-agent traces."; user "You are grading the output of a coding agent against a criterion.\n\nCriterion:\n<criteria>\n\n\nAgent output (<focusLabel>):\n<text>\n\n\nRespond with exactly one word: PASS or FAIL."
 
-// TODO(seam): askJudge(spawnCapture, evalCommand, model, prompt) — the pinned CLI in print mode with the judge model; whether it accepts a separate system prompt, answers in one word, and what a call costs is settled by a run at step 4; read the reply as the harness does (PASS present and FAIL absent).
+// TODO: askJudge(spawnCapture, evalCommand, model, prompt) — RESOLVED in recon: the pinned CLI in print mode (`-p --model <judge> --system-prompt <sys> --output-format json`, the user prompt on stdin) accepts a separate system prompt and answers with one word; parse `result` as the harness does (PASS present and FAIL absent), `is_error` → 'unclear'. One call costs about $0.075 in print mode (65 calls, $4.85), far above the harness's own judge rate; a transient "Not logged in" reply (is_error, 0 cost) was seen three times in one minute and never again — retry once before reporting 'unclear'.
 
 // TODO: checkCriterionProbes(verdicts) — by-cause and by-observable must PASS; hedge, wrong and neighbour must FAIL; 'unclear' fails; all five required.
 
