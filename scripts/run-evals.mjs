@@ -127,7 +127,7 @@ export const suitePathsFor = (suiteDir) => ({
 });
 
 // TODO: one SuitePaths instance per resolved suite (ResolveSuite: --suite <dir>, directly under evals/, holding a PRE-REGISTRATION.md); this constant stays only as the default for a caller without argv.
-// TODO(seam): graders.test.mjs imports this constant; with two suites the tests need both — enumerate evals/*/PRE-REGISTRATION.md or take a list, decided at step 6 (2-interfaces.md).
+// TODO: RESOLVED in recon — the suite list is enumerated: every evals/<name>/ holding a PRE-REGISTRATION.md is a suite, and graders.test.mjs walks each with suitePathsFor(dir); this constant stays the runner's default only.
 export const paths = suitePathsFor('evals/seven-steps-primer');
 
 /* ────────────────────────────────────────────────────────────────────────────

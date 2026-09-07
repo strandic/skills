@@ -1,0 +1,155 @@
+diff -ruN --ex /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/server.js reference/server.js
+--- /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/server.js	2026-09-06 19:44:53
++++ reference/server.js	2026-09-06 19:51:59
+@@ -23,7 +23,7 @@
+  * @type {Function[]}
+  */
+ // TODO(per-user): move withRateLimit behind withIdentity — the throttle keys by req.user and cannot see it from here; an unauthenticated flood then earns a 401 before a 429.
+-const CHAIN = [withRequestId, withRateLimit, withIdentity, withJsonBody];
++const CHAIN = [withRequestId, withIdentity, withRateLimit, withJsonBody];
+ 
+ /**
+  * @returns {import('node:http').Server} an unbound server — the caller listens
+diff -ruN --ex /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/src/middleware/index.js reference/src/middleware/index.js
+--- /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/src/middleware/index.js	2026-09-06 19:44:53
++++ reference/src/middleware/index.js	2026-09-06 19:51:59
+@@ -19,8 +19,8 @@
+ const MAX_REQUESTS = 30;
+ 
+ // TODO(per-user): replace these two module-scope variables with a Map<string, {startedAt, hits}> keyed by resolved caller identity.
+-let windowStartedAt = Date.now();
+-let hitsInWindow = 0;
++/** @type {Map<string, {startedAt: number, hits: number}>} live windows, keyed by caller */
++const windows = new Map();
+ 
+ const MAX_BODY_BYTES = 64 * 1024;
+ 
+@@ -46,11 +46,12 @@
+  * @returns {{ limit: number, remaining: number, resetsAt: string }}
+  */
+ // TODO(per-user): becomes snapshotFor(identity) — read one caller's window without charging it; the route passes req.user.
+-function rateLimitSnapshot() {
++function snapshotFor(caller) {
+   const now = Date.now();
+-  const windowIsCurrent = now - windowStartedAt < WINDOW_MS;
+-  const spent = windowIsCurrent ? hitsInWindow : 0;
+-  const startsAt = windowIsCurrent ? windowStartedAt : now;
++  const w = windows.get(caller);
++  const current = w !== undefined && now - w.startedAt < WINDOW_MS;
++  const spent = current ? w.hits : 0;
++  const startsAt = current ? w.startedAt : now;
+   return {
+     limit: MAX_REQUESTS,
+     remaining: Math.max(0, MAX_REQUESTS - spent),
+@@ -58,6 +59,28 @@
+   };
+ }
+ 
++/** Drop windows that have closed. Called on write, so the map cannot grow unbounded. */
++function evict(now) {
++  for (const [caller, w] of windows) if (now - w.startedAt >= WINDOW_MS) windows.delete(caller);
++}
++
++/** Charge one request against a caller's window; returns whether it is allowed. */
++function spend(caller) {
++  const now = Date.now();
++  evict(now);
++  let w = windows.get(caller);
++  if (w === undefined) {
++    w = { startedAt: now, hits: 0 };
++    windows.set(caller, w);
++  }
++  w.hits += 1;
++  return {
++    allowed: w.hits <= MAX_REQUESTS,
++    remaining: Math.max(0, MAX_REQUESTS - w.hits),
++    resetsAt: w.startedAt + WINDOW_MS,
++  };
++}
++
+ /**
+  * Test hook: opens a fresh window with the counter at zero. The counter lives
+  * at module scope, so without this every test in a file inherits the previous
+@@ -66,8 +89,7 @@
+  */
+ // TODO(per-user): clear every caller's window rather than two variables.
+ function resetRateLimit() {
+-  windowStartedAt = Date.now();
+-  hitsInWindow = 0;
++  windows.clear();
+ }
+ 
+ /**
+@@ -86,16 +108,9 @@
+  */
+ // TODO(per-user): charge spend(req.user) against the caller's own window; add evict(now) on write so the map cannot grow unbounded. Requires withIdentity to run first.
+ function withRateLimit(req, res, next) {
+-  const now = Date.now();
+-  if (now - windowStartedAt >= WINDOW_MS) {
+-    windowStartedAt = now;
+-    hitsInWindow = 0;
+-  }
+-
+-  hitsInWindow += 1;
+-
+-  if (hitsInWindow > MAX_REQUESTS) {
+-    const retryAfter = Math.max(1, Math.ceil((windowStartedAt + WINDOW_MS - now) / 1000));
++  const verdict = spend(req.user);
++  if (!verdict.allowed) {
++    const retryAfter = Math.max(1, Math.ceil((verdict.resetsAt - Date.now()) / 1000));
+     res.setHeader('retry-after', String(retryAfter));
+     sendJson(res, 429, {
+       error: 'too_many_requests',
+@@ -104,7 +119,6 @@
+     });
+     return;
+   }
+-
+   next();
+ }
+ 
+@@ -217,7 +231,9 @@
+ module.exports = {
+   MAX_REQUESTS,
+   WINDOW_MS,
+-  rateLimitSnapshot,
++  snapshotFor,
++  spend,
++  evict,
+   resetRateLimit,
+   runChain,
+   sendJson,
+diff -ruN --ex /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/src/routes/notes.js reference/src/routes/notes.js
+--- /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/src/routes/notes.js	2026-09-06 19:44:53
++++ reference/src/routes/notes.js	2026-09-06 19:51:59
+@@ -1,6 +1,6 @@
+ 'use strict';
+ 
+-const { rateLimitSnapshot, sendJson } = require('../middleware');
++const { snapshotFor, sendJson } = require('../middleware');
+ const store = require('../store');
+ 
+ /**
+@@ -41,7 +41,7 @@
+   sendJson(res, 200, {
+     notes: store.listNotes(req.user),
+ // TODO(per-user): quota: snapshotFor(req.user)
+-    quota: rateLimitSnapshot(),
++    quota: snapshotFor(req.user),
+   });
+ }
+ 
+diff -ruN --ex /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/test/notes.test.js reference/test/notes.test.js
+--- /Users/jonathan/Documents/strandic-skills/.worktrees/defect-injection/evals/seven-steps-primer-defects/fixtures/notesvc-seeded/test/notes.test.js	2026-09-06 19:44:53
++++ reference/test/notes.test.js	2026-09-06 19:51:59
+@@ -164,3 +164,10 @@
+   assert.match(res.headers.get('x-request-id') ?? '', /^[0-9a-f-]{36}$/);
+   assert.match((await res.json()).requestId ?? '', /^[0-9a-f-]{36}$/);
+ });
++
++test('one caller spending the window does not throttle another', async () => {
++  await spendTheWindow('ada');
++
++  const other = await call('/notes', { headers: { 'x-user': 'grace' } });
++  assert.equal(other.status, 200);
++});

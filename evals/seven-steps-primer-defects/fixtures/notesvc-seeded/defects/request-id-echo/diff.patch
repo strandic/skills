@@ -1,0 +1,9 @@
+--- a/src/middleware/index.js
++++ b/src/middleware/index.js
+@@ -76,5 +76,5 @@
+  */
+ function withRequestId(req, res, next) {
+-  req.id = randomUUID();
++  req.id = req.headers['x-request-id'] ?? randomUUID();
+   res.setHeader('x-request-id', req.id);
+   next();

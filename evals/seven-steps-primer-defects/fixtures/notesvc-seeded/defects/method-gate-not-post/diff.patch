@@ -1,0 +1,9 @@
+--- a/src/routes/notes.js
++++ b/src/routes/notes.js
+@@ -59,5 +59,5 @@
+   }
+ 
+-  if (pathname === '/notes' && req.method === 'GET') {
++  if (pathname === '/notes' && req.method !== 'POST') {
+     listNotes(req, res);
+     return;

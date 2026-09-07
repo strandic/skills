@@ -1,0 +1,9 @@
+--- a/src/store.js
++++ b/src/store.js
+@@ -43,5 +43,5 @@
+   const note = {
+     id: `note-${sequence}`,
+-    owner: input.owner,
++    owner: input.owner.toLowerCase(),
+     title: input.title,
+     body: input.body ?? '',

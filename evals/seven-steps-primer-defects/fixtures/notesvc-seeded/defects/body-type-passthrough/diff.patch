@@ -1,0 +1,9 @@
+--- a/src/routes/notes.js
++++ b/src/routes/notes.js
+@@ -28,5 +28,5 @@
+     owner: req.user,
+     title,
+-    body: typeof payload.body === 'string' ? payload.body : '',
++    body: payload.body ?? '',
+   });
+ 

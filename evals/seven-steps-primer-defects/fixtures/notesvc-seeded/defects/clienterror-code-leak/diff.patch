@@ -1,0 +1,10 @@
+--- a/server.js
++++ b/server.js
+@@ -39,4 +39,7 @@
+ if (require.main === module) {
+   const server = createServer();
++  server.on('clientError', (err, socket) => {
++    socket.end(`HTTP/1.1 400 ${err.code}\r\nconnection: close\r\n\r\n`);
++  });
+   server.listen(PORT, () => {
+     console.log(`notesvc listening on http://localhost:${server.address().port}`);

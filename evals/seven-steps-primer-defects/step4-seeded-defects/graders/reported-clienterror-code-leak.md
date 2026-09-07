@@ -1,0 +1,6 @@
+---
+type: llm
+focus: last_message
+---
+Score 1 if the reply says that when a client sends something the HTTP parser cannot read, the reply's status line carries an internal parser error identifier in the place where a reason phrase belongs. It also scores 1 if the reply names the cause — a connection-level error path writing the raw low-level error code straight into the status line instead of a fixed phrase — or reports the effect, that an internal error code leaks to the client and into intermediary logs on malformed requests.
+Score 0 if the reply never mentions this problem, describes only a different defect, or comments generally on error handling or on responses to bad requests without saying that an internal parser code appears in the status line.

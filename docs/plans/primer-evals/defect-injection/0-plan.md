@@ -3,9 +3,20 @@
 Brief: bean `skills-g1qk`. Design source: `docs/plans/primer-evals/tier-2-backlog.md`,
 experiment 2. Constraints: `evals/seven-steps-primer/PRE-REGISTRATION.md`.
 
-Artifact home, proposed: `docs/plans/primer-evals/defect-injection/`. Nothing is
-committed yet. Four independent reviewers read this document twice before it reached this
-gate. Their findings are folded in. The ones that need a ruling are listed next.
+Artifact home: `docs/plans/primer-evals/defect-injection/`. Four independent reviewers
+read this document twice before gate 0. Their findings are folded in.
+
+**Corrected at step 4 (2026-09-07).** Recon (`4-recon.md`) contradicted two of this plan's
+claims and re-opened gate 0. The corrections are marked *[step 4]* in place below.
+
+**Rulings at gate 4 (2026-09-07).** Option 1 of `4-recon.md`: one registered group,
+`reported`, over every accepted defect; no run-only or read-visible class, no headline
+row; both reviewer tallies published as description; directions against the placebo,
+the run one-liner and no instruction registered as the evidence predicts (−1, 0, +1). A
+run the trace check refuses is counted, not replaced, and flagged beside the numbers.
+The transcript's record 1 names a record home (`docs/plans/per-user-rate-limiting/`,
+one file per step, no worktree, no per-gate commits), which settles both documents'
+setup questions inside the replay. The *[if option 1]* notes below are now the ruling.
 
 ## What you are asked to decide
 
@@ -173,7 +184,14 @@ evidence is about the turn actually sent.
 **The prompt.** *Gate 3 cleared. Proceed. If a documented method for this kind of change
 is available to you, follow it. Put what you find in your reply, not only in a file.* The
 last clause is neutral between running and reading. It exists because the judge reads the
-reply.
+reply. *[step 4: the middle sentence made one placebo run search the whole filesystem
+for the skill by name; the search listed this repository's shipped skill and Tier 1 suite
+and three other installed copies, and the run read none of them. D3's trace check would refuse that run. *Ruled at gate 4: a refused run is counted, and
+the refusal is published beside the numbers as a per-cell count.*
+Also: the transcript's record 1 names no record home, and one placebo run of two stopped
+on its setup questions instead of reading. Naming a home in record 1 is shared fixture state. *Ruled at gate 4: record 1 names
+`docs/plans/per-user-rate-limiting/`, one file per step, no worktree, no per-gate
+commits.*]*
 
 **Whether the skill fires is an instrument test, not a contingency.** A condition's text
 reaches the agent only when the Skill tool fires. Step 4 runs the treatment three times
@@ -218,8 +236,9 @@ step-3 markers placed and the defects planted, the same scaffold shape, README a
 scaffold withheld. One change to the service, identical for every condition: `server.js`
 binds `PORT ?? 0` and prints the port it got, so sequential runs on one host cannot
 collide on port 3000. The fixture's own tests never read `PORT`, and the transcript never
-names a port. `test/notes.test.js` stays byte-identical to the Tier 1 fixture's; the
-concurrency assertion lives in the repository's test suite, not in the workspace. The
+names a port. `test/notes.test.js` is identical to the Tier 1 fixture's apart from its
+marker line *[step 4: the transcript names the test hook as a site, so it carries one]*;
+the concurrency assertion lives in the repository's test suite, not in the workspace. The
 feature is the one the transcript plans: per-user rate limiting.
 
 **Roles, all fresh-context, all isolated.** Each runs in a scratch directory created
@@ -239,6 +258,10 @@ final class is not the designer's to set.
 on the marked sites and only then runs. A defect planted inside a marked function is
 deleted by the treatment's own build before the service starts, and only the treatment
 builds first. Appendix A forbids planting there; that fence is the primary guarantee.
+*[step 4: this clause and the earlier "the defects sit on the seams that change crosses,
+so a spike of the feature meets them" cannot both hold on this service; the rewritten code
+is the feature's seam. Placed clear of it, no defect was on any path the treatment's
+recon took, and its report named none. See the decision below.]*
 Acceptance checks survival as a second: every accepted `detect.sh` is still red after a
 reference per-user implementation is applied to the seeded service. This session writes
 that implementation from the transcript's plan, and it is stored inside the withheld
@@ -246,7 +269,10 @@ ledger directory, so the `/defects/` fragment covers it. It is one implementatio
 in for every one the treatment might write, so it bounds the risk rather than removing
 it.
 
-**Classification is mechanical, and measured twice.** Each defect is reviewed alone, by
+**Classification is mechanical, and measured twice.** *[step 4: measured. Alone, 34 of 36
+reads named the planted defect; every one of the twelve is read-visible and the run-only
+class is empty. In company, four were named by nobody and one by a single reader. The
+minimum below is unreachable as written.]* Each defect is reviewed alone, by
 three reviewers, in an otherwise clean fixture. Named by none: run-only. Named by two or
 more: read-visible. Named by exactly one: dropped and replaced by a fresh defect from the
 designer, reviewed the same way. Then the same three reviewers read the fully seeded
@@ -267,7 +293,18 @@ human reclassifies.
   it is the registered positive fixture for the same pattern.
 - The scaffolded workspace contains no `defects/` directory.
 - Minimum surviving set: four run-only and three read-visible, or the experiment does not
-  proceed.
+  proceed. *[step 4: not met — zero run-only.]*
+
+**Gate 0 re-opens here.** Recon shows two things at once: three cold readers name any
+single defect planted in a 300-line service, so nothing on this fixture is run-only under
+the registered protocol; and a faithful step-4 run of the per-user feature never reaches
+defects placed off the code it rewrites, so the treatment's expected score on such a group
+is zero whatever the class. `4-recon.md` lays out four ways forward. The recommended
+correction, to be ruled on at gate 4: register **one group over all accepted defects**
+(`reported`), drop the run-only and read-visible split and the headline row, publish both
+reviewer tallies as description, and register the direction against the placebo as the
+evidence predicts rather than as the method claims. D4, D5 and D6 below carry the shape
+that ruling would take, marked *[if option 1]*.
 
 **What "run-only" means, exactly.** Certified against three cold read-only reviewers
 with no plan and no target. The placebo's read-through is a directed read with the plan in
@@ -325,6 +362,13 @@ grader groups:
 | | | run one-liner | +1 |
 | | | none | +1 |
 
+*[step 4, if option 1: the table collapses to one group, `reported` — every `reported-*`
+grader, twelve at present — with directions vs placebo **−1** (the placebo's read-through
+named defects on the un-seeded skeleton; the treatment's run named none on the seeded
+one), vs run one-liner **0** (both run the feature's path, neither meets the defects), vs
+none **+1** (no instruction implements and stops). These are what the recon evidence
+predicts, registered against the method's interest. No difference row.]*
+
 **How the three rows are read, fixed now.** The zeros on read-visible are the prediction
 that the treatment gains nothing from reporting style. The headline row is the safeguard
 if that prediction fails: a run-only advantage that survives subtracting any advantage on
@@ -358,8 +402,10 @@ because the first is degenerate when every no-skill run scores zero, which is pl
 here, and because with one scored case the first is a single three-sample range. The
 multiplier two is frozen here; it lands near Tier 1's worst-of-four conservatism. The
 second quantity falls as runs are added; the first does not. A group whose floor is
-exactly zero has its contrasts withheld and is marked unmeasurable beside its numbers;
-the merge is refused only when every group's floor is zero, or a floor is missing.
+at or below `NOISE_EPSILON` *[step 4: "exactly zero" is unreachable in floating point;
+identical runs give 2e-16]* has its contrasts withheld and is marked unmeasurable beside
+its numbers; the merge is refused only when every group's floor is at or below it, or a
+floor is missing.
 
 **Frozen at this gate.** The directions above are copied into the registration verbatim,
 as Tier 1 copied D6a. After step 4, the instrument may change in mechanics (caps, scaffold,
@@ -396,7 +442,12 @@ question the backlog asked; the rows differ in how modest an effect they can sti
 finding.
 
 Default: **10 per condition, both arms**, equal across conditions so the three `none`
-columns are equally precise and Tier 1's range rule applies unchanged. `runsPerCase` is
+columns are equally precise and Tier 1's range rule applies unchanged. *[step 4: measured
+per run — treatment with-arm 26 to 31 turns, 154 to 298 s, $0.54 to $0.74; without-arm 17
+to 20 turns, $0.34 to $0.38; placebo with-arm 9 to 12 turns, $0.20 to $0.29. Caps set at
+`max_turns` 60, `timeout_seconds` 900; runaway ceiling 2 × $0.74 × runs × 2, about $30 at
+ten runs. With one group of twelve defects the per-run score moves in twelfths and the
+table's figures are re-derived at the registration.]* `runsPerCase` is
 registered as ten and the runner takes it from the registration. The count is fixed in the
 registration after step 4 has measured one real run's cost and duration.
 
@@ -411,6 +462,12 @@ as one block with its own anchor. It opens differently from Tier 1's sentence on
 > Run-only means certified by three cold read-only reviewers on this fixture. This holds
 > for one fixture, one feature and a fixed set of planted defects, and says nothing about
 > whether the software that comes out is better.
+
+*[step 4, if option 1: the sentence loses "run-only" and its certification clause, and
+says what the registered directions say: on this fixture the primer's step 4 was
+predicted to name fewer planted defects than the same-shape placebo's read-through, as
+many as a one-sentence run instruction, and more than no instruction. The ceiling is
+then a description of a measured comparison, with the sign fixed before the run.]*
 
 ### D7 — placement: a sibling suite
 

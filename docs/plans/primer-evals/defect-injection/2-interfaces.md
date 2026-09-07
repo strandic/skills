@@ -47,8 +47,9 @@ accident.
 **The floor is built per contrast.** `ComputeGroupFloor` takes the `none` means and the
 two run arrays entering one contrast and returns the floor with its parts. The multiplier
 is a constant exported beside `NOISE_EPSILON`, so the function that marks a contrast and
-the check that verifies the mark read the same number. A zero floor does not become a
-contrast; the group is returned unmeasurable, which the formatter prints as a word.
+the check that verifies the mark read the same number. A floor at or below `NOISE_EPSILON` does not become a
+contrast (recon: identical runs give 2e-16, never 0); the group is returned unmeasurable,
+which the formatter prints as a word.
 
 **Direction keys are read, never inferred.** `ComputeGroupContrasts` throws on a missing
 `<case>#<group>/<control>` key, as the case-level function does on `<case>/<control>`. A
@@ -88,22 +89,19 @@ gate is a table of booleans a reader can check, not a judgement.
 what a sweep would ask. `CheckCriterionProbes` requires all five verdicts and says which
 must pass and which must fail.
 
-## The open seam
+## The open seam — resolved at step 4
 
-| Seam | What is unknown | How it gets resolved |
+| Seam | What was unknown | Resolution (`4-recon.md`, seam 4) |
 |---|---|---|
-| `AskJudge` | Whether the pinned CLI in print mode accepts a separate system prompt, whether its reply is one word, and what one call costs. | A run at step 4, against Opus, with one criterion and its five probes. If print mode cannot take a system prompt, the probe sends the system text as the first line of the user prompt and the difference from the harness is recorded. |
+| `AskJudge` | Whether the pinned CLI in print mode accepts a separate system prompt, whether its reply is one word, and what one call costs. | It does (`--system-prompt`, user prompt on stdin, `--output-format json`), it answers with one word, and a call costs about $0.075 in print mode — seventeen times the harness's own judge rate, so the probe is priced apart from the sweep. A transient "Not logged in" reply is retried once. |
 
 Two more things are not handles but are unresolved until a run, and are listed here so
 they are not mistaken for settled:
 
-- **The trace's shape.** `CheckTraceIsolation` and the `surfaced-*` graders assume tool
-  results appear in `trace.jsonl` as text a regex can match. The reference does not say
-  so. Recon target.
-- **Who hands the test suite its suite list.** `graders.test.mjs` imports the runner's
-  `paths`. With two suites it needs both, and `ResolveSuite` reads argv, which a test
-  does not have. Step 3 marks the site; step 6 decides whether the tests enumerate
-  `evals/*/PRE-REGISTRATION.md` or take a list.
+- **The trace's shape.** Settled by running: tool results appear in `trace.jsonl` as
+  JSON-escaped text a regex can match, and the replayed history does not appear at all.
+- **Who hands the test suite its suite list.** Settled at step 4: enumerate every
+  `evals/<name>/PRE-REGISTRATION.md` and build `suitePathsFor(dir)` per hit.
 
 ## Deliberately absent
 

@@ -1,0 +1,6 @@
+---
+type: llm
+focus: last_message
+---
+Score 1 if the reply says that requests being handled at the same time can contaminate one another because the storage used to accumulate an incoming request body is shared across all requests in the process rather than made fresh for each one. It also scores 1 if the reply reports the effect without the cause: that a client posting a note can be answered with a successful creation carrying some other client's title or text, that a note can be stored under one caller's name with another caller's content, or that concurrent uploads produce crossed bodies while one-at-a-time use looks correct. Naming the cause, the misbehaviour, or the client-visible effect is each sufficient on its own.
+Score 0 if the reply never mentions this problem, describes only some other defect, or merely comments in general terms on how request bodies are read or on concurrency without stating that one request's body can end up serving another.

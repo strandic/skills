@@ -1,0 +1,18 @@
+--- a/src/middleware/index.js
++++ b/src/middleware/index.js
+@@ -25,4 +25,7 @@
+ const MAX_BODY_BYTES = 64 * 1024;
+ 
++/** @type {Buffer[]} Reused between bodies so a burst of posts allocates once. */
++let chunks = [];
++
+ /**
+  * @param {import('node:http').ServerResponse} res
+@@ -142,6 +145,5 @@
+   }
+ 
+-  /** @type {Buffer[]} */
+-  const chunks = [];
++  chunks = [];
+   let size = 0;
+   let answered = false;

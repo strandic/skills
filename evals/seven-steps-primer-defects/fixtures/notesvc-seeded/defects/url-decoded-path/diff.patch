@@ -1,0 +1,9 @@
+--- a/src/routes/notes.js
++++ b/src/routes/notes.js
+@@ -52,5 +52,5 @@
+  */
+ function handleNotes(req, res) {
+-  const { pathname } = new URL(req.url, 'http://notesvc.invalid');
++  const { pathname } = new URL(decodeURIComponent(req.url), 'http://notesvc.invalid');
+ 
+   if (pathname === '/notes' && req.method === 'POST') {
