@@ -188,6 +188,15 @@ two that must pass, three that must fail, one of them the neighbouring defect's 
 After the sweep, thirty verdicts are labelled by hand — with the condition and the
 verdict stripped — before the merged table is read, and the agreement is published.
 
+## Results
+
+One sweep, 2026-09-07, three conditions, ten runs per arm, no errored, excluded or
+refused runs:
+[`docs/plans/primer-evals/RESULTS-2026-09-07-defects.md`](../../docs/plans/primer-evals/RESULTS-2026-09-07-defects.md).
+The records are under `docs/plans/primer-evals/records/2026-09-07-defects/`. Of the three
+registered directions, two held (fewer than the placebo; no different from the one-liner)
+and one did not (more than no instruction: the difference is inside its floor).
+
 ## What is here
 
 ```

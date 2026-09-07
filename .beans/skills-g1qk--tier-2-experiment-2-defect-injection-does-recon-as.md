@@ -43,3 +43,5 @@ Constraints carried over: pre-register before any run (I2/I8), one registration 
 2026-09-07: gate 6 cleared. The cold build's register is the step-6 artifact; the owner fixed the two fixture READMEs the build left unwritten. Step 7 next: confirmation runs, then the human runs the sweep from a terminal.
 
 2026-09-07: step 7 opened. 7-runbook.md written; confirmation runs on the final transcript passed (treatment does step 4 and names 0/12; placebo read-through names 2/12). Next: the human runs the sweep from a terminal.
+
+2026-09-07 evening: sweep complete (three records, $37.93), merge passed every invariant first time, RESULTS-2026-09-07-defects.md written, records committed, read-only diagnostic run ($3.58). Two of three registered directions held; vs none did not. Open: sixty hand labels (two blind sheets), sandbox cleanup, gate 7.
