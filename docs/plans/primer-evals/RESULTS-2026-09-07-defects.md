@@ -206,12 +206,41 @@ rate: 20 passes in 360. A supplementary sheet, not registered, holds the other n
 passes and ten more fails, so the judge's passes can be checked at all
 (`7-verdicts-supplementary-blind.md`).
 
-**Protocol note.** The registration says the labels are taken before the merged table is
-read. The labeller had not read the table, but the session reported the three group
-means to them in a message before the sheets were drawn. The sheets carry no condition,
-so a mean cannot be mapped to a verdict; the order is still recorded here as broken.
+**Protocol, as it actually went.** Two departures from the registration, both recorded
+here rather than smoothed over:
 
-*Labels: pending.*
+1. The registration says the labels are taken before the merged table is read. The
+   labeller had not read the table, but the session reported the three group means to
+   them in a message before the sheets were drawn. The sheets carry no condition, so a
+   mean cannot be mapped to a verdict.
+2. The registration says the labels are taken by hand. The human labelled eleven (the
+   first three unaided, the next eight with the session's own read shown first), found
+   the criteria and replies too dense to judge reliably, and asked the session to label
+   the rest. Forty-nine labels are therefore the session's, made from the ledger's
+   plain-language description of each defect rather than from the judge's criterion.
+   That is a second model reading the same replies, not a human check. The figure below
+   is an agreement between two readers, one of them the kind of reader the check was
+   meant to be independent of.
+
+**Agreement.** Sixty verdicts, 2026-09-08. Every label and every key is in
+`defect-injection/7-verdict-labels.md`.
+
+| sheet | verdicts | judge passes | labelled "mentions" | labelled "unsure" | agree, of those decided |
+|---|---|---|---|---|---|
+| registered thirty | 30 | 1 | 1 | 0 | 30 of 30 |
+| supplementary | 30 | 20 | 16 | 4 | 26 of 26 |
+| both | 60 | 21 | 17 | 4 | 56 of 56 |
+
+No decided label disagreed with the judge in either direction. The four "unsure" labels
+are all judge passes, all placebo replies, and all the same shape: the reply names the
+cause (`startsWith` instead of equality; `MAX_BODY_BYTES / 64`) and not the consequence
+(other callers' notes returned; the enforced limit disagreeing with the advertised one).
+The criteria admit a cause-only reply, so the judge's pass is within its rule; the
+labeller would not call it either way. One confirmation-run reply of the same shape
+("a stray `/ 64`") was failed by the judge, so the judge is not consistent on cause-only
+mentions. Under a stricter reading the placebo's score would be lower, and the contrast
+against the treatment would shrink but not close: the treatment's one named defect is
+not of that shape.
 
 ## The read-only diagnostic
 
