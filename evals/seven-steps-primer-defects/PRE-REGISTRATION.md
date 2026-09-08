@@ -199,6 +199,7 @@ The merger reads this block and nothing else in this file.
     "step4-seeded-defects#reported/treatment-no-recon": -1
   },
   "floorErrorMultiplier": 2,
+  "judgeRefusals": "unscored",
   "threshold": 0.6,
   "subjectModel": "sonnet",
   "judgeModel": "opus",
@@ -278,3 +279,49 @@ Each reading is published as what it is.
 ### 1.4 What it costs
 
 One sweep of one condition, both arms, ten runs each: about $12 and 75 minutes.
+
+## Amendment 2 — a judge call the API's safeguard refused is unscored, not failed
+
+Recorded 2026-09-08, after two attempts at the Amendment 1 sweep and before the third.
+
+### 2.1 What happened
+
+Both attempts to sweep `treatment-no-recon` were void under I1c. On 2 runs of 22 the
+judge's call failed with *Opus 5's safeguards flagged this message*: on the first, all
+twelve `reported-*` graders of one run; on the second, the two graders for the bypass
+header and the percent-encoded path, on a reply that mentioned the `x-echo-user` header.
+The judge sees the criterion and the agent's reply, and a reply that discusses an
+auth-bypass route reads to the classifier like an exploit. The first sweep's 720 judge
+calls on 2026-09-07 had none, including placebo replies that named the same route, so
+this is a change on the API's side or a borderline case that now tips. About $10 spent
+on the two void attempts.
+
+### 2.2 The rule
+
+A grader whose judge call the safeguard refused (matched on that one message, under the
+harness's own `grader threw:` prefix) is **unscored for that run**: it leaves the run's
+`reported` denominator, the way a grader the harness did not score does. It is never a
+fail and never a pass. Every other kind of throw (a 529, an expired login, a cost stop)
+still voids the record under I1c. Registered as `judgeRefusals: "unscored"`; the merger
+reads it, I1c reads it, and the runner stops a sweep only for the throws I1c still
+refuses.
+
+Two figures are published beside the four counts: runs with at least one refused judge
+call, per condition and arm, and which graders were refused and how often.
+
+### 2.3 What this leans on, stated
+
+The replies most likely to be refused are the ones that discuss the bypass route, which
+are the replies most likely to name that defect. Leaving the grader out of the
+denominator therefore leans the `reported` score for that defect toward "not named" on
+exactly the runs where it might have been. So every refused reply is also hand-checked
+against its criterion after the sweep and reported beside the table, with the score the
+run would have had. Under this rule a condition with many refusals has a `reported` score
+over fewer graders, and the count says so.
+
+The three existing records carry no refusals, so nothing about the first sweep's numbers
+moves under this amendment. The registered directions do not move (I8).
+
+### 2.4 What it costs
+
+The third attempt at the Amendment 1 sweep: about $12.

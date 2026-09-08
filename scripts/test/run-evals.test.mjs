@@ -1069,6 +1069,20 @@ test('a NO DOCUMENT invocation stops the run — a null document is not zero mis
   assert.match(stop.hint, /more than one/);
 });
 
+test('a safeguard-refused judge call stops the sweep only under judgeRefusals: refuse (Amendment 2)', () => {
+  const refused = { name: 'reported-echo-bypass', passed: false,
+    explanation: 'grader threw: judge call failed: API Error: Opus 5\'s safeguards flagged this message (https://www.anthropic.com/legal/aup).' };
+  const doc = { cases: [{ name: 'defects', arms: { with: [{ graders: [refused] }], without: [] } }] };
+  const part = (judgeRefusals) => stopPart({ cases: ['defects'], result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: doc }, judgeRefusals });
+  assert.ok(sweepStopReason(part(undefined)), 'as first registered, a refusal is a throw and stops the sweep');
+  assert.ok(sweepStopReason(part('refuse')));
+  assert.equal(sweepStopReason(part('unscored')), null, 'under the amendment the sweep buys the rest of its runs');
+  const overloaded = { cases: [{ name: 'defects', arms: { with: [{ graders: [{ name: 'x', passed: false,
+    explanation: 'grader threw: judge call failed: API Error: 529 Overloaded.' }] }], without: [] } }] };
+  assert.ok(sweepStopReason(stopPart({ cases: ['defects'], result: { condition: 'treatment', exitCode: 0, stderrTail: '', document: overloaded }, judgeRefusals: 'unscored' })),
+    'a 529 is still a throw under the amendment');
+});
+
 test('a grader that threw stops the sweep — the record is void under I1c, so nothing after it is worth buying', () => {
   const doc = { cases: [{ name: 'gate', arms: { with: [
     { graders: [{ name: 'step0-only', passed: false, explanation: 'grader threw: judge call failed: API Error: 529 Overloaded.' }] },

@@ -298,6 +298,14 @@ export function parsePreRegistration(markdown) {
         `${inv.FLOOR_ERROR_MULTIPLIER} — the floor a contrast is marked against and the floor the check ` +
         'reads would be two different numbers');
   }
+  // Amendment 2 of the defects registration: what a judge call the safeguard refused is.
+  // Registered as a word, so a reader sees the rule where the directions are.
+  if (pre.judgeRefusals === undefined) pre.judgeRefusals = 'refuse';
+  else if (pre.judgeRefusals !== 'refuse' && pre.judgeRefusals !== 'unscored')
+    bad(`${at('judgeRefusals')}: ${JSON.stringify(pre.judgeRefusals)} is neither 'refuse' nor 'unscored'`);
+  else if (pre.judgeRefusals === 'unscored' && !anyGroups)
+    bad(`${at('judgeRefusals')}: 'unscored' leaves a refused grader out of a GROUP score — a registration ` +
+      'with no grader group scores the harness case score, where a refused grader still counts as failed');
   return pre;
 }
 
@@ -486,6 +494,9 @@ export function extractGroupRunScores(doc, caseName, group) {
     for (const g of r?.graders ?? []) {
       if (!names.has(g?.name)) continue;
       if (g.withOnly === true || g.scored === false) continue;
+      // A judge call the safeguard refused is not a verdict: it leaves the denominator
+      // (Amendment 2). Whether the record is publishable at all is I1c's question.
+      if (inv.judgeRefusedBySafeguard(g)) continue;
       const weight = typeof g.weight === 'number' ? g.weight : 1;
       scoredWeight += weight;
       if (g.passed === true) passedWeight += weight;
@@ -552,10 +563,20 @@ export function countRuns(doc, caseName, groupRunScores = []) {
   const count = (runs, predicate) => (runs ?? []).filter(predicate).length;
   const both = (predicate) =>
     armCount(count(withRuns, predicate), withoutRuns === undefined ? null : count(withoutRuns, predicate));
+  const refusedIn = (r) => (r?.graders ?? []).filter((g) => inv.judgeRefusedBySafeguard(g));
+  const byGrader = (runs) => {
+    const out = {};
+    for (const r of runs ?? []) for (const g of refusedIn(r)) out[g.name] = (out[g.name] ?? 0) + 1;
+    return out;
+  };
   return {
     runCounts: both(() => true),
     errorCounts: both((r) => r?.error !== null && r?.error !== undefined),
     excludedCounts: both((r) => r?.skippedPaidGraders === true),
+    // Amendment 2: runs with at least one judge call the safeguard refused, and which
+    // graders, so a reader can see whether the refusals fell on one defect.
+    judgeRefusedCounts: both((r) => refusedIn(r).length > 0),
+    judgeRefusedGraders: { with: byGrader(withRuns), without: withoutRuns === undefined ? null : byGrader(withoutRuns) },
   };
 }
 
@@ -920,6 +941,8 @@ function fillGroupFields(row, spec, docs, preRegistration, options) {
   row.runCounts = {};
   row.errorCounts = {};
   row.excludedCounts = {};
+  row.judgeRefusedCounts = {};
+  row.judgeRefusedGraders = {};
   for (const [condition, doc] of docs) {
     if (!findCase(doc, spec.name)) continue;
     const perGroup = spec.groups
@@ -929,6 +952,8 @@ function fillGroupFields(row, spec, docs, preRegistration, options) {
     row.runCounts[condition] = counts.runCounts;
     row.errorCounts[condition] = counts.errorCounts;
     row.excludedCounts[condition] = counts.excludedCounts;
+    row.judgeRefusedCounts[condition] = counts.judgeRefusedCounts;
+    row.judgeRefusedGraders[condition] = counts.judgeRefusedGraders;
   }
 
   const traceTexts = options?.traceTexts;
@@ -1233,7 +1258,7 @@ export function checkReport(report, preRegistration, ctx) {
     // errors, and the merge has already reduced them to scores by this point. A run
     // that failed scores 0 and is indistinguishable from a run that did badly.
     ...(ctx.sweeps ?? []).map((s, i) => [`I1c/${s.condition ?? i}`,
-      inv.i1cNoFailedRuns(s.document, preRegistration.runsPerCase)]),
+      inv.i1cNoFailedRuns(s.document, preRegistration.runsPerCase, { judgeRefusals: preRegistration.judgeRefusals })]),
     // I1b is the REPORT-WIDE floor, and it is measured from case-level delta rows. When
     // every delta case is registered `contrasts: 'groups'` there is no such row, the
     // spread is absent by design, and I1b would refuse a report for a number nothing was
@@ -1311,22 +1336,38 @@ function formatGroups(report, conditions) {
     for (const [name, contrasts] of Object.entries(r.groupContrasts)) {
       const unmeasurable = (r.unmeasurableGroups ?? []).includes(name);
       out.push(`### \`${r.case}\` · group \`${name}\``, '');
-      out.push('| condition | score | runs | errored | excluded | refused |');
-      out.push('|---|---|---|---|---|---|');
+      out.push('| condition | score | runs | errored | excluded | refused | judge refused |');
+      out.push('|---|---|---|---|---|---|---|');
       for (const c of conditions)
         out.push(`| ${c} | ${f2(r.groupScores?.[name]?.[c])} | ${counts('runCounts', c, 'with')} | ` +
           `${counts('errorCounts', c, 'with')} | ${counts('excludedCounts', c, 'with')} | ` +
-          `${counts('refusedCounts', c, 'with')} |`);
+          `${counts('refusedCounts', c, 'with')} | ${counts('judgeRefusedCounts', c, 'with')} |`);
       const baselines = r.groupBaselineScores?.[name] ?? [];
       out.push(`| none (per sweep) | ${baselines.map((n) => f2(n)).join(' · ') || '—'} | ` +
         `${conditions.map((c) => counts('runCounts', c, 'without')).join(' · ')} | ` +
         `${conditions.map((c) => counts('errorCounts', c, 'without')).join(' · ')} | ` +
         `${conditions.map((c) => counts('excludedCounts', c, 'without')).join(' · ')} | ` +
-        `${conditions.map((c) => counts('refusedCounts', c, 'without')).join(' · ')} |`);
+        `${conditions.map((c) => counts('refusedCounts', c, 'without')).join(' · ')} | ` +
+        `${conditions.map((c) => counts('judgeRefusedCounts', c, 'without')).join(' · ')} |`);
       out.push('');
       out.push('Runs present, runs that errored, runs excluded because a cost ceiling skipped their paid ' +
-        'graders, and runs whose kept trace named the fence. All four are registered reported figures: an ' +
-        'errored run counts and is not replaced, and a refused run counts and is not dropped.', '');
+        'graders, runs whose kept trace named the fence, and runs with at least one judge call the ' +
+        'API\'s safeguard refused. The first four are registered reported figures: an errored run counts ' +
+        'and is not replaced, and a refused run counts and is not dropped. The fifth is Amendment 2: a ' +
+        'refused judge call is not a verdict, so that grader leaves that run\'s denominator, and the ' +
+        'count says how often.', '');
+      const refusedLines = [];
+      for (const c of conditions) {
+        const byArm = r.judgeRefusedGraders?.[c];
+        for (const arm of ['with', 'without']) {
+          const entries = Object.entries(byArm?.[arm] ?? {});
+          if (entries.length)
+            refusedLines.push(`- ${c}, ${arm}-arm: ${entries.map(([g, n]) => `\`${g}\` ×${n}`).join(', ')}`);
+        }
+      }
+      if (refusedLines.length)
+        out.push('Which graders the safeguard refused, and how many times. A refusal that falls on one ' +
+          'defect\'s grader leans the score on that defect toward "not named":', '', ...refusedLines, '');
 
       if (unmeasurable) {
         out.push(`**unmeasurable.** This group's floor came out at or below ${inv.NOISE_EPSILON}, which is ` +
