@@ -317,6 +317,24 @@ test('I1c catches a grader that threw — a broken instrument is not a verdict',
   caught(inv.i1cNoFailedRuns(doc, 2), 'threw instead of judging');
 });
 
+test('I1c under judgeRefusals: unscored tolerates a safeguard refusal and nothing else (Amendment 2)', () => {
+  const refused = { name: 'reported-echo-bypass', passed: false,
+    explanation: 'grader threw: judge call failed: API Error: Opus 5\'s safeguards flagged this message (https://www.anthropic.com/legal/aup). Our intentionally broad safeguards…' };
+  const overloaded = { name: 'reported-x', passed: false, explanation: 'grader threw: judge call failed: API Error: 529 Overloaded.' };
+  const ok = { name: 'reported-y', passed: true, explanation: 'judge votes: PASS PASS PASS' };
+  const docWith = (bad) => ({ cases: [{ name: 'a', arms: { with: [{ score: 0.5, error: null, graders: [ok, bad] }, runOk(1)], without: [runOk(0), runOk(0)] } }] });
+  // As first registered, and for Tier 1: a refusal is a throw.
+  caught(inv.i1cNoFailedRuns(docWith(refused), 2), 'threw instead of judging');
+  caught(inv.i1cNoFailedRuns(docWith(refused), 2, { judgeRefusals: 'refuse' }), 'threw instead of judging');
+  // Under the amendment: the refusal passes, the 529 still does not.
+  assert.equal(inv.i1cNoFailedRuns(docWith(refused), 2, { judgeRefusals: 'unscored' }).ok, true);
+  caught(inv.i1cNoFailedRuns(docWith(overloaded), 2, { judgeRefusals: 'unscored' }), 'threw instead of judging');
+  assert.equal(inv.judgeRefusedBySafeguard(refused), true);
+  assert.equal(inv.judgeRefusedBySafeguard(overloaded), false);
+  assert.equal(inv.judgeRefusedBySafeguard({ explanation: 'safeguards flagged' }), false,
+    'the match needs the harness\'s own thrown-grader prefix, so a reply that merely says the words is not a refusal');
+});
+
 test('I1c accepts a turn-capped run — it was graded, so it measured something', () => {
   // harness-facts #9: a run that started and ended badly is still graded on what it
   // produced. Refusing those threw away four legitimate runs, one of which had placed

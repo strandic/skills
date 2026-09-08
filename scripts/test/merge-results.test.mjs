@@ -1278,6 +1278,31 @@ test('a single-arm case carries no without count, rather than a zero that reads 
   assert.equal('without' in counts.errorCounts, false);
 });
 
+test('a safeguard-refused judge call leaves the run`s group denominator and is counted (Amendment 2)', () => {
+  const refusedExpl = 'grader threw: judge call failed: API Error: Opus 5\'s safeguards flagged this message (https://www.anthropic.com/legal/aup).';
+  const run = (r1, r2Refused) => ({ score: 0, error: null, tracePath: '/t', graders: [
+    { name: 'r1', passed: r1, weight: 1, scored: true, explanation: r1 ? 'judge votes: PASS' : 'judge votes: FAIL' },
+    { name: 'r2', passed: false, weight: 1, scored: true, explanation: r2Refused ? refusedExpl : 'judge votes: FAIL' },
+  ] });
+  const doc = gDoc([run(true, true), run(true, false)], [run(false, false)]);
+  const group = { name: 'g', kind: 'graders', graders: ['r1', 'r2'] };
+  const scores = m.extractGroupRunScores(doc, 'defects', group);
+  assert.deepEqual(scores.with, [1, 0.5], 'the refused grader is out of the first run`s denominator: 1 of 1, not 1 of 2');
+  assert.deepEqual(scores.without, [0]);
+  const counts = m.countRuns(doc, 'defects');
+  assert.deepEqual(counts.judgeRefusedCounts, { with: 1, without: 0 });
+  assert.deepEqual(counts.judgeRefusedGraders, { with: { r2: 1 }, without: {} });
+});
+
+test('parsePreRegistration reads judgeRefusals: refuse by default, unscored only with a grader group', () => {
+  const pre = GPRE();
+  assert.equal(m.parsePreRegistration(gPreRegMd(pre)).judgeRefusals, 'refuse');
+  assert.equal(m.parsePreRegistration(gPreRegMd({ ...pre, judgeRefusals: 'unscored' })).judgeRefusals, 'unscored');
+  throws(() => m.parsePreRegistration(gPreRegMd({ ...pre, judgeRefusals: 'ignore' })), "neither 'refuse' nor 'unscored'");
+  throws(() => m.parsePreRegistration(PREREG_MD.replace('"publishAllConditions": true', '"publishAllConditions": true, "judgeRefusals": "unscored"')),
+    'no grader group');
+});
+
 test('countRuns refuses a group array that describes a different number of runs', () => {
   throws(() => m.countRuns(gDoc([gRun({ r1: 1 })]), 'defects', [[0.5, 0.5]]),
     'carries 2 with-arm scores for 1 runs');

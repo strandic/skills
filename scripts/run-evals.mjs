@@ -39,6 +39,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { check as checkDrift, pathsFor as mirrorPathsFor } from './build-conditions.mjs';
 import { instrumentDigest, conditionDigest } from './instrument.mjs';
+import * as inv from './invariants.mjs';
 import { parsePreRegistration } from './merge-results.mjs';
 
 /** Raised by a pure function that refuses its input, or by the loop before it spends. */
@@ -1298,16 +1299,19 @@ export function planSweep(cases, args, suitePaths = paths) {
  * @returns {{why: string, hint: string|null}|null}
  */
 /** `<case>/<arm> run N grader <name>: <explanation head>` for every grader that threw. */
-const gradersThrownIn = (document) =>
+const gradersThrownIn = (document, judgeRefusals = 'refuse') =>
   (document?.cases ?? []).flatMap((c) =>
     Object.entries(c.arms ?? {}).flatMap(([arm, runs]) =>
       (Array.isArray(runs) ? runs : []).flatMap((r, i) =>
         (r?.graders ?? [])
           .filter((g) => /grader threw|judge call failed/i.test(String(g?.explanation ?? '')))
+          // Amendment 2: under `judgeRefusals: 'unscored'` a safeguard refusal is not a
+          // throw, so it is not a reason to stop buying the rest of the sweep.
+          .filter((g) => !(judgeRefusals === 'unscored' && inv.judgeRefusedBySafeguard(g)))
           .map((g) => `${c.name}/${arm} run ${i + 1} grader ${g.name}: ` +
             `${String(g.explanation).replace(/^grader threw:\s*/i, '').slice(0, 60)}`))));
 
-export function sweepStopReason({ ablation, cases, result }) {
+export function sweepStopReason({ ablation, cases, result, judgeRefusals = 'refuse' }) {
   const named = `the --ablation ${ablation} invocation named ${(cases ?? []).join(', ')}`;
   if (isInterrupted(result.exitCode))
     return { why: `${named} and was killed by a signal (exit ${result.exitCode})`, hint: null };
@@ -1328,7 +1332,7 @@ export function sweepStopReason({ ablation, cases, result }) {
   // unpublishable under I1c whatever the other runs did, so every invocation after this
   // one is money spent on a record the merger will refuse. Paid for on 2026-09-03: the
   // Opus judge failed 35 of 45 calls across a $9 treatment sweep that ran to completion.
-  const threw = gradersThrownIn(result.document);
+  const threw = gradersThrownIn(result.document, judgeRefusals);
   if (threw.length > 0)
     return {
       why: `${named} and ${threw.length} grader call(s) threw instead of judging (first: ${threw[0]})`,
@@ -1693,7 +1697,8 @@ export async function main(argv) {
       parts.push({ ablation: planned.ablation, cases: planned.cases, argv: planned.argv, result });
       // Whether the next ablation is worth its budget is a decision, so it is made by a
       // pure function a test can drive rather than by three conditions inline here.
-      stop = sweepStopReason({ ablation: planned.ablation, cases: planned.cases, result });
+      stop = sweepStopReason({ ablation: planned.ablation, cases: planned.cases, result,
+        judgeRefusals: preRegistration.judgeRefusals });
       if (stop !== null) break;
     }
 

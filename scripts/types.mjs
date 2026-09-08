@@ -228,6 +228,14 @@
  *                                       `FLOOR_ERROR_MULTIPLIER` when the merge runs.
  *                                       Required of a registration that carries a groups
  *                                       case, absent from one that does not
+ * @property {'refuse'|'unscored'} [judgeRefusals]  what a judge call the API's safeguard
+ *                                       refused is. `'refuse'` (the default, and Tier 1's
+ *                                       rule): a throw, and I1c voids the record.
+ *                                       `'unscored'` (Amendment 2 of the defects
+ *                                       registration): not a verdict, so the grader leaves
+ *                                       that run's group denominator and the count is
+ *                                       published. Only a registration with grader groups
+ *                                       may say `'unscored'`
  * @property {string}     claudeVersion  the CLI version the predictions were made against;
  *                                       I2 voids a run whose report disagrees
  * @property {true}       publishAllConditions literal `true` — the undertaking to publish
@@ -442,6 +450,14 @@
  *                                       runs left out of every group score because their
  *                                       paid graders were skipped by a cost ceiling. Never
  *                                       scored as zero
+ * @property {Record<ConditionId, ArmCounts>} [judgeRefusedCounts]
+ *                                       runs with at least one judge call the API's
+ *                                       safeguard refused (Amendment 2 of the defects
+ *                                       registration). Such a grader is unscored for that
+ *                                       run, never failed; the count is published
+ * @property {Record<ConditionId, {with: Record<string, number>, without: Record<string, number>|null}>} [judgeRefusedGraders]
+ *                                       the same refusals by grader name, so a reader can
+ *                                       see which defect's grader they fell on
  * @property {Record<ConditionId, ArmCounts>} [refusedCounts]
  *                                       runs whose kept trace named a fence fragment (I9's
  *                                       second half), per condition and arm. Ruled at gate
