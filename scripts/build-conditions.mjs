@@ -111,7 +111,9 @@ export function suiteConditionPlan(suiteDir) {
     return {
       generated: { treatment: SHIPPED_SKILL },
       copied: { placebo: conditionPath('evals/seven-steps-primer', 'placebo') },
-      ablations: {},
+      // Amendment 1 of the defects registration: the same recon cut as Tier 1's, so the
+      // two suites' `treatment-no-recon` conditions are byte for byte the same text.
+      ablations: { 'treatment-no-recon': SHIPPED_SKILL },
     };
   throw new Error(`suiteConditionPlan: '${suiteDir}' is not a suite this generator serves ` +
     `(${SUITES.join(', ')}) — a suite whose conditions nothing generates has no drift check`);
