@@ -138,7 +138,10 @@ sweep has been run
 ([`RESULTS-2026-09-07-defects.md`](docs/plans/primer-evals/RESULTS-2026-09-07-defects.md)):
 the treatment named fewer than the placebo, as registered; as many as the one-liner, as
 registered; and no more than no instruction, which the registration predicted otherwise.
-The reasoning is in `docs/plans/primer-evals/defect-injection/`.
+A second sweep cut the recon text from the primer and found no difference
+([`RESULTS-2026-09-08-defects-no-recon.md`](docs/plans/primer-evals/RESULTS-2026-09-08-defects-no-recon.md)):
+on this fixture the only instruction that names planted defects is the one that says to
+read. The reasoning is in `docs/plans/primer-evals/defect-injection/`.
 
 ## Adding a skill
 

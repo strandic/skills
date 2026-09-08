@@ -197,6 +197,13 @@ The records are under `docs/plans/primer-evals/records/2026-09-07-defects/`. Of 
 registered directions, two held (fewer than the placebo; no different from the one-liner)
 and one did not (more than no instruction: the difference is inside its floor).
 
+A second sweep, 2026-09-08, added `treatment-no-recon` (Amendment 1: the primer minus
+the twelve lines that say recon is a run):
+[`RESULTS-2026-09-08-defects-no-recon.md`](../../docs/plans/primer-evals/RESULTS-2026-09-08-defects-no-recon.md).
+Registered −1, not held: the cut agent ran the feature and named nothing, like the
+treatment. Amendment 2 (a judge call the API's safeguard refuses is unscored, not
+failed) was needed to complete it.
+
 ## What is here
 
 ```

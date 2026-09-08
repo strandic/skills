@@ -1,0 +1,126 @@
+{
+  "treatment": {
+    "startedAt": "2026-09-07T12:08:49.188Z",
+    "conditionSha": "503291b82253aa2201649ef648eb273b572f3a5c9a7695e205b883caab2ae80e",
+    "from": "the merge of 2026-09-07 (RESULTS-2026-09-07-defects.md: refused 0 in every cell), transcribed 2026-09-08 after the kept sandboxes had been deleted",
+    "verdicts": {
+      "with": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "without": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  },
+  "placebo": {
+    "startedAt": "2026-09-07T13:29:09.224Z",
+    "conditionSha": "0ddcff104f11e069b040afd2660484484b066749a615b71b80ae9c313e7adfd7",
+    "from": "the merge of 2026-09-07 (RESULTS-2026-09-07-defects.md: refused 0 in every cell), transcribed 2026-09-08 after the kept sandboxes had been deleted",
+    "verdicts": {
+      "with": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "without": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  },
+  "run-oneliner": {
+    "startedAt": "2026-09-07T17:38:34.837Z",
+    "conditionSha": "fb85d01885a699f98bf73c81c5030e8a9762ce02b2b8cb01cd8d1ba7229d8a1d",
+    "from": "the merge of 2026-09-07 (RESULTS-2026-09-07-defects.md: refused 0 in every cell), transcribed 2026-09-08 after the kept sandboxes had been deleted",
+    "verdicts": {
+      "with": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "without": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  },
+  "treatment-no-recon": {
+    "startedAt": "2026-09-08T17:00:43.227Z",
+    "conditionSha": "4e6a35a2381b9ecb1cebdaa25b09464f6eed418ccd2f51eeefed25e3cb4654c2",
+    "from": "the merge of 2026-09-08 at suite 37477be",
+    "verdicts": {
+      "with": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "without": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    }
+  }
+}
