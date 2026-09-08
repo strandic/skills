@@ -450,6 +450,10 @@
  *                                       runs left out of every group score because their
  *                                       paid graders were skipped by a cost ceiling. Never
  *                                       scored as zero
+ * @property {Record<ConditionId, {with: (string|null)[], without: (string|null)[]}>} [fenceVerdicts]
+ *                                       per run, the fence fragment its trace named or
+ *                                       null; archived by a passed merge so a re-merge
+ *                                       after the sandboxes are deleted can carry it
  * @property {Record<ConditionId, ArmCounts>} [judgeRefusedCounts]
  *                                       runs with at least one judge call the API's
  *                                       safeguard refused (Amendment 2 of the defects

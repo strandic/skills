@@ -145,3 +145,11 @@ judge; four are "unsure", all cause-only mentions the judge passed. Key and labe
 **2026-09-08, cleanup.** Five stray `node server.js` processes killed; 233 kept
 sandboxes removed (47 MB; the harness had emptied the workspaces, the traces had been
 read). Gate 7 presented.
+
+**2026-09-08, the recon cut (after gate 7).** Amendment 1 registered `treatment-no-recon`
+at −1. Five attempts to sweep it: two void under the judge's safeguard classifier
+(Amendment 2 followed), one to an expired login, one to the session limit, the fifth
+complete. Result: +0.01, inside the floor; not held. The cleanup step above deleted the
+first three records' traces before this re-merge was foreseen; the merger now archives
+fence verdicts (`fence-verdicts.json`) so a later re-merge survives a cleanup. **Do not
+delete kept sandboxes until the archive exists for every record they belong to.**

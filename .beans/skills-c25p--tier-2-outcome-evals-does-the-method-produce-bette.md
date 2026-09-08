@@ -29,3 +29,5 @@ Children and order: skills-fqdf (section ablation) first, blocked by skills-ccsx
 2026-09-06: experiment 1 (section ablation, skills-fqdf plus the recon cut skills-btt2) is complete and closed; Tier 1 is exhausted on this fixture. Experiment 2 is skills-g1qk, the next thing to spend on. Experiment 3 waits on it.
 
 2026-09-08: experiment 2 (skills-g1qk) is complete and closed: on the seeded fixture the primer's step 4 names fewer planted defects than the placebo's read-through (registered −1, held), as many as a one-line "run it" (registered 0, held), and no more than no instruction (registered +1, not held). RESULTS-2026-09-07-defects.md. Next: the "Later: ablate recon" re-run of the defects suite, then experiment 3.
+
+2026-09-08: the "Later: ablate recon" re-run is done (RESULTS-2026-09-08-defects-no-recon.md). Registered −1, not held: cutting the recon text changes nothing the reported score sees; the cut agent runs the feature and names nothing, like the treatment. Two amendments on the defects registration (the condition; safeguard-refused judge calls unscored). Next: experiment 3, skills-hvqb.

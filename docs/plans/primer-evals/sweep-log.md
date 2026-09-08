@@ -15,6 +15,10 @@ is the durable list. Costs are the harness's API-equivalent estimate.
 | 2026-09-07 | Tier 2 defects suite: full sweep, 10 runs each arm | treatment, placebo, run-oneliner | $37.93 | published, `RESULTS-2026-09-07-defects.md`; records under `records/2026-09-07-defects/` |
 | 2026-09-07 | Tier 2 defects suite: first run-oneliner attempt | run-oneliner | $0.28 | **void** — session limit at run 1; re-run whole the same evening (counted in the row above) |
 | 2026-09-07 | Tier 2 defects suite: `step4-read-only` diagnostic, treatment, 5 runs each arm, from a copy of the suite | treatment | $3.58 | ten of ten runs stopped at the denied tool; `RESULTS-2026-09-07-defects.md`, "The read-only diagnostic" |
+| 2026-09-08 | Tier 2 defects suite, Amendment 1: `treatment-no-recon`, attempts 1 and 2 | treatment-no-recon | ~$11 | **void** ×2 — the Opus judge's safeguard classifier refused `reported-echo-bypass` calls; led to Amendment 2 |
+| 2026-09-08 | the same, attempt 3 under Amendment 2 | treatment-no-recon | $11.12 | **void** — OAuth session expired on the without-arm's last five runs |
+| 2026-09-08 | the same, attempt 4 | treatment-no-recon | ~$1 | **void** — session limit at run 2 |
+| 2026-09-08 | the same, attempt 5 | treatment-no-recon | $13.86 | published, `RESULTS-2026-09-08-defects-no-recon.md`; the three 2026-09-07 records' fence verdicts carried from the archive (their sandboxes had been deleted) |
 | 2026-09-03 | full sweep after Amendments 5 and 6, started 16:00 | treatment (complete), oneliner (2 of 5 cases) | $11.37 | **aborted at 16:57**: the Opus judge returned `API Error: 529 Overloaded` on 35 of 45 treatment judge calls and 10 of 10 in the oneliner's first case. Both records are void under I1c. Nothing published. The runner now stops at the first thrown grader (7a004ec) |
 
 | 2026-09-04 | runner smoke with the re-fetched 2.1.250 binary, 1 run | treatment | $0.59 | judge healthy again; pinned binary works |

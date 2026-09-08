@@ -862,7 +862,7 @@ export function markNoiseFloor(rows, spread) {
  * @param {PreRegistration} preRegistration
  * @param {{traceTexts?: Record<string, string|null>, traceFragments?: string[]}} options
  */
-function fillGroupFields(row, spec, docs, preRegistration, options) {
+function fillGroupFields(row, spec, docs, preRegistration, options, records = new Map()) {
   const finite = (xs) => (xs ?? []).filter((n) => Number.isFinite(n));
   row.groupScores = {};
   row.groupRunScores = {};
@@ -962,17 +962,39 @@ function fillGroupFields(row, spec, docs, preRegistration, options) {
       'refused-run count is published');
   } else {
     const traces = [];
+    const archived = options?.fenceVerdicts ?? {};
     for (const [condition, doc] of docs) {
       const c = findCase(doc, spec.name);
       if (!c) continue;
       for (const arm of ['with', 'without'])
         (c.arms[arm] ?? []).forEach((r, i) => {
           const path = r?.tracePath ?? '';
-          const text = path === '' ? undefined : traceTexts[path];
+          let text = path === '' ? undefined : traceTexts[path];
+          // A trace no longer on disk may have a verdict archived by an earlier merge of
+          // the SAME record (matched by the sweep's start time and condition digest, so a
+          // re-swept condition never inherits an old verdict). The verdict is replayed as
+          // a text the fence check reads the same way — the fragment it hit, or nothing —
+          // and the report says the verdict was carried, not re-read.
+          const key = `${condition}/${arm}/${i + 1}`;
+          const entry = archived[condition];
+          const carried = (typeof text !== 'string' && entry
+            && entry.startedAt === doc.startedAt && entry.conditionSha === records.get(condition)?.conditionSha
+            && Array.isArray(entry.verdicts?.[arm]) && entry.verdicts[arm].length === (c.arms[arm] ?? []).length)
+            ? entry.verdicts[arm][i] : undefined;
+          if (carried !== undefined) {
+            text = carried === null ? '' : String(carried);
+            row.advisories.push(`fence: ${key}: verdict carried from ${entry.from ?? 'an earlier merge'} — the trace is no longer on disk`);
+          }
           traces.push({ condition, arm, run: i + 1, text: text ?? undefined });
         });
     }
     const flags = inv.i9TraceFlags(traces, options.traceFragments ?? FENCE_FRAGMENTS);
+    row.fenceVerdicts = {};
+    for (const t of traces) {
+      if (typeof t.text !== 'string') continue;
+      const hit = (options.traceFragments ?? FENCE_FRAGMENTS).find((f) => t.text.includes(f)) ?? null;
+      ((row.fenceVerdicts[t.condition] ??= { with: [], without: [] })[t.arm])[t.run - 1] = hit;
+    }
     row.refusedCounts = flags.refusedCounts;
     for (const f of flags.flagged) row.advisories.push(`fence: ${f}`);
     for (const v of flags.violations) row.advisories.push(`fence: ${v}`);
@@ -1019,6 +1041,28 @@ function fillGroupFields(row, spec, docs, preRegistration, options) {
  * so a rule that refused any repository path would flag every with-arm run.
  */
 export const FENCE_FRAGMENTS = ['/defects/', 'skills/seven-steps-primer', 'fixtures/notesvc/'];
+
+/**
+ * FenceVerdictsFor — what a passed merge archives, so a later re-merge of the same
+ * records survives the kept sandboxes being deleted. One entry per condition: the sweep's
+ * start time and condition digest (the identity a fallback is matched on), the verdict of
+ * every run (the fragment its trace named, or null), and where it came from.
+ *
+ * @param {MergedReport} report
+ * @param {SweepRecord[]} sweeps
+ * @param {string} from  a sentence naming this merge
+ * @returns {Record<string, {startedAt: string, conditionSha: string, from: string, verdicts: {with: (string|null)[], without: (string|null)[]}}>}
+ */
+export function fenceVerdictsFor(report, sweeps, from) {
+  const out = {};
+  for (const row of report.deltaRows ?? [])
+    for (const [condition, verdicts] of Object.entries(row.fenceVerdicts ?? {})) {
+      const s = sweeps.find((x) => x.condition === condition);
+      if (!s) continue;
+      out[condition] = { startedAt: s.document.startedAt, conditionSha: s.conditionSha, from, verdicts };
+    }
+  return out;
+}
 
 /**
  * MergeSweeps — three sweeps into one comparison.
@@ -1160,7 +1204,7 @@ export function mergeSweeps(sweeps, preRegistration, provenance, options = {}) {
     }
 
     if ((spec.contrasts ?? 'case') === 'groups')
-      fillGroupFields(row, spec, docs, preRegistration, options);
+      fillGroupFields(row, spec, docs, preRegistration, options, records);
     else if (spec.evidence === 'delta' && comparable)
       row.contrasts = computeContrasts(row.conditionScores, row.baselineScores, preRegistration, spec.name);
 
@@ -1787,7 +1831,11 @@ async function main(argv) {
             if (typeof r?.tracePath === 'string' && r.tracePath !== '' && !(r.tracePath in traceTexts))
               traceTexts[r.tracePath] = await readTextFile(r.tracePath).catch(() => null);
   }
-  const report = mergeSweeps(sweeps, preRegistration, provenance, { traceTexts });
+  // The fence archive: written by every merge that passes, read when a trace is gone.
+  const fenceArchivePath = join(resultsDir, 'fence-verdicts.json');
+  const fenceVerdicts = traceTexts === undefined ? undefined
+    : await readTextFile(fenceArchivePath).then((t) => JSON.parse(t)).catch(() => ({}));
+  const report = mergeSweeps(sweeps, preRegistration, provenance, { traceTexts, fenceVerdicts });
 
   // Taken now, over the tree being merged from — so a grader, fixture or condition edited
   // between the sweeps and this merge is caught by I2b rather than published.
@@ -1825,6 +1873,20 @@ async function main(argv) {
   }
 
   const text = formatComparison(report);
+  if (traceTexts !== undefined) {
+    const fresh = fenceVerdictsFor(report, sweeps,
+      `the merge of ${new Date().toISOString().slice(0, 10)} at suite ${provenance.suiteSha?.slice(0, 7) ?? '?'}`);
+    // A verdict's provenance is the FIRST merge that read the trace: an entry the archive
+    // already carries for the same record keeps its own `from`, so a carried verdict is
+    // never re-labelled as freshly read.
+    const archive = { ...(fenceVerdicts ?? {}) };
+    for (const [condition, entry] of Object.entries(fresh)) {
+      const prior = archive[condition];
+      const same = prior && prior.startedAt === entry.startedAt && prior.conditionSha === entry.conditionSha;
+      archive[condition] = same ? { ...entry, from: prior.from } : entry;
+    }
+    await writeTextFile(fenceArchivePath, `${JSON.stringify(archive, null, 2)}\n`);
+  }
   if (outPath) {
     await writeTextFile(outPath, text);
     process.stderr.write(`wrote ${outPath}\n`);

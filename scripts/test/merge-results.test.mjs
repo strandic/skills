@@ -1471,6 +1471,32 @@ test('a trace that could not be read is a violation, not a clean run', () => {
   assert.equal(check.ok, false);
 });
 
+test('a missing trace takes its archived verdict when the archive names the same record, and says so', () => {
+  const sweeps = gSweeps();
+  const traces = gTraces(sweeps);
+  const first = sweeps[0];
+  const gone = first.document.cases[0].arms.with[0].tracePath;
+  traces[gone] = null;
+  const archive = { treatment: { startedAt: first.document.startedAt, conditionSha: first.conditionSha, from: 'the merge of 2026-09-07',
+    verdicts: { with: ['/defects/', null], without: [null, null] } } };
+  const report = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv), { traceTexts: traces, fenceVerdicts: archive });
+  const row = report.deltaRows[0];
+  assert.equal(row.refusedCounts.treatment.with, 1, 'the archived verdict for the missing run was a flag, and it is counted');
+  assert.match(row.advisories.join(' '), /fence: treatment\/with\/1: verdict carried from the merge of 2026-09-07/);
+  assert.match(row.advisories.join(' '), /fence: treatment\/with\/1: names \/defects\//);
+  assert.deepEqual(row.fenceVerdicts.treatment, { with: ['/defects/', null], without: [null, null] });
+  // A re-swept condition never inherits: a different start time or digest is a different record.
+  for (const over of [{ startedAt: '1999-01-01T00:00:00.000Z' }, { conditionSha: 'deadbeef' }]) {
+    const stale = { treatment: { ...archive.treatment, ...over } };
+    const r2 = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv), { traceTexts: traces, fenceVerdicts: stale });
+    assert.equal(r2.deltaRows[0].refusedCounts.treatment, undefined, 'no verdict, no count');
+    assert.match(r2.deltaRows[0].advisories.join(' '), /no trace text/);
+  }
+  const archived = m.fenceVerdictsFor(report, sweeps, 'this merge');
+  assert.equal(archived.treatment.startedAt, first.document.startedAt);
+  assert.deepEqual(archived.treatment.verdicts.with, ['/defects/', null]);
+});
+
 test('a merge handed no traces at all publishes no fence count, and I12 refuses the report', () => {
   const sweeps = gSweeps();
   const report = m.mergeSweeps(sweeps, GPRE(), structuredClone(gProv));
