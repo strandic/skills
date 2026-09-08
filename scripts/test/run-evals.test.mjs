@@ -1336,5 +1336,5 @@ test('the two registrations name the run counts the runner will default to', asy
   const tier2 = parsePreRegistration(await readTextFile('evals/seven-steps-primer-defects/PRE-REGISTRATION.md'));
   assert.equal(tier1.runsPerCase, 5);
   assert.equal(tier2.runsPerCase, 10);
-  assert.deepEqual(tier2.conditions, ['treatment', 'placebo', 'run-oneliner']);
+  assert.deepEqual(tier2.conditions, ['treatment', 'placebo', 'run-oneliner', 'treatment-no-recon']);
 });

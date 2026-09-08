@@ -233,7 +233,10 @@ test('every suite the generator serves declares what each of its conditions is d
   assert.deepEqual(Object.keys(tier2.generated), ['treatment']);
   assert.deepEqual(Object.keys(tier2.copied), ['placebo']);
   assert.match(tier2.copied.placebo, /evals\/seven-steps-primer\/conditions\/placebo\/SKILL\.md$/);
-  assert.deepEqual(tier2.ablations, {}, 'the section ablations belong to the first suite`s registration');
+  assert.deepEqual(Object.keys(tier2.ablations), ['treatment-no-recon'],
+    'Amendment 1 of the defects registration: the recon cut, and no section ablation — those belong to the first suite`s registration');
+  assert.equal(tier2.ablations['treatment-no-recon'], tier1.ablations['treatment-no-recon'],
+    'the same cut from the same shipped skill, so the two suites` recon-cut texts are byte for byte the same');
 });
 
 test('an authored condition is in no plan, so nothing regenerates the text under test', () => {
