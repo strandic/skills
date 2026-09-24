@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-09-24T15:54:00Z
+updated_at: 2026-09-24T15:56:05Z
 parent: skills-sp16
 blocking:
     - skills-p4oc
@@ -19,3 +19,5 @@ Report what each branch loads, measured the same way at every retro, in the word
 
 - [ ] measuring command written into the retro section or the workflow
 - [ ] first reading recorded at the next retro
+
+Estimator note (2026-09-24): `claude plugin details` gives shawarma ~4.2k on-invoke tokens through `--plugin-dir` but ~3.1k for the marketplace-installed copy. The meter pins one path and never compares readings across them.
