@@ -1,0 +1,21 @@
+---
+# skills-tkc0
+title: 'shawarma retro: a size meter per branch'
+status: todo
+type: task
+priority: normal
+created_at: 2026-09-24T15:53:50Z
+updated_at: 2026-09-24T15:54:00Z
+parent: skills-sp16
+blocking:
+    - skills-p4oc
+---
+
+Report what each branch loads, measured the same way at every retro, in the word-count table the retro already writes. It is the number the size objective is judged by.
+
+- per branch (`plan`, `run`, `retro`): the skill files it reads and their total; SKILL.md's on-invoke tokens from `claude plugin details --plugin-dir <skill>`, the other files in bytes and words
+- the host's house rules and lessons-since-marker reported beside, not counted
+- baseline (2026-09-24): SKILL.md ~4.3k tokens on invoke; `plan` as loaded ~8k tokens
+
+- [ ] measuring command written into the retro section or the workflow
+- [ ] first reading recorded at the next retro
