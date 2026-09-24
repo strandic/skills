@@ -6,17 +6,17 @@
   },
   "metadata": {
     "description": "Skills from Strandic for building software with AI agents, deliberately.",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "plugins": [
     {
       "name": "strandic",
       "source": "./",
       "description": "Skills from Strandic for building software with AI agents, deliberately.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": { "name": "Strandic" },
       "category": "workflow",
-      "keywords": ["skills", "agents", "claude-code", "method", "seven-steps"]
+      "keywords": ["skills", "agents", "claude-code", "method", "seven-steps", "shawarma"]
     }
   ]
 }

@@ -39,6 +39,7 @@ Installed this way, skills are namespaced under the plugin, e.g.
 | Skill | What it does |
 |---|---|
 | [`seven-steps-primer`](skills/seven-steps-primer/SKILL.md) | A step-gated method for building one medium, structural feature with an agent, without slop — each step produces one small artifact, then stops at a gate *you* clear. The agent never advances a gate itself. |
+| [`shawarma`](skills/shawarma/SKILL.md) | Plan one settled ticket as a brief whose claims were executed before they were frozen, then run it — blind tests first, one implementer, a review wave — to a PR. The orchestrator owns git and every human gate; `retro` reviews the method itself. Invoked explicitly (`/shawarma plan\|run\|retro`); built for Claude Code — its lanes are subagents, and `retro` runs a Workflow script. |
 
 ## Evals — does the skill actually do anything?
 
