@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:10Z
-updated_at: 2026-09-24T15:56:05Z
+updated_at: 2026-09-24T16:06:51Z
 blocking:
     - skills-x895
     - skills-tkc0
@@ -28,3 +28,5 @@ Files, byte-identical to the installed copy (revision of 2026-09-23): `SKILL.md`
 Branch `feat/shawarma` (worktree `.worktrees/shawarma`), one commit on top of the beans commit. Readings: `claude plugin validate --strict` passed on both manifests; `claude plugin details --plugin-dir` lists seven-steps-primer and shawarma at 0.2.0; a marketplace add + install in a throwaway config dir cached all four files; `npx skills add <checkout> -l` listed both skills, and `--skill shawarma -a claude-code --copy` wrote all four files, byte-identical. The commit also applies cleanly onto origin/main.
 
 Publishing waits on a decision: local main is 17 commits ahead of origin (unpushed primer-eval work), so either main is pushed with them, or this one commit goes up alone, rebased onto origin/main.
+
+PR #2 open (2026-09-24): https://github.com/strandic/skills/pull/2 — the shawarma commit alone, rebased onto origin/main; local main's other commits stay unpushed. Merge is the maintainer's; after it, local main rebases onto origin/main and the skill store becomes a symlink to `skills/shawarma` (ruled: one copy).
