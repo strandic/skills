@@ -1,13 +1,14 @@
 {
   "name": "strandic",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Skills from Strandic for building software with AI agents, deliberately.",
   "author": { "name": "Strandic", "url": "https://strandic.com" },
   "homepage": "https://github.com/strandic/skills#readme",
   "repository": "https://github.com/strandic/skills",
   "license": "MIT",
-  "keywords": ["skills", "agents", "claude-code", "method", "seven-steps"],
+  "keywords": ["skills", "agents", "claude-code", "method", "seven-steps", "shawarma"],
   "skills": [
-    "./skills/seven-steps-primer"
+    "./skills/seven-steps-primer",
+    "./skills/shawarma"
   ]
 }
