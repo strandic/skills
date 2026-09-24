@@ -5,7 +5,7 @@ status: in-progress
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:10Z
-updated_at: 2026-09-24T15:54:00Z
+updated_at: 2026-09-24T15:56:05Z
 blocking:
     - skills-x895
     - skills-tkc0
@@ -16,9 +16,15 @@ Import the shawarma method skill (`/shawarma plan|run|retro`) from the local ski
 
 Files, byte-identical to the installed copy (revision of 2026-09-23): `SKILL.md`, `spike.md`, `brief-template.md`, `retro-workflow.js`. Read in full for publication: generic wording, no host-project names, paths or private content.
 
-- [ ] skill files copied, byte-identical (`diff -r`)
-- [ ] `plugin.json` skills array; version 0.1.0 -> 0.2.0 in both manifests (plugin.json pins the version: marketplace users receive changes only on a bump)
-- [ ] README Skills table row
-- [ ] verified: `claude plugin validate --strict`, `claude plugin details` via `--plugin-dir`, native marketplace round-trip in a throwaway config dir, npx install into a temp project
+- [x] skill files copied, byte-identical (`diff -r`)
+- [x] `plugin.json` skills array; version 0.1.0 -> 0.2.0 in both manifests (plugin.json pins the version: marketplace users receive changes only on a bump)
+- [x] README Skills table row
+- [x] verified: `claude plugin validate --strict`, `claude plugin details` via `--plugin-dir`, native marketplace round-trip in a throwaway config dir, npx install into a temp project
 - [ ] published (push or PR: the maintainer's call; local main is ahead of origin)
 - [ ] after merge: the local skill store points at this repo's `skills/shawarma` (one copy), and retro installs commit here
+
+## Progress 2026-09-24
+
+Branch `feat/shawarma` (worktree `.worktrees/shawarma`), one commit on top of the beans commit. Readings: `claude plugin validate --strict` passed on both manifests; `claude plugin details --plugin-dir` lists seven-steps-primer and shawarma at 0.2.0; a marketplace add + install in a throwaway config dir cached all four files; `npx skills add <checkout> -l` listed both skills, and `--skill shawarma -a claude-code --copy` wrote all four files, byte-identical. The commit also applies cleanly onto origin/main.
+
+Publishing waits on a decision: local main is 17 commits ahead of origin (unpushed primer-eval work), so either main is pushed with them, or this one commit goes up alone, rebased onto origin/main.
