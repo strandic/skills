@@ -23,7 +23,7 @@ export const meta = {
     { title: 'Evidence + Research', detail: 'artifact auditors and sourced researchers, concurrently' },
     { title: 'Propose', detail: 'two proposers with opposing lenses (lean vs rigor)' },
     { title: 'Consolidate', detail: 'one numbered proposition list with exact proposed wording' },
-    { title: 'Test, Argue, Verify', detail: 'replay against the recorded runs, two critics, citation re-fetch' },
+    { title: 'Test, Argue, Verify', detail: 'replay against the recorded runs, two critics, a cold reader, citation re-fetch' },
   ],
 }
 
@@ -87,21 +87,22 @@ const proposers = await parallel(Object.entries(lens).map(([k, v]) => () =>
 
 phase('Consolidate')
 const consolidated = await agent(`Consolidate two independent proposal sets into ONE numbered list.${RULES}
-Merge duplicates; keep genuine disagreements between the lenses as separate alternatives (P4a / P4b); drop nothing silently. For each, write the EXACT proposed wording and where it goes (SKILL.md, spike.md, brief-template.md, the repo's house rules, a kept tool). Keep the method's voice: terse, imperative. Order by expected benefit. Apply nothing.
+Merge duplicates; keep genuine disagreements between the lenses as separate alternatives (P4a / P4b); drop nothing silently. For each, write the EXACT proposed wording and where it goes (SKILL.md, spike.md, brief-template.md, the repo's house rules, a kept tool). Keep the method's voice: terse, imperative. Order by expected benefit. List every lesson and open item since the last marker as adopted, dropped or carried. Apply nothing.
 LEAN: ${JSON.stringify(proposers[0])}\nRIGOR: ${JSON.stringify(proposers[1])}${INPUTS}
 Write the document to ${A.outDir}/propositions.md.`, { label: 'consolidate', phase: 'Consolidate', schema: CONSOLIDATED })
 const PROPS = JSON.stringify(consolidated)
 
 phase('Test, Argue, Verify')
 const cites = research.flatMap(r => r.findings.map(f => ({ url: f.source_url, quote: f.quote })))
-const [replay, criticLean, criticRigor, citeCheck] = await parallel([
+const [replay, criticLean, criticRigor, coldReader, citeCheck] = await parallel([
   () => agent(`TEST each proposition by replaying it against every recorded run.${RULES}
 Which specific incident would it have prevented or shortened, in which run, and how — mechanically? Where would it have HURT? Estimate the added cost per run. A proposition that would have changed nothing is "neutral" however sensible it sounds; be willing to return "loss".\nPROPOSITIONS: ${PROPS}\nEVIDENCE: ${JSON.stringify(evidence)}`, { label: 'test:replay', phase: 'Test, Argue, Verify', schema: REPLAY }),
   () => agent(`You are the LEAN CRITIC. Refute.${RULES}
 For each proposition argue why NOT: ceremony, a rule that will be ignored, duplication, a cheaper mechanical alternative, evidence too thin. Default to "drop" when the benefit is speculative, "modify" with the smaller version when one exists. Total up what adopting every "keep" would add to the method's text, in words, and say whether it still reads in one pass. List rules in the CURRENT method that the runs suggest deleting.\nPROPOSITIONS: ${PROPS}`, { label: 'argue:lean critic', phase: 'Test, Argue, Verify', schema: CRITIQUE }),
   () => agent(`You are the RIGOR CRITIC. Find what is still broken.${RULES}
 For each proposition: does it close the hole it names, or restate the intent? Could an agent satisfy the wording while repeating the failure? What new failure mode does it create? Then list every friction item NO proposition addresses, and every place the orchestrator still grades its own homework.\nPROPOSITIONS: ${PROPS}\nEVIDENCE: ${JSON.stringify(evidence)}`, { label: 'argue:rigor critic', phase: 'Test, Argue, Verify', schema: CRITIQUE }),
+  () => agent(`You are the COLD READER. You know nothing of the project these propositions came from: read no file, run no command. For each proposition's wording below, flag every phrase you could not apply in an unrelated project (a ticket id, a name, a path, a domain's vocabulary, an example only that project would recognise) and give a generic rewording that keeps the class of failure. A wording with nothing to flag reads keep.\nPROPOSITIONS: ${PROPS}`, { label: 'argue:cold reader', phase: 'Test, Argue, Verify', schema: CRITIQUE, agentType: 'Explore' }),
   () => agent(`You are a citation verifier.${RULES}\n${WEB}\nRE-FETCH every URL below yourself and check the quote appears verbatim. Check every pair; if there are more than 45, check the first 45 and say how many you skipped.\nPAIRS: ${JSON.stringify(cites)}`, { label: 'verify:citations', phase: 'Test, Argue, Verify', schema: CITES }),
 ])
 
-return { evidence, research_counts: research.map(r => r.findings.length), research_not_found: research.flatMap(r => r.not_found || []), consolidated, replay, criticLean, criticRigor, citeCheck, outDir: A.outDir }
+return { evidence, research_counts: research.map(r => r.findings.length), research_not_found: research.flatMap(r => r.not_found || []), consolidated, replay, criticLean, criticRigor, coldReader, citeCheck, outDir: A.outDir }
