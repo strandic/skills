@@ -16,6 +16,10 @@
 // misread. Any new mechanism is tested as a second arm with its adoption rule written beforehand —
 // and a mechanism that itself spawns an agent (a lane the planner launches) must be played by the
 // replay script as its own stage: workflow subagents have no Agent tool (2026-09-22 round).
+// The retro first diffs the skill against its last installed version; any other change is one of its
+// propositions, its words counted in the budget. Before install, a grep for the project's ticket ids and
+// names finds nothing in the draft, and an agent holding only the draft flags every sentence it could not
+// apply in an unrelated project.
 export const meta = {
   name: 'shawarma-retro',
   description: 'Retrospective on the shawarma method: audit the run record against the artifacts, research with fetched quotes, propose from a lean and a rigor lens, consolidate, then replay, critique and verify. Read-only; ends in propositions for the human.',
