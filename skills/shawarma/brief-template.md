@@ -1,10 +1,10 @@
 # <ticket> — <title>
 
-Ticket `<id>` (+ folded siblings and why) · authority: <the ticket's rulings / ADR / evidence> · planned <date> (<model>; skill <version>) at base `<commit subject>` [· refreshed <date>, supersedes `<old path>`] · proposed branch `<name>` in `<worktree path>` (created by `run`), PR + <merge style>. Everything in §3 is **frozen**: whoever needs to change it stops and reports. Commands: see the house rules — not restated here, except in §5. Lessons read: <n> matching since the last retro marker, cited in §2 — or `none`.
+Ticket `<id>` (+ folded siblings and why) · authority: <the ticket's rulings / ADR / evidence> · planned <date> (<model>; skill <version>) at base `<commit subject>` [· refreshed <date>, supersedes `<old path>`] · proposed branch `<name>` in `<worktree path>` (created by `run`), PR + <merge style>. Everything in §3 is **frozen**: whoever needs to change it stops and reports. Lessons read: <n> matching since the last retro marker, cited in §2 — or `none`.
 
 ## 1. What (the defect or goal, measured)
 
-The evidence, each number with the command or committed document that produced it, `file:line`. Workers cannot open the tracker, your scratch or ignored reports: never cite them as evidence.
+The evidence, `file:line`. Workers cannot open the tracker, your scratch or ignored reports: never cite them as evidence.
 
 ## 2. The design
 
@@ -30,7 +30,7 @@ Signatures, data shapes, doc-comment rules. If the change has an error surface: 
 
 Numbered and named, file per test, one reason to go red each. Synthetic data only. The executed test file sits beside the brief.
 
-- *red* — must fail on the tests commit; the assertion as executed on the base, verbatim from the spike, so a test that cannot load or compile cannot pass for it and a paraphrase cannot weaken it.
+- *red* — must fail on the tests commit; the assertion as executed on the base, verbatim from the spike.
 - *guard* — green before and after; pins what must not change.
 
 **Existing tests that change** (the spike's patched suite run, new fixtures in place; a flipped expectation is a ruling):
@@ -69,8 +69,6 @@ Attack lines, one per row, each one input or one verb sequence with the oracle t
 Mutants for 3b, one per row:
 
 - `mutant: <the one-line patch, as executed> → <tests red on the final §4 files> (<output path>)`
-
-More than one implementer only with an argued line here: disjoint files and no shared new symbol, key or contract.
 
 ## 8. Out of scope (recorded so nobody drifts)
 
