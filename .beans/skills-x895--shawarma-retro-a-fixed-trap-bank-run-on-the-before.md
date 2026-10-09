@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-09-24T15:54:00Z
+updated_at: 2026-10-09T05:59:34Z
 parent: skills-sp16
 blocking:
     - skills-jk6n
@@ -26,3 +26,7 @@ Lands at the next retro (skill files change only there); the bank's data can be 
 - [ ] at most 6 cases assembled in the host project, one per failure class
 - [ ] retro-workflow.js runs the bank on both arms, re-running only disagreeing cells
 - [ ] noise calibration read once and recorded
+
+## Round 6 (2026-10-09, bigbrain docs/retros/2026-10-08-shawarma-round-6/, skill v0.6.0 0f5fa13)
+
+Not done: a one-off replay ran instead (2 tickets, rubric committed first, draft only — not before-text vs draft). Its two cases (a config flag contradicting the disk; error-surface 'unchanged' claims and dependency default limits) are bank candidates.
