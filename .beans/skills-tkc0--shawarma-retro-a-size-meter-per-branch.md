@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-09-24T15:56:05Z
+updated_at: 2026-10-09T05:59:34Z
 parent: skills-sp16
 blocking:
     - skills-p4oc
@@ -21,3 +21,7 @@ Report what each branch loads, measured the same way at every retro, in the word
 - [ ] first reading recorded at the next retro
 
 Estimator note (2026-09-24): `claude plugin details` gives shawarma ~4.2k on-invoke tokens through `--plugin-dir` but ~3.1k for the marketplace-installed copy. The meter pins one path and never compares readings across them.
+
+## Round 6 (2026-10-09, bigbrain docs/retros/2026-10-08-shawarma-round-6/, skill v0.6.0 0f5fa13)
+
+Not done: words only were reported (SKILL 2582, spike 1214, template 887, workflow 2414); no per-branch token reading.
