@@ -1,6 +1,6 @@
 {
   "name": "strandic",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Skills from Strandic for building software with AI agents, deliberately.",
   "author": { "name": "Strandic", "url": "https://strandic.com" },
   "homepage": "https://github.com/strandic/skills#readme",
