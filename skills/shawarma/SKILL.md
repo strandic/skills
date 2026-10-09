@@ -1,6 +1,6 @@
 ---
 name: shawarma
-description: Plan one settled ticket as a brief whose claims ran before it froze, then run it to a PR: executed tests, then code, then a review wave. The orchestrator owns git and every human gate; `retro` reviews the method.
+description: "Plan one settled ticket as a brief whose claims ran before it froze, then run it to a PR: executed tests, then code, then a review wave. The orchestrator owns git and every human gate; `retro` reviews the method."
 disable-model-invocation: true
 ---
 
