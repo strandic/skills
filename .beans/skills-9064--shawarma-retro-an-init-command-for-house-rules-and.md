@@ -3,8 +3,9 @@
 title: 'shawarma retro: an init command for house rules and CODING_STANDARDS.md'
 status: todo
 type: feature
+priority: normal
 created_at: 2026-10-13T12:56:49Z
-updated_at: 2026-10-13T12:56:49Z
+updated_at: 2026-10-15T17:52:47Z
 blocked_by:
     - skills-iim2
 ---
@@ -19,3 +20,7 @@ Proposed (input to the next retro; the skill text changes only there):
 - [ ] **Never overwrites.** If either file exists, `init` proposes differences only. After the first run, only the retro changes the standards.
 - [ ] **Read-only on the code.** It follows the repo's data rules and starts no servers. It commits only the two files, per house rules.
 - [ ] Try it on one host repo before adopting it. Record how many candidates it found, how many were DEFAULTs or RULINGs, and how many the human struck.
+
+## Round 7
+
+Dropped this round (R7): adds lane text with no case in this window. Stays open for a round that has one.

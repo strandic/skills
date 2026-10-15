@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-10-09T05:59:34Z
+updated_at: 2026-10-15T17:52:47Z
 parent: skills-sp16
 blocking:
     - skills-jk6n
@@ -22,11 +22,15 @@ Replace per-retro replay tickets with a fixed bank that every revision is run ag
 
 Lands at the next retro (skill files change only there); the bank's data can be assembled before it.
 
-- [ ] case format written (ticket, base commit, rulings file, trap items)
-- [ ] at most 6 cases assembled in the host project, one per failure class
+- [x] case format written (ticket, base commit, rulings file, trap items)
+- [x] at most 6 cases assembled in the host project, one per failure class
 - [ ] retro-workflow.js runs the bank on both arms, re-running only disagreeing cells
-- [ ] noise calibration read once and recorded
+- [x] noise calibration read once and recorded
 
 ## Round 6 (2026-10-09, bigbrain docs/retros/2026-10-08-shawarma-round-6/, skill v0.6.0 0f5fa13)
 
 Not done: a one-off replay ran instead (2 tickets, rubric committed first, draft only — not before-text vs draft). Its two cases (a config flag contradicting the disk; error-surface 'unchanged' claims and dependency default limits) are bank candidates.
+
+## Round 7
+
+Bank built in bigbrain (6 cases, 14 traps), run on both arms by a separate replay workflow, then the disagreeing cases re-run: the before-text flips three traps on identical text (noise ±0.5 per trap); no reproducible loss. Remaining: retro-workflow.js runs the bank itself; a wave-rules-only and a lanes-only case (critic note).
