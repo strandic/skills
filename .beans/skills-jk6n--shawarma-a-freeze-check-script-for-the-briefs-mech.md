@@ -3,8 +3,9 @@
 title: 'shawarma: a freeze-check script for the brief''s mechanical rules'
 status: todo
 type: task
+priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-09-24T15:53:50Z
+updated_at: 2026-10-15T17:52:47Z
 parent: skills-sp16
 ---
 
@@ -19,3 +20,7 @@ Lands at a retro, validated on the trap bank.
 - [ ] script and the prose it deletes, drafted together
 - [ ] word delta reported
 - [ ] trap bank: no trap lost
+
+## Round 7
+
+R1/R8: this ticket carries the plan path's gap to 6.5k (~7.1k measured, interview + brief ~7.3k) into round 8, judged on the round-7 trap bank. Cold-reader items not reworded in round 7 are listed in the round-7 record.

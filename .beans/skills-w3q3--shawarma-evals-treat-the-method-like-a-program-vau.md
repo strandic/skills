@@ -3,8 +3,9 @@
 title: 'shawarma evals: treat the method like a program (vault thinking, 2026-10-06)'
 status: draft
 type: task
+priority: normal
 created_at: 2026-10-09T06:08:42Z
-updated_at: 2026-10-09T06:08:42Z
+updated_at: 2026-10-15T17:52:47Z
 parent: skills-sp16
 ---
 
@@ -28,3 +29,7 @@ Thinking recorded in the vault (page `shawarma`, section "Open: evaluation and s
 
 - [ ] rule which suggestions to adopt; split adopted ones not already covered (cheap control, rulings per run, time to merge) into their own beans
 - [ ] decide whether lane-level testing changes the trap bank's case format (skills-x895)
+
+## Round 7
+
+Dropped this round (R7); method-skill evals stay bounded. The round-7 trap bank (skills-x895) is the closed regression check.

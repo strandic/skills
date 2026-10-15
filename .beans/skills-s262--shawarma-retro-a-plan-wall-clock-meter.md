@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-09T11:54:42Z
+updated_at: 2026-10-15T17:52:47Z
 parent: skills-mcfe
 ---
 
@@ -16,3 +16,7 @@ Move the round-6 transcript meter (bigbrain docs/retros/2026-10-08-shawarma-roun
 - [ ] script in scripts/, project-agnostic (no hardcoded paths or tickets)
 - [ ] retro-workflow.js or the retro section names the command
 - [ ] first reading at the next retro, beside the size meter
+
+## Round 7
+
+R3: the meter moves to `scripts/`; this ticket closes when its project-agnostic script lands there. Not done this round (the round-7 reading used bigbrain's `plantime_r7.py`). Record: bigbrain docs/retros/2026-10-14-shawarma-round-7/ (record.md, rulings.md).

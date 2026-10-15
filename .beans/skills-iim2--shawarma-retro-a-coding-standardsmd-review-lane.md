@@ -3,8 +3,9 @@
 title: 'shawarma retro: a CODING_STANDARDS.md review lane'
 status: todo
 type: feature
+priority: normal
 created_at: 2026-10-13T12:56:39Z
-updated_at: 2026-10-13T12:56:39Z
+updated_at: 2026-10-15T17:52:47Z
 ---
 
 Let shawarma use a per-project CODING_STANDARDS.md to review the code's shape. It complements, and does not replace, the behaviour checks the method already runs. Source: Matt Pocock's "fixing the PR bottleneck" talk (aihero.dev/skills). His points: the implementer agent is already overloaded, so standards go to a separate reviewer with its own context; checks can lie through tests that restate the implementation, tests tied to code structure, and mocks that cannot fail.
@@ -23,3 +24,7 @@ Proposed (input to the next retro; the skill text changes only there):
 - [ ] House rules point to the file; they do not restate it. House rules cover how the process works, the standards cover what the code looks like.
 
 Keep in mind: the retro must cut at least as many words as it adds. Measure what this adds to SKILL.md and brief-template.md.
+
+## Round 7
+
+Dropped this round (R7): adds lane text with no case in this window. Stays open for a round that has one.
