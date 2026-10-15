@@ -9,6 +9,30 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-15
+
+shawarma round 7.
+
+### Changed
+- shawarma is split by load path. SKILL.md keeps the core (house rules, asking, triage) and a
+  Dispatch section; plan, run, retro, the design interview, the lane cells and cost probes
+  each have their own file, read when the command reaches them. Text moved verbatim. Plan
+  load ~9.4k → ~7.1k tokens; retro ~5.1k → ~1.8k; run ~6.9k → ~7.1k.
+- Retro: tokens per load path (`scripts/size_paths.py`) replace the word-count rule; the
+  trap-bank replay decides each cut. The evidence lanes also count escapes (bugs traced
+  to a merged PR).
+- Review: before committing a review round, one RULING stop carries every hunk that
+  touches frozen text, read from a pasted `git diff`.
+- Design interview: a ruled question whose options later research widens is re-asked.
+- Lanes check each named oracle: one sharing a parser, a ref or an environment with what
+  it grades is a finding, not run. A §5 rule reads a trace that its guarded step ran.
+- The plan-time lane flags ticket checklist items with no owner in the brief.
+- PR body: an "Unreviewed since the last lane" field with pasted `git log`; run step 1's
+  base-moved row built from pasted `git diff --name-only`. Brief header pastes the lessons
+  listing with a verdict per lesson.
+
+Also in this release:
+
 ### Changed
 - README: seven-steps-primer is marked retired, with its reasons and a summary of its
   eval findings. shawarma now leads the Skills table and has its own section. The
