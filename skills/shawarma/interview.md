@@ -1,0 +1,3 @@
+# The design interview — read when Triage finds a design not settled
+
+Not settled ⇒ a design interview as wave −1, one open question at a time, opening with research (plan step 1); when research returns, every ruled question whose options it widens is re-asked as a RULING before the interview ends; a design that follows a reference also needs two independent implementations agreeing on the inputs it decides (executed) and an aggregates-only count of the real inputs it changes (or `no real data: <why>`) — disagreement or 0 means not settled. The interview writes the design's two error directions and which corrupts output; the frozen rule never errs that way. Outcome onto the ticket; then plan. The brief never settles a design.

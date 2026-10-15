@@ -63,10 +63,9 @@ answer, or a DEFAULT, which stands unless you strike it.
 
 ### How the three commands work
 
-The rules live in [`SKILL.md`](skills/shawarma/SKILL.md),
-[`spike.md`](skills/shawarma/spike.md),
-[`brief-template.md`](skills/shawarma/brief-template.md) and
-[`retro-workflow.js`](skills/shawarma/retro-workflow.js). This is a guided tour, not a
+The rules live in [`skills/shawarma/`](skills/shawarma/): [`SKILL.md`](skills/shawarma/SKILL.md)
+holds the shared core and says which other file each command reads, and when (plan, run,
+retro, the design interview, the spike, cost probes, the brief template, the lane cells). This is a guided tour, not a
 substitute. The session you invoke the skill in is the **orchestrator**: it alone touches
 git, the ticket, real data and the PR. The other work goes to **lanes**, which are
 subagents with a narrow prompt and a fixed set of files.
@@ -161,8 +160,8 @@ new wording and, before you see it, replays `plan` with the draft on past ticket
 throwaway worktree at each ticket's base commit, a rubric committed first, a proxy that
 answers only from the rulings on record. Every lesson since the last retro is adopted or
 dropped. A new rule names the class of failure it prevents, never the case that prompted
-it. The retro reports word counts per file and must cut at least as many words as it
-adds, unless you rule otherwise.
+it. The retro reports tokens per load path with `scripts/size_paths.py`; no path grows unless
+you rule it, and the replay, not the count, decides each cut.
 
 ### What has been measured
 

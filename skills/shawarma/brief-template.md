@@ -1,6 +1,6 @@
 # <ticket> — <title>
 
-Ticket `<id>` (+ folded siblings and why) · authority: <the ticket's rulings / ADR / evidence> · planned <date> (<model>; skill <version>) at base `<commit subject>` [· refreshed <date>, supersedes `<old path>`] · proposed branch `<name>` in `<worktree path>`, PR + <merge style>. Lessons read: <n> matching since the last retro marker, cited in §2 — or `none`.
+Ticket `<id>` (+ folded siblings and why) · authority: <the ticket's rulings / ADR / evidence> · planned <date> (<model>; skill <version>) at base `<commit subject>` [· refreshed <date>, supersedes `<old path>`] · proposed branch `<name>` in `<worktree path>`, PR + <merge style>. Lessons read: <the house rules' listing of lessons since the last retro marker, pasted>, each `matches §<x>` or `no: <why>`.
 
 ## 1. What (the defect or goal, measured)
 
@@ -49,7 +49,7 @@ Predicted red set on the tests commit (plan step 2's run, pasted): **…**; guar
 
 - suite, lint and review per run steps 3–4
 - live-data run: <what, where; read-only, aggregates only — or `DRY-RUN ON STAND-IN` where the house rules allow no access, said in the PR>; readings with no rule are observations, recorded here at plan time and in the PR's Verification at run time
-- rules, written now — for each: the rule · the command line it runs, on a tracked script, and the output fields it reads · the dataset and slice that binds, read in aggregate or case by case · its settle clause (when read, how many readings; none = once) · its dry-run reading with the fix patched in (or `DRY-RUN ON STAND-IN`) · its FAIL reading on the named data (spike q3) · the executed reading when its command cannot run (a tool or an input missing), which must differ from its PASS
+- rules, written now — for each: the rule · the command line it runs, on a tracked script, and the output fields it reads · the dataset and slice that binds, read in aggregate or case by case · its settle clause (when read, how many readings; none = once) · its dry-run reading with the fix patched in (or `DRY-RUN ON STAND-IN`) · its FAIL reading on the named data (spike q3) · the executed reading when its command cannot run (a tool or an input missing, or its guarded step skipped: the rule reads a trace that the step ran), which must differ from its PASS
 - orchestrator follow-ups: <re-runs, other tickets>
 
 ## 6. Worst impact
@@ -58,19 +58,7 @@ One line: the worst a hostile or malformed input or state can do through this ch
 
 ## 7. Lanes
 
-| lane | files | done when |
-|---|---|---|
-| 3a adversarial | read-only, scratch dir | *(template text)* §6's worst impact and §3's error surface, by attacks of the lane's own design · the `NOT RUN` lines <ids>, a planner re-run included · the hostile corpus · the `enumerate:` rows not pinned as §4 tests <ids>, only where the implementation differs from §2's executed sketch (the orchestrator pastes the diff); executed, output under `reports/3a/`, each finding with a reproduction and marked `listed` or `own` |
-| 3b code review | read-only, scratch dir | *(template text)* the `mutant:` rows below · invariants and this brief · claims check on prose · §3's error surface, by attacks of its own; output under `reports/3b/` |
-
-Attack lines, one per row, each one input or one verb sequence with the oracle that grades it — the expected reading stays in the planner's notes; a class word (spike.md q3) is an `enumerate:` row with its source; one line per repeat over input the diff adds or changes, its worst-case input named. The plan-time attack lane (plan step 2; output under `reports/0a/`) also flags each spike.md rule the diff triggers that §2 does not apply:
-
-- `<attack> → oracle <name>`
-- `enumerate: <finite list, source> → oracle <name>`
-
-Mutants for 3b, one per row:
-
-- `mutant: <the one-line patch, as executed> → <tests red on the final §4 files> (<output path>)`
+Written from [lanes.md](lanes.md) at plan step 2: the two lane cells with ids filled, the attack lines, the mutants.
 
 ## 8. Out of scope
 
