@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-16T18:15:45Z
 parent: skills-sp16
 ---
 
@@ -32,3 +32,8 @@ Ruled before the retro, owner: "go with reco". `plan` as loaded (brief ending) �
 ## Round 7 (2026-10-15, v0.7.0)
 
 R0 ruled ≤ 6.5k by moving text only. Measured on the installed draft (`scripts/size_paths.py` + `plugin details`): plan ~9.4k → ~7.1k, interview + brief ~7.3k, run ~6.9k → ~7.1k, retro ~5.1k → ~1.8k. R8: installed as measured; the ~0.6k gap goes to round 8 with skills-jk6n (no deletion pass this round: rewording was barred). Trap bank: no reproducible loss. Record: bigbrain docs/retros/2026-10-14-shawarma-round-7/ (record.md, rulings.md).
+
+
+## From skills-pi0y (2026-10-16)
+
+R1 there: a ~70-word state-files section joins SKILL.md; plan-brief and run ~7.1k → ~7.2k (size_paths.py + plugin details, scratch sketch). Round 8 absorbs it.
