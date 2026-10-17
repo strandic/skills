@@ -1,11 +1,11 @@
 ---
 # skills-qaaa
 title: Measure 'the human picks the child' in the Decompose band
-status: todo
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-09-01T11:04:58Z
-updated_at: 2026-09-03T09:32:25Z
+updated_at: 2026-10-17T12:49:46Z
 blocked_by:
     - skills-fqdf
 ---
@@ -28,3 +28,8 @@ Sequence with skills-mtgs: one SKILL.md change per sweep.
 - [ ] write the grader, register it, land the clause
 - [ ] sweep all three, merge, read the grader's pass rate per condition from the records
 - [ ] if it does not separate treatment from the controls, that is evidence the decomposition guidance is not earning its length
+
+
+## Triage (2026-10-17)
+
+Scrapped (owner: "Go" on the triage). The primer track is shelved (skills-c25p); Tier 1 cannot separate this change: the placebo ties the primer on every delta case (docs/plans/primer-evals/RESULTS-2026-09-03.md). The skills-fqdf blocker was already completed.

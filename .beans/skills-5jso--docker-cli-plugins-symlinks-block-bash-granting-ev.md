@@ -1,11 +1,11 @@
 ---
 # skills-5jso
 title: Docker cli-plugins symlinks block Bash-granting evals from 2.1.251
-status: todo
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-09-01T11:01:44Z
-updated_at: 2026-09-04T06:59:37Z
+updated_at: 2026-10-17T12:49:46Z
 ---
 
 From CLI 2.1.251 the harness refuses any Bash-granting evaluation while `~/.docker` holds a symlink anywhere inside it. It seals credential stores by path, a symlink defeats the seal, and it fails closed. Correct in general, wrong here: the symlinks are `~/.docker/cli-plugins/*`, which Docker Desktop installs pointing into its app bundle. They are CLI plugin binaries, not credentials. `DOCKER_CONFIG` does not redirect the check.
@@ -22,3 +22,8 @@ What the runner enforces (`scripts/run-evals.mjs` preflightCli): the 2.1 series,
 
 2026-09-04: the auto-updater pruned 2.1.250 from ~/.local/share/claude/versions/ overnight (2.1.257–2.1.260 remain). Re-fetched from downloads.claude.ai with the manifest checksum into ~/.local/share/claude-pinned/2.1.250, outside the cache; README updated with the recipe. 2.1.260 still carries a 'Refusing to write through symlink' guard, and ~/.docker/cli-plugins still has symlinks, so the pin stands.
 - [x] before 2.1.250 is collected from the version cache, verify a newer patch — it was collected first; recovered instead. Verifying 2.1.260 is still open (one $0.30 smoke with EVAL_CLAUDE_BIN pointed at it would answer the Docker question)
+
+
+## Triage (2026-10-17)
+
+Scrapped (owner: "Go" on the triage). It only served primer sweeps, and that track is shelved (skills-c25p). The 2.1.250 pin is gone (`ls ~/.local/share/claude-pinned` → empty; `claude-personal --version` → 2.1.302), so a revival re-pins from scratch. Reopen it if skills-c25p reopens (it and docs/plans/primer-evals/tier-2-backlog.md name it as a blocker).

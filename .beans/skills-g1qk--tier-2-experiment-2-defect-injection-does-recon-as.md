@@ -1,11 +1,11 @@
 ---
 # skills-g1qk
 title: 'Tier 2, experiment 2: defect injection — does recon-as-a-run find defects a read does not?'
-status: done
+status: completed
 type: task
 priority: high
 created_at: 2026-09-06T06:46:56Z
-updated_at: 2026-09-08T12:08:06Z
+updated_at: 2026-10-17T12:49:47Z
 parent: skills-c25p
 ---
 
@@ -49,3 +49,8 @@ Constraints carried over: pre-register before any run (I2/I8), one registration 
 2026-09-08: sixty verdicts labelled (11 by the human, 49 by the session at the human's request; recorded as a departure), 56/56 decided agree with the judge, 4 unsure. Sandboxes and stray servers cleaned. Gate 7 presented.
 
 2026-09-08: closed at gate 7. Result: RESULTS-2026-09-07-defects.md — two of three registered directions held (fewer than the placebo, as registered against the method; no different from "run it" in one sentence); the third (more than no instruction) did not, inside its floor. Every run that started the service named no planted defect; every read-through named one to three. Denied the run, the primer stops and names nothing. Next per the backlog: the recon-cut re-run of this suite, then experiment 3.
+
+
+## Triage (2026-10-17)
+
+Status `done` → `completed` (`done` is not a beans status).

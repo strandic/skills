@@ -1,11 +1,11 @@
 ---
 # skills-mtgs
 title: Measure the Concise restyle of SKILL.md
-status: todo
+status: scrapped
 type: task
 priority: deferred
 created_at: 2026-09-01T11:04:48Z
-updated_at: 2026-09-03T09:32:25Z
+updated_at: 2026-10-17T12:49:46Z
 blocked_by:
     - skills-fqdf
 ---
@@ -21,3 +21,8 @@ Sequence with skills-qaaa, which also edits SKILL.md: one change per sweep, or t
 - [ ] decide whether this is worth a sweep after the section ablation, given the placebo result
 - [ ] if yes: restyle, regenerate, register an amendment, sweep all three, merge
 - [ ] record the per-case comparison here, including a regression
+
+
+## Triage (2026-10-17)
+
+Scrapped (owner: "Go" on the triage). The primer track is shelved (skills-c25p); Tier 1 cannot separate this change: the placebo ties the primer on every delta case (docs/plans/primer-evals/RESULTS-2026-09-03.md). The skills-fqdf blocker was already completed.
