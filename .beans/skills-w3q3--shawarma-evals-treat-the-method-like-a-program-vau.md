@@ -1,11 +1,11 @@
 ---
 # skills-w3q3
 title: 'shawarma evals: treat the method like a program (vault thinking, 2026-10-06)'
-status: draft
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-10-09T06:08:42Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-17T12:49:46Z
 parent: skills-sp16
 ---
 
@@ -33,3 +33,8 @@ Thinking recorded in the vault (page `shawarma`, section "Open: evaluation and s
 ## Round 7
 
 Dropped this round (R7); method-skill evals stay bounded. The round-7 trap bank (skills-x895) is the closed regression check.
+
+
+## Triage (2026-10-17)
+
+Scrapped (owner: "Go" on the triage). Covered elsewhere: the trap bank (skills-x895), compression as a refactor (skills-p4oc), escaped defects (skills-j1ck); R7 bounded method evals. Not filed, owner chose not to: the cheap control, rulings per run, time to merge.

@@ -1,11 +1,11 @@
 ---
 # skills-zk77
 title: Chunk sweeps per case — a per-condition run sits on the ~35min kill boundary
-status: todo
+status: scrapped
 type: task
 priority: normal
 created_at: 2026-09-01T11:01:44Z
-updated_at: 2026-09-03T09:32:25Z
+updated_at: 2026-10-17T12:49:46Z
 ---
 
 Backgrounded tasks in this environment die near a 35-minute wall clock: four attempts went 41m killed, 34m killed, 34m completed, 33m killed, the last emitting output right up to the kill. A whole-condition sweep sits on that boundary.
@@ -18,3 +18,8 @@ What is still open: a process that runs five invocations back to back still live
 - [x] refuse stale results (I2b, instrument digest)
 - [ ] decide: per-case launches as separate tasks, or keep the terminal as the documented path
 - [ ] if per-case launches: a `--case` entry point that writes a per-case record, and a merge step that assembles five into one
+
+
+## Triage (2026-10-17)
+
+Scrapped (owner: "Go" on the triage). It only served primer sweeps, and that track is shelved (skills-c25p). The 2.1.250 pin is gone (`ls ~/.local/share/claude-pinned` → empty; `claude-personal --version` → 2.1.302), so a revival re-pins from scratch. Reopen it if skills-c25p reopens (it and docs/plans/primer-evals/tier-2-backlog.md name it as a blocker).

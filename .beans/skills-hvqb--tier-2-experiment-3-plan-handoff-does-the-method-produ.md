@@ -1,11 +1,11 @@
 ---
 # skills-hvqb
 title: 'Tier 2, experiment 3: plan handoff — does a fresh implementer build better software from the method''s plan?'
-status: todo
+status: draft
 type: task
 priority: high
 created_at: 2026-09-08T13:41:11Z
-updated_at: 2026-09-08T13:41:11Z
+updated_at: 2026-10-17T12:49:47Z
 parent: skills-c25p
 ---
 
@@ -34,3 +34,8 @@ What step 0 has to settle, and nothing here decides:
 Cost, from the backlog: about 200 runs, $100 to $230, several session-limit windows, half a day per feature to review the hidden tests. Read before step 0: docs/plans/primer-evals/tier-2-backlog.md (experiment 3 and the rules for reporting), evals/seven-steps-primer-defects/PRE-REGISTRATION.md (the group and floor machinery to reuse, and Amendments 1 and 2), docs/plans/primer-evals/RESULTS-2026-09-07-defects.md (what experiment 2 found and did not).
 
 Constraints carried over: pre-register before any run (I2/I8); one registration digest per suite; a sibling suite, nothing added to the two existing ones; the human runs the sweeps from a terminal; records committed under docs/plans/primer-evals/records/; thirty judge or test verdicts checked by hand before the table is read, with the check's independence stated honestly if it is not.
+
+
+## Triage (2026-10-17)
+
+Shelved (draft; owner: "Go" on the triage). The primer track has been idle since 927fe5a (2026-09-24). Reopening skills-c25p reopens its sweep blockers skills-zk77 and skills-5jso (scrapped, CLI pin gone).

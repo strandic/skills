@@ -1,11 +1,11 @@
 ---
 # skills-c25p
 title: Tier 2 — outcome evals (does the method produce better software?)
-status: todo
+status: draft
 type: epic
 priority: normal
 created_at: 2026-09-01T11:01:44Z
-updated_at: 2026-09-08T12:08:06Z
+updated_at: 2026-10-17T12:49:47Z
 ---
 
 Tier 1 measures what the agent does. Tier 2 measures whether the software comes out better, and is the only thing that can support that claim. Designed and costed in `docs/plans/primer-evals/tier-2-backlog.md`; that document is the source for the designs and prices, this bean only orders them.
@@ -31,3 +31,8 @@ Children and order: skills-fqdf (section ablation) first, blocked by skills-ccsx
 2026-09-08: experiment 2 (skills-g1qk) is complete and closed: on the seeded fixture the primer's step 4 names fewer planted defects than the placebo's read-through (registered −1, held), as many as a one-line "run it" (registered 0, held), and no more than no instruction (registered +1, not held). RESULTS-2026-09-07-defects.md. Next: the "Later: ablate recon" re-run of the defects suite, then experiment 3.
 
 2026-09-08: the "Later: ablate recon" re-run is done (RESULTS-2026-09-08-defects-no-recon.md). Registered −1, not held: cutting the recon text changes nothing the reported score sees; the cut agent runs the feature and names nothing, like the treatment. Two amendments on the defects registration (the condition; safeguard-refused judge calls unscored). Next: experiment 3, skills-hvqb.
+
+
+## Triage (2026-10-17)
+
+Shelved (draft; owner: "Go" on the triage). The primer track has been idle since 927fe5a (2026-09-24). Reopening skills-c25p reopens its sweep blockers skills-zk77 and skills-5jso (scrapped, CLI pin gone).

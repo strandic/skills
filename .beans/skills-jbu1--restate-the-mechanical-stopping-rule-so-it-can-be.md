@@ -1,11 +1,11 @@
 ---
 # skills-jbu1
 title: Restate the 'mechanical' stopping rule so it can be met
-status: todo
+status: draft
 type: task
 priority: normal
 created_at: 2026-09-03T09:11:06Z
-updated_at: 2026-09-03T09:11:06Z
+updated_at: 2026-10-17T12:49:47Z
 ---
 
 The skill says planning is finished when implementation has become mechanical: "the feature buildable from the artifacts alone". Step 6 adds that a design decision surfacing during the build is a defect in an earlier artifact. Taken literally, you never stop.
@@ -21,3 +21,8 @@ Prediction: not measurable by Tier 1. The falsifiable form is a third fork under
 - [ ] write the revised stopping rule into SKILL.md (step 5/6 wording)
 - [ ] run a third cold fork on a real feature and count blocking items
 - [ ] record the outcome here and in a pre-registration amendment
+
+
+## Triage (2026-10-17)
+
+Shelved (draft; owner: "Go" on the triage). The primer track has been idle since 927fe5a (2026-09-24). Reopening skills-c25p reopens its sweep blockers skills-zk77 and skills-5jso (scrapped, CLI pin gone).

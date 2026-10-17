@@ -1,11 +1,11 @@
 ---
 # skills-uxfe
 title: Build an urgency triage case, then measure the urgency clause
-status: todo
+status: scrapped
 type: task
 priority: low
 created_at: 2026-09-01T11:05:09Z
-updated_at: 2026-09-03T09:32:25Z
+updated_at: 2026-10-17T12:49:46Z
 blocked_by:
     - skills-fqdf
 ---
@@ -21,3 +21,8 @@ The breadcrumb-convention item that used to share this bean is now skills-ovtu.
 - [ ] write the urgency triage case and its graders, with probes
 - [ ] register it in an amendment, land the clause in SKILL.md
 - [ ] sweep all three conditions, merge, record the outcome here
+
+
+## Triage (2026-10-17)
+
+Scrapped (owner: "Go" on the triage). The primer track is shelved (skills-c25p); Tier 1 cannot separate this change: the placebo ties the primer on every delta case (docs/plans/primer-evals/RESULTS-2026-09-03.md). The skills-fqdf blocker was already completed.

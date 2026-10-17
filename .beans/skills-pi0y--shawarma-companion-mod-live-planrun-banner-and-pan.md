@@ -1,14 +1,14 @@
 ---
 # skills-pi0y
 title: 'shawarma companion mod: live plan/run banner and pane'
-status: draft
+status: todo
 type: feature
 priority: normal
 tags:
     - shawarma
     - mod
 created_at: 2026-10-16T18:08:30Z
-updated_at: 2026-10-16T20:03:16Z
+updated_at: 2026-10-17T12:49:47Z
 ---
 
 A Claude Code mod that shows, while a shawarma plan or run is active, which ticket is in progress, what step it is at, and the decisions made so far. It ships in this repo's marketplace as a second plugin next to `strandic`.
@@ -117,3 +117,8 @@ Brief: `docs/plans/2026-10-17-skills-pi0y-shawarma-companion/plan.md`, whole-fil
 `run` waits for skills-hekn (R4).
 
 unruled: none
+
+
+## Triage (2026-10-17)
+
+Brief committed (37e94a1), awaiting go; `run` waits for skills-hekn (R4). The CLI moved past the planned build: `claude-personal --version` → 2.1.302 (brief: 2.1.301). Wave 0 re-reads the type file and re-runs the predicted reds on the installed build, recorded as §9's first row.
