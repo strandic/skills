@@ -94,3 +94,26 @@ Q2 (two sessions in one tree — R2 assumed one session per tree; R3's label): r
 DEFAULTs (stand unless struck): a missing plan.md or decisions.md is a normal state (no brief yet / none recorded), so only a malformed marker or a missing plan dir draws a problem line; a `|` inside a decision's text is allowed (a row needs at least 4 fields); a marker naming a plan dir outside the repo shows that dir's name (reads only).
 
 unruled: Q1, Q2 — default (1) for each
+
+## Rulings on the 2 questions (2026-10-17)
+
+Owner, verbatim: "Go with recos, but let's file a bean for the shawarma skill to guard against the skill to be fired on a checkout that is already beging worked on by the skill from another session."
+
+- **R5 (Q1, refresh).** Option 1: refresh after every Write/Edit/MultiEdit/NotebookEdit/Bash call and at turn end, plus a 15 s stat-only check of the drawn marker while a row is drawn.
+- **R6 (Q2, two sessions).** Option 1: the label reads `unconfirmed:`; only a Write/Edit of the marker's path counts as this session's; skills-hekn adds "write it with the Write tool". Residual: a race inside one Write call.
+- Residue: skills-lhdg (new, round 8, blocked by skills-hekn): the skill asks before starting on a tree that already holds `.shawarma/active`. The mod's `unconfirmed:` label stays as the fallback.
+- DEFAULTs above stand (not struck).
+
+## Plan: brief written (2026-10-17)
+
+Brief: `docs/plans/2026-10-17-skills-pi0y-shawarma-companion/plan.md`, whole-file sketches in its `sketch/`. Re-spike on R5/R6, readings:
+- `claude-personal plugin test mods/shawarma-companion` → 39 pass, 0 fail; stubbed modules → 6 pass, 33 fail (predicted red set: tests 1–33 and 41).
+- `node --test scripts/test/*.test.mjs` → 513 pass, 0 fail, 2 skipped (base 511; +2 from the new `scripts/test/marketplace.test.mjs`).
+- `tsc` → exit 0; `claude-personal plugin validate` on the mod and on `.` → ✔ Validation passed.
+- Mutants: 31 run, 29 red; M22 (check never cancelled) and M31 (no restart from the render hook) survive — not observable in the test kit; both go to the review lane.
+- Attack lane pass 2 (L9–L13): L13 found two unlabelled rows this session did not write (another writer inside, or right after, an own Write). Fixed: an own Write must match the file's text, and the record keeps the text. L12 (reload after a settings change may skip session.start): the render hook now restarts the check. `MultiEdit` is not a 2.1.301 tool: dropped. Planner re-run of the lane's tests on the fixed sketch → 1219 pass, 0 fail.
+- Also: `claude plugin validate .` does not check a marketplace entry's source path exists (new test pins it); the marketplace entry adds 9 lines and reformats nothing; the mod gets a `.gitignore` for the editor types the engine writes.
+
+`run` waits for skills-hekn (R4).
+
+unruled: none

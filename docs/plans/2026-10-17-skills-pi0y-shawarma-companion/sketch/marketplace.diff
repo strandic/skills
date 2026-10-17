@@ -1,0 +1,20 @@
+diff --git a/.claude-plugin/marketplace.json b/.claude-plugin/marketplace.json
+index 733c4cf..ae0e6d3 100644
+--- a/.claude-plugin/marketplace.json
++++ b/.claude-plugin/marketplace.json
+@@ -17,6 +17,15 @@
+       "author": { "name": "Strandic" },
+       "category": "workflow",
+       "keywords": ["skills", "agents", "claude-code", "method", "seven-steps", "shawarma"]
++    },
++    {
++      "name": "shawarma-companion",
++      "source": "./mods/shawarma-companion",
++      "description": "Shows the active shawarma plan or run above the prompt: ticket, step, decisions so far.",
++      "version": "0.1.0",
++      "author": { "name": "Strandic" },
++      "category": "workflow",
++      "keywords": ["shawarma", "mod", "claude-code"]
+     }
+   ]
+ }
