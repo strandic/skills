@@ -1,0 +1,12 @@
+{
+  "name": "shawarma-companion",
+  "version": "0.1.0",
+  "description": "Shows the active shawarma plan or run above the prompt: ticket, step, decisions so far.",
+  "author": { "name": "Strandic" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "band": { "type": "boolean", "title": "Band", "description": "Show the plan/run row above the prompt", "default": true },
+    "pane": { "type": "boolean", "title": "Pane", "description": "Offer /shawarma-companion to open the detail pane", "default": true },
+    "context": { "type": "boolean", "title": "Context", "description": "Add context-window use to the row", "default": false }
+  }
+}
