@@ -75,3 +75,10 @@ The owner, verbatim: "Go with reco" → R5 (fix every wave-1 finding; two declin
 Found while checking: §5's G2 command passes `scripts/plantime.mjs` relative, which `classes.mjs` imports as a package name → ERR_MODULE_NOT_FOUND (cannot run as written); with `$PWD/scripts/plantime.mjs` → PASS, PASS. `gates/turns.mjs` and `gates/stopsweep.mjs` restated the old rules (fix → 0 differ; pre-fix → 42 and 1128).
 
 unruled: round-1 contract hunks and the G2 command — default none (a RULING)
+
+## Run: round 1 committed; review round 2 stopped before commit (2026-10-18)
+
+The owner, verbatim: "Go" → R6 (round 1's hunks), R7 (G2 takes `$PWD/scripts/plantime.mjs`), D9, D10 accepted; branch commits 4a5dc6a (tests), db0d4eb (fix), 0101378 (§9). The fresh review lane on db0d4eb found 4 new defects, each reproduced by the orchestrator (scratch `fixreview/r2/`): a lane's `<result>` quoting a stop notice counts a hit (`notice_split.py` A, A2: 1, want 0); a stop notice whose command holds `<result>`, `<task-notification>` or `</task-notification>` is missed (B1–B3: 0, want 1); a nested non-string `tool_use_id` loses the plan (`ids.py` I1, I4: `could not be measured: RangeError`); a named pipe whose writer opens 1 s late reads `holds no plan`, and the 10 s limit ran from the start (`plans_fifo_named.sh` P4, P9). Also: distinct non-string ids share one key (I2, I3: 1, want 2; already in 85ae60e); `<(…)` on macOS blocks; G1's and G3's tools still restate the old lane and opener rules (rounds 6 and 7 read the same either way).
+Round 2 is written, uncommitted (diff `reports/r2-meter.diff`, 7 hunks): `node --test scripts/test/plantime.test.mjs` → 46/46; on db0d4eb → 4 fail, all ERR_ASSERTION, every new assertion red but 3 guards (soft run); suite → 559 / 557 / 0 / 2. Real data: rounds 6 and 7 `--json` byte-identical to db0d4eb (`cmp`); `classdiff.mjs` db0d4eb vs round 2 over bigbrain → 90,855 records, 0 changed; G4 oracle 154 = meter 154 (18:30); stopsweep 0 of 19,608; turns 0 of 1,560; the lane's repros all `ok`; cost 4× → ≤ 4.07× on 4 hostile notice shapes.
+
+unruled: round-2 contract hunks and the G1/G3 tools — default none (a RULING)
