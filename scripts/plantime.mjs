@@ -11,31 +11,40 @@
  *   <ticket> <session id or unique prefix> <brief commit time> [<start time>]
  * <ticket> as typed in the plan command. The session prefix is 4+ characters of 0-9, a-f and `-`.
  * Times are ISO 8601 date-times with an offset or `Z`; the brief commit's is `git log -1 --format=%cI <commit>`.
- * The window starts at the first `plan <ticket>` command in the session unless a start time is given.
+ * The window starts at the first `plan <ticket>` command in the session before the brief time unless a
+ * start time is given; only a command the owner gave counts (no origin or the owner's, its text opening
+ * with the command's tag, or a typed `/…shawarma plan <ticket>`), never one a record quotes.
  * Owner turns count the owner's turns whose wait lies inside the window. Records at the opener's own
  * instant are part of the opener; the first owner record after that instant starts a turn even with
  * nothing between, and later owner records with only accompanying records (meta, reminders,
- * compactions) between join the turn before; a turn whose wait crosses the window's start is not
- * counted, nor are the owner records that join it. An
- * AskUserQuestion answer is an owner turn; an interrupt (the harness's record, which has no origin) is
- * not. The median of an even count is the lower middle. `timeLimitHits` counts tool
- * calls the harness stopped or moved to the background at their time limit, and background commands
- * it stopped at their background time limit (its notice of it). Each call counts once per transcript
- * file, so a call moved at its limit and later stopped at the next is one; a call in the session and
+ * compactions) between join the turn before. A turn's wait runs from the last record before it that is
+ * not an accompanying one, or with none, from the file's first record; a turn whose wait crosses the
+ * window's start is not counted, nor are the owner records that join it. An AskUserQuestion answer is
+ * an owner turn; an interrupt (the harness's record, which has no origin) is not. The median of an
+ * even count is the lower middle. `timeLimitHits` counts tool calls the harness stopped or moved to the
+ * background at their time limit, and background commands it stopped at their background time limit
+ * (its notice of it, each notice in a record read alone; only the harness's part of a notice, before the
+ * `<result>` a lane wrote, is read). Each call counts
+ * once per transcript file, so a call moved at its limit and later stopped at the next is one, whether
+ * the notice names it by its call id or by the task id its result carried; a call in the session and
  * its notice in a lane are two files, so two. A call the file does not hold is known by the id the
- * record names; a record naming no id is a call of its own. `unreadableRecords` counts
- * lines that are not JSON and turn records with no real timestamp, in the whole session file and in
- * each lane whose first record is in the window. A lane file with bad lines and no turn record is a
- * skipped lane; one with no lines at all, or only blank lines, is no lane. Claude Code deletes transcripts after
- * `cleanupPeriodDays` (30 by default), so a plan older than that reads NOT RUN.
+ * record names, and by the task id once a record has named both; a record naming no id is a call of its
+ * own. `unreadableRecords` counts lines that are not JSON and turn records with no real timestamp, in the
+ * whole session file and in each lane with a record in the window. A lane file with bad lines and no
+ * turn record is a skipped lane; one with no turn record and no bad line (empty, blank, or other record
+ * types only) is no lane. Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), so
+ * a plan older than that reads NOT RUN. A plan the meter could not measure for any other reason reads
+ * NOT RUN with the error's name, and the other plans still run.
  *
  * Each gap between two consecutive records is charged to the record that ends it (`bucket`).
  * A gap that crosses the window's start or end is dropped, so `attributed` can be less than `wall`.
- * Lane transcripts (subagents whose first record is in the window) are split the same way and
- * summed; lanes that overlap are counted twice. Symbolic links and anything not a regular file
- * or directory under `subagents/` are skipped. Errors name no path.
+ * Lane transcripts (subagents with a record in the window) are split the same way and summed; lanes
+ * that overlap are counted twice. Symbolic links, and anything named `*.jsonl` that is not a regular
+ * file, under `subagents/` are skipped and counted in `lanesSkipped`, as is a session folder that is a
+ * link; links are never followed. The plans file is a regular file or a pipe; a pipe that stays empty
+ * past 10 s is refused. Errors name no path.
  */
-import { readFileSync, readdirSync, lstatSync, realpathSync } from 'node:fs';
+import { readFileSync, readdirSync, lstatSync, realpathSync, statSync, openSync, readSync, closeSync, constants } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -76,7 +85,7 @@ export function isProbe(c) {
 }
 
 export function bashKind(cmd, rx) {
-  const c = cmd ?? '';
+  const c = typeof cmd === 'string' ? cmd : ''; // a command that is not text is no known kind
   if (rx.suite.test(c)) return 'exec:suite';
   if (rx.probe.source === DEFAULTS.probe ? isProbe(c) : rx.probe.test(c)) return 'exec:probe';
   if (rx.vcs.test(c)) return 'vcs/tracker';
@@ -94,25 +103,53 @@ export function toolKind(name, input, rx) {
   return 'tool:other';
 }
 
+// Text blocks only, and only text: a block whose `text` is not a string reads as empty.
 const textOf = (c) =>
-  typeof c === 'string' ? c : Array.isArray(c) ? c.filter((b) => b?.type === 'text').map((b) => b.text ?? '').join(' ') : '';
+  typeof c === 'string' ? c : Array.isArray(c) ? c.filter((b) => b?.type === 'text').map((b) => (typeof b.text === 'string' ? b.text : '')).join(' ') : '';
 
-const noticeIds = (text) => [text.match(/<tool-use-id>([^<]+)<\/tool-use-id>/)?.[1], text.match(/<task-id>([^<]+)<\/task-id>/)?.[1]];
+// Task ids, per transcript: the call whose result carried each, or the key of a call the transcript
+// does not hold. Kept apart from the call ids, so a call id can never be taken for a task id.
+const TASKS = new WeakMap();
+const tasksOf = (kinds) => { let m = TASKS.get(kinds); if (!m) TASKS.set(kinds, (m = new Map())); return m; };
+
+/** A record's task notifications, each read alone: the text after each `<task-notification>` up to its
+ *  close; a record that is one by its origin and holds no tag is one notification. */
+const notices = (text) => {
+  const parts = text.split('<task-notification>');
+  return parts.length > 1 ? parts.slice(1).map((n) => { const e = n.indexOf('</task-notification>'); return e >= 0 ? n.slice(0, e) : n; }) : [text];
+};
+/** The harness's part of a notification: all before the `<result>`, which a lane's model wrote. */
+const head = (n) => { const i = n.indexOf('<result>'); return i >= 0 ? n.slice(0, i) : n; };
+const noticeIds = (n) => { const h = head(n); return [h.match(/<tool-use-id>([^<]+)<\/tool-use-id>/)?.[1], h.match(/<task-id>([^<]+)<\/task-id>/)?.[1]]; };
 
 /** The call a task notification reports on: by `<tool-use-id>`, or by the task id its result carried. */
-function noticeCall(text, kinds) {
-  const [id, task] = noticeIds(text);
-  return (id !== undefined && kinds.get(id)) || (task !== undefined && kinds.get(`task:${task}`)) || undefined;
+function noticeCall(n, kinds) {
+  const [id, task] = noticeIds(n);
+  return (id !== undefined && kinds.get(id)) || (task !== undefined && tasksOf(kinds).get(task)?.call) || undefined;
 }
 
 /** A task notification's bucket: a background shell or Monitor reports here too, and that wait is on
  *  the command, not a lane. A call this transcript does not hold (another session's, before a resume)
  *  is told by the harness's words. */
-function noticeKind(text, kinds) {
-  const call = noticeCall(text, kinds);
+function noticeKind(n, kinds) {
+  const call = noticeCall(n, kinds);
   if (call) return call.name === 'Bash' || call.name === 'Monitor' ? 'exec-wait' : 'lane-wait';
-  return BACKGROUND_TEXT.test(text) ? 'exec-wait' : 'lane-wait';
+  return BACKGROUND_TEXT.test(head(n)) ? 'exec-wait' : 'lane-wait';
 }
+
+// A tool result's key when its call is not in the transcript; a result naming no call is its own.
+const resultKey = (r) => (r.tool_use_id !== undefined ? `id:${r.tool_use_id}` : {});
+// The harness's words for a call moved to the background at its limit, with the task id it got.
+const MOVED_ID = /^(?:<error>)?Command did not complete within its \d+s timeout and was moved to the background \(ID: ([^)\s]+)\)/;
+/** The task id a tool result carries: on its record, or in the harness's moved-to-the-background words. */
+function resultTask(d, r, call) {
+  const tr = d.toolUseResult && typeof d.toolUseResult === 'object' ? d.toolUseResult : {};
+  const moved = call?.name === 'Bash' ? MOVED_ID.exec(typeof r.content === 'string' ? r.content : textOf(r.content))?.[1] : undefined;
+  return [tr.taskId, tr.backgroundTaskId, moved].find((v) => typeof v === 'string');
+}
+
+/** A record that is the harness's task notification: by its origin, or with no origin, opening with the tag. */
+const isNotice = (d, origin, text) => origin === 'task-notification' || (origin === undefined && text.trimStart().startsWith('<task-notification>'));
 
 /** The bucket of the gap a record ends; tool kinds are learnt from assistant records into `kinds`. */
 export function classify(d, kinds, rx) {
@@ -129,8 +166,9 @@ export function classify(d, kinds, rx) {
     if (r) {
       const call = kinds.get(r.tool_use_id);
       // A background task's later notifications name its task id, not the call.
-      const task = d.toolUseResult && typeof d.toolUseResult === 'object' ? d.toolUseResult.taskId ?? d.toolUseResult.backgroundTaskId : undefined;
-      if (call && typeof task === 'string') kinds.set(`task:${task}`, call);
+      const task = resultTask(d, r, call);
+      const tasks = tasksOf(kinds);
+      if (task !== undefined && !tasks.has(task)) tasks.set(task, { call, key: call ?? resultKey(r) });
       return call?.kind ?? 'tool:other';
     }
   }
@@ -149,10 +187,9 @@ export function classify(d, kinds, rx) {
   // that session's.
   const has = (tag) => (READ_ORIGINS.has(origin) ? text.includes(tag) : text.trimStart().startsWith(tag));
   // A task notification is the harness's report on a call, whatever the command it quotes holds; a
-  // peer record relaying another session's message stays that session's, whatever the message quotes.
-  if (origin === 'task-notification' || (origin === undefined && has('<task-notification>'))) return noticeKind(text, kinds);
+  // peer or coordinator record stays its sender's, whatever the message quotes.
+  if (isNotice(d, origin, text)) return noticeKind(notices(text)[0], kinds);
   if (has('<cross-session-message') || has('<teammate-message')) return 'other-session-wait';
-  if (has('<task-notification>')) return noticeKind(text, kinds);
   if (origin === 'peer' || has('<agent-message') || /^\s*<remote-review[\w-]*[\s>]/.test(text)) return 'lane-wait';
   if (origin === 'coordinator' || has('<coordinator-relay') || text.trimStart().startsWith('The coordinator sent a message')) return 'idle-for-coordinator';
   if (d.isMeta || ACCOMPANYING_TAGS.test(text)) return DEFER;
@@ -175,7 +212,8 @@ export function isIso(s) {
 }
 
 /** user and assistant records with an ISO timestamp, in time order; unreadable lines and untimed records are counted, not read.
- *  The file is split as bytes, so a transcript past the engine's string limit still reads. */
+ *  The file is split as bytes, so a transcript past the engine's string limit still reads, up to the 2 GiB
+ *  one file read allows; a larger one reads NOT RUN (ERR_FS_FILE_TOO_LARGE). */
 export function records(path) {
   const out = [];
   let bad = 0;
@@ -207,7 +245,7 @@ export function split(recs, t0, t1, rx) {
   const add = (k, g) => { if (g > 0) b.set(k, (b.get(k) ?? 0) + g); };
   const kinds = new Map();
   const waits = [];
-  let prev = null, last = null, limited = 0, counted = false;
+  let prev = null, prevWake = null, first = null, last = null, limited = 0, counted = false;
   const limitedCalls = new Set(); // a call moved to the background at its limit, then stopped at the next, counts once
   let carried = []; // [gap, bucket if no wake-up record follows]
   for (const d of recs) {
@@ -223,20 +261,23 @@ export function split(recs, t0, t1, rx) {
       let total = g;
       for (const [cg, fallback] of carried) if (WAKE.has(k)) total += cg; else add(fallback, cg);
       add(k, total);
-      // Records at the opener's own instant are part of the opener. A turn whose wait crosses the
-      // window's start is not counted, and owner records joining it are not either.
+      // Records at the opener's own instant are part of the opener. A turn's wait runs from the last
+      // record that is not an accompanying one, or with none, from the first record; a turn whose wait
+      // crosses the window's start is not counted, and owner records joining it are not either.
       if (k === 'human' && t0 < t && t <= t1) {
-        if (last !== 'human') { counted = inside; if (counted) waits.push(0); }
+        const from = prevWake ?? (prev !== null ? first : null);
+        if (last !== 'human') { counted = from !== null && t0 <= from; if (counted) waits.push(0); }
         if (counted) waits[waits.length - 1] += total; // waits[i] is the i-th owner turn's wait
       }
       carried = [];
       if (t0 < t && t <= t1) last = k;
+      prevWake = t;
     }
     if (t0 <= t && t <= t1) {
-      const call = limitCall(d, k, kinds);
-      if (call && !limitedCalls.has(call)) { limitedCalls.add(call); limited++; }
+      for (const call of limitCalls(d, k, kinds)) if (!limitedCalls.has(call)) { limitedCalls.add(call); limited++; }
     }
     prev = t;
+    first ??= t;
   }
   for (const [cg, fallback] of carried) add(fallback, cg);
   return { buckets: b, turns: waits.length, waits, limited };
@@ -248,29 +289,49 @@ const LIMIT_TEXT = /^(?:<error>)?(?:Command did not complete within its \d+s tim
 
 // The harness's notice for a background command stopped at its own time limit (CLI 2.1.285 and later):
 // `<summary>Background command "<command>" was stopped after reaching its background time limit</summary>`.
-// Two searches, not a regex: `"[\s\S]*"` would retry from every opener, quadratic in a long notice.
+// The harness does not escape the command, so the summary is read from its first `<summary>` to the last
+// `</summary>` of the harness's part. Searches, not a regex: `"[\s\S]*"` would retry from every opener,
+// quadratic in a long notice.
 const STOPPED_OPEN = '<summary>Background command "';
-const STOPPED_CLOSE = '" was stopped after reaching its background time limit</summary>';
-const isStopNotice = (text) => { const i = text.indexOf(STOPPED_OPEN); return i >= 0 && text.indexOf(STOPPED_CLOSE, i + STOPPED_OPEN.length) >= 0; };
+const STOPPED_END = '" was stopped after reaching its background time limit';
+const isStopNotice = (n) => {
+  const h = head(n);
+  const i = h.indexOf('<summary>');
+  const j = h.lastIndexOf('</summary>');
+  // The command's two quotes are two characters: one quote cannot open and close it.
+  return i >= 0 && h.startsWith(STOPPED_OPEN, i) && j >= i + STOPPED_OPEN.length + STOPPED_END.length && h.startsWith(STOPPED_END, j - STOPPED_END.length);
+};
 
-/** The call a record says ran out of time, by the harness's record of it, or null: a tool result with
- *  `timedOutAfterMs` or its words opening the result, or its notice that a background command was
- *  stopped at its background limit. A call the transcript does not hold is keyed by the id the record
- *  names; a record naming none is a call of its own. Elapsed time never counts. */
-function limitCall(d, k, kinds) {
-  if (d.type !== 'user') return null;
+/** The calls a record says ran out of time, by the harness's record of it: a tool result with
+ *  `timedOutAfterMs` or its words opening the result, or each of its notices that a background command
+ *  was stopped at its background limit. A call the transcript does not hold is keyed by the id the record
+ *  names, or by its task id once a record has named both; a record naming none is a call of its own.
+ *  Elapsed time never counts. */
+function limitCalls(d, k, kinds) {
+  if (d.type !== 'user') return [];
   const c = d.message?.content;
   const r = Array.isArray(c) ? c.find((x) => x?.type === 'tool_result') : null;
+  const tasks = tasksOf(kinds);
   if (r) {
     const text = typeof r.content === 'string' ? r.content : textOf(r.content);
     const call = kinds.get(r.tool_use_id);
     const hit = typeof d.toolUseResult?.timedOutAfterMs === 'number' || (call?.name === 'Bash' && LIMIT_TEXT.test(text));
-    return hit ? call ?? `id:${r.tool_use_id}` : null;
+    if (!hit) return [];
+    const task = resultTask(d, r, call);
+    return [call ?? (task !== undefined ? tasks.get(task)?.key : undefined) ?? resultKey(r)];
   }
   const text = textOf(c);
-  if (k !== 'exec-wait' || !isStopNotice(text)) return null;
-  const [id, task] = noticeIds(text);
-  return noticeCall(text, kinds) ?? (id !== undefined ? `id:${id}` : task !== undefined ? `task:${task}` : {});
+  if ((k !== 'exec-wait' && k !== 'lane-wait') || !isNotice(d, d.origin?.kind, text)) return [];
+  return notices(text).filter((n) => isStopNotice(n) && noticeKind(n, kinds) === 'exec-wait').map((n) => {
+    const known = noticeCall(n, kinds);
+    if (known) return known;
+    const [id, task] = noticeIds(n);
+    const byTask = task !== undefined ? tasks.get(task)?.key : undefined;
+    if (byTask !== undefined) return byTask;
+    const key = id !== undefined ? `id:${id}` : task !== undefined ? `task:${task}` : {};
+    if (task !== undefined) tasks.set(task, { call: undefined, key });
+    return key;
+  });
 }
 
 const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -283,8 +344,11 @@ export function planStarts(recs, ticket) {
   const out = [];
   for (const d of recs) {
     if (d.type !== 'user' || d.isSidechain || d.isMeta) continue;
+    // Only a command the owner gave: no origin or the owner's, the command's tags opening the text.
+    const origin = d.origin?.kind;
+    if (origin !== undefined && !OWNER_ORIGINS.has(origin)) continue;
     const text = textOf(d.message?.content);
-    if (args.test(text) || typed.test(text)) out.push(ts(d.timestamp));
+    if ((OWNER_TAGS.test(text) && args.test(text)) || typed.test(text)) out.push(ts(d.timestamp));
   }
   return out;
 }
@@ -312,17 +376,22 @@ export function parsePlans(text) {
 
 /** An fs error as its code alone: the message would name the path. */
 const why = (e) => (e && typeof e.code === 'string' ? e.code : 'unreadable');
-const isFile = (p) => { try { return lstatSync(p).isFile(); } catch { return false; } };
 
 export function sessionFile(dir, prefix) {
   let names;
   try { names = readdirSync(dir); } catch (e) { throw new Error(`transcripts dir not readable: ${why(e)}`); }
-  const hits = names.filter((f) => f.endsWith('.jsonl') && f.startsWith(prefix) && isFile(join(dir, f)));
+  const hits = [];
+  for (const f of names) {
+    if (!f.endsWith('.jsonl') || !f.startsWith(prefix)) continue;
+    let st;
+    try { st = lstatSync(join(dir, f)); } catch (e) { throw new Error(`session transcript not readable: ${why(e)}`); }
+    if (st.isFile()) hits.push(f);
+  }
   if (hits.length !== 1) throw new Error(`session ${hits.length ? 'prefix is ambiguous' : 'not found'}: ${hits.length} transcripts match`);
   return join(dir, hits[0]);
 }
 
-/** Regular `*.jsonl` files under the session's `subagents/`, at any depth; links and others skipped. */
+/** Regular `*.jsonl` files under the session's `subagents/`, at any depth; links and other `*.jsonl` skipped and counted. */
 function subagentFiles(sessionPath) {
   const out = [];
   let skipped = 0;
@@ -335,13 +404,18 @@ function subagentFiles(sessionPath) {
       try { st = lstatSync(p); } catch { skipped++; continue; }
       if (st.isDirectory()) walk(p);
       else if (st.isFile() && f.endsWith('.jsonl')) out.push(p);
-      else if (f.endsWith('.jsonl')) skipped++;
+      else if (st.isSymbolicLink() || f.endsWith('.jsonl')) skipped++;
     }
   };
-  const root = sessionPath.replace(/\.jsonl$/, '') + '/subagents';
+  const folder = sessionPath.replace(/\.jsonl$/, '');
   let st = null;
-  try { st = lstatSync(root); } catch { /* no lanes */ }
-  if (st?.isDirectory()) walk(root); else if (st) skipped++;
+  try { st = lstatSync(folder); } catch { /* no lanes */ }
+  if (st && !st.isDirectory()) return { files: out, skipped: 1 }; // a link is never followed
+  if (st) {
+    let rs = null;
+    try { rs = lstatSync(join(folder, 'subagents')); } catch { /* no lanes */ }
+    if (rs?.isDirectory()) walk(join(folder, 'subagents')); else if (rs) skipped++;
+  }
   return { files: out, skipped };
 }
 
@@ -369,38 +443,41 @@ export function measure(dir, plans, rx) {
     try { path = sessionFile(dir, p.session); } catch (e) { notRun(e.message); continue; }
     let recs, bad;
     try { ({ recs, bad } = records(path)); } catch (e) { notRun(`session transcript not readable: ${why(e)}`); continue; }
-    const starts = planStarts(recs, p.ticket).filter((t) => t <= p.brief);
-    const t0 = p.start ?? starts[0];
-    if (t0 === undefined) { notRun(`no \`plan ${p.ticket}\` command before the brief time`); continue; }
-    if (t0 > p.brief) { notRun('start is after the brief time'); continue; }
-    const m = split(recs, t0, p.brief, rx);
-    const lanes = new Map();
-    let n = 0, limited = m.limited, unread = bad;
-    const sub = subagentFiles(path);
-    let skipped = sub.skipped;
-    for (const f of sub.files) {
-      let s;
-      let lb;
-      try { ({ recs: s, bad: lb } = records(f)); } catch { skipped++; continue; }
-      if (!s.length && lb) { skipped++; continue; } // nothing readable: its window cannot be known
-      if (!s.length || ts(s[0].timestamp) < t0 || ts(s[0].timestamp) > p.brief) continue;
-      n++;
-      unread += lb;
-      const r = split(s, t0, p.brief, rx);
-      merge(lanes, r.buckets);
-      limited += r.limited;
-    }
-    merge(all.main, m.buckets);
-    merge(all.lanes, lanes);
-    const att = [...m.buckets.values()].reduce((a, v) => a + v, 0);
-    const commands = starts.filter((t) => t >= t0).length;
-    data.push({ ticket: p.ticket, wallMs: p.brief - t0, attributedMs: att, planCommands: commands, ownerTurns: m.turns, ownerWaitsMs: m.waits,
-      timeLimitHits: limited, unreadableRecords: unread, lanes: n, lanesSkipped: skipped, buckets: Object.fromEntries(m.buckets), laneBuckets: Object.fromEntries(lanes) });
-    const ws = waitStats(m.waits);
-    lines.push(`## ${p.ticket}: wall ${min(p.brief - t0)} (attributed ${min(att)})`);
-    lines.push(`  plan commands in window: ${commands} · owner turns: ${m.turns} · owner wait per turn: median ${min(ws.median)}, max ${min(ws.max)} · tool calls that hit their time limit: ${limited}${unread ? ` · records not read in the session file and its lanes (bad line or no real timestamp): ${unread}` : ''}${skipped ? ` · lane files skipped: ${skipped}` : ''}`);
-    lines.push(`  orchestrator: ${fmt(m.buckets)}`);
-    lines.push(`  lanes (${n} transcripts, summed, overlap not removed): ${min([...lanes.values()].reduce((a, v) => a + v, 0))} — ${fmt(lanes)}`);
+    try {
+      const starts = planStarts(recs, p.ticket).filter((t) => t <= p.brief);
+      const t0 = p.start ?? starts[0];
+      if (t0 === undefined) { notRun(`no \`plan ${p.ticket}\` command before the brief time${bad ? ` (records not read: ${bad})` : ''}`); continue; }
+      if (t0 > p.brief) { notRun('start is after the brief time'); continue; }
+      const m = split(recs, t0, p.brief, rx);
+      const lanes = new Map();
+      let n = 0, limited = m.limited, unread = bad;
+      const sub = subagentFiles(path);
+      let skipped = sub.skipped;
+      for (const f of sub.files) {
+        let s;
+        let lb;
+        try { ({ recs: s, bad: lb } = records(f)); } catch { skipped++; continue; }
+        if (!s.length && lb) { skipped++; continue; } // nothing readable: its window cannot be known
+        // A lane with a record in the window; only its gaps inside the window are charged.
+        if (!s.some((r) => { const t = ts(r.timestamp); return t0 <= t && t <= p.brief; })) continue;
+        n++;
+        unread += lb;
+        const r = split(s, t0, p.brief, rx);
+        merge(lanes, r.buckets);
+        limited += r.limited;
+      }
+      const att = [...m.buckets.values()].reduce((a, v) => a + v, 0);
+      const commands = starts.filter((t) => t >= t0).length;
+      data.push({ ticket: p.ticket, wallMs: p.brief - t0, attributedMs: att, planCommands: commands, ownerTurns: m.turns, ownerWaitsMs: m.waits,
+        timeLimitHits: limited, unreadableRecords: unread, lanes: n, lanesSkipped: skipped, buckets: Object.fromEntries(m.buckets), laneBuckets: Object.fromEntries(lanes) });
+      const ws = waitStats(m.waits);
+      lines.push(`## ${p.ticket}: wall ${min(p.brief - t0)} (attributed ${min(att)})`);
+      lines.push(`  plan commands in window: ${commands} · owner turns: ${m.turns} · owner wait per turn: median ${min(ws.median)}, max ${min(ws.max)} · tool calls that hit their time limit: ${limited}${unread ? ` · records not read in the session file and its lanes (bad line or no real timestamp): ${unread}` : ''}${skipped ? ` · lane files skipped: ${skipped}` : ''}`);
+      lines.push(`  orchestrator: ${fmt(m.buckets)}`);
+      lines.push(`  lanes (${n} transcripts, summed, overlap not removed): ${min([...lanes.values()].reduce((a, v) => a + v, 0))} — ${fmt(lanes)}`);
+      merge(all.main, m.buckets);
+      merge(all.lanes, lanes);
+    } catch (e) { notRun(`could not be measured: ${typeof e?.name === 'string' ? e.name : 'error'}`); } // the name only: a message may quote the record
   }
   for (const [name, g] of [['ORCHESTRATOR, all', all.main], ['LANES, all (summed)', all.lanes]]) {
     const tot = [...g.values()].reduce((a, v) => a + v, 0);
@@ -410,6 +487,31 @@ export function measure(dir, plans, rx) {
     lines.push(`  ${fmt(g)}`);
   }
   return { lines, data };
+}
+
+const PAUSE = new Int32Array(new SharedArrayBuffer(4));
+/** The plans file: a regular file, or a pipe (`<(…)`), read without blocking; a pipe empty past 10 s,
+ *  or anything else (a device, a socket), is refused rather than waited on. */
+function readPlans(path) {
+  let fd;
+  try {
+    const st = statSync(path);
+    if (st.isDirectory()) throw Object.assign(new Error(), { code: 'EISDIR' });
+    if (!st.isFile() && !st.isFIFO()) throw Object.assign(new Error(), { code: 'not a file or pipe' });
+    fd = openSync(path, constants.O_RDONLY | (st.isFIFO() ? constants.O_NONBLOCK : 0));
+    const parts = [], buf = Buffer.alloc(1 << 16), until = Date.now() + 10000;
+    for (;;) {
+      let n;
+      try { n = readSync(fd, buf, 0, buf.length, null); } catch (e) {
+        if (e.code !== 'EAGAIN' || Date.now() > until) throw e;
+        Atomics.wait(PAUSE, 0, 0, 10);
+        continue;
+      }
+      if (n === 0) return Buffer.concat(parts).toString('utf8');
+      parts.push(Buffer.from(buf.subarray(0, n)));
+    }
+  } catch (e) { throw new Error(`plans file not readable: ${why(e)}`); }
+  finally { if (fd !== undefined) closeSync(fd); }
 }
 
 export function main(argv) {
@@ -430,9 +532,9 @@ export function main(argv) {
   const compiled = Object.fromEntries(Object.entries(rx).map(([k, v]) => {
     try { return [k, new RegExp(v)]; } catch { throw new Error(`--${k} is not a valid regex`); }
   }));
-  let text;
-  try { text = readFileSync(pos[1], 'utf8'); } catch (e) { throw new Error(`plans file not readable: ${why(e)}`); }
-  const { lines, data } = measure(pos[0], parsePlans(text), compiled);
+  const plans = parsePlans(readPlans(pos[1]));
+  if (!plans.length) throw new Error('plans file holds no plan');
+  const { lines, data } = measure(pos[0], plans, compiled);
   return json ? [JSON.stringify(data, null, 1)] : lines;
 }
 
