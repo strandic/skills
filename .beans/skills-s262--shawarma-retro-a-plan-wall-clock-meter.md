@@ -82,3 +82,7 @@ The owner, verbatim: "Go" → R6 (round 1's hunks), R7 (G2 takes `$PWD/scripts/p
 Round 2 is written, uncommitted (diff `reports/r2-meter.diff`, 7 hunks): `node --test scripts/test/plantime.test.mjs` → 46/46; on db0d4eb → 4 fail, all ERR_ASSERTION, every new assertion red but 3 guards (soft run); suite → 559 / 557 / 0 / 2. Real data: rounds 6 and 7 `--json` byte-identical to db0d4eb (`cmp`); `classdiff.mjs` db0d4eb vs round 2 over bigbrain → 90,855 records, 0 changed; G4 oracle 154 = meter 154 (18:30); stopsweep 0 of 19,608; turns 0 of 1,560; the lane's repros all `ok`; cost 4× → ≤ 4.07× on 4 hostile notice shapes.
 
 unruled: round-2 contract hunks and the G1/G3 tools — default none (a RULING)
+
+## Run: round 2 committed; fresh review lane running (2026-10-18)
+
+The owner, verbatim: "I'd rather update them than leave outdated code that might stir further work in the wrong direction" → R9 (G1's and G3's tools read R6's window and lane rules; wrongfix W4 re-pointed), then "Go" → R8 (round 2's hunks); D11 accepted. Branch commits 5bd4db5 (tests), 2bb0014 (fix), ad2b0b4 (gate tools), 2601068 (§9). Readings on the updated tools: G1 PASS 6/6, 7/7 and G3 PASS 6/6, 7/7 (`oracle.py`, `g3.py` on round 2's `--json`); `wrongfix.py` W1–W3 FAIL 1/7 (round 7), W4, W5 PASS 7/7, all PASS 6/6 (round 6); M4 → G1 FAIL 6/6, 7/7; a synthetic session (quoted opener, a lane opening before the window): updated tools PASS round 2 and FAIL 85ae60e, the old G3 tool the reverse. A fresh review lane runs on 2bb0014; a third round is a RULING.
