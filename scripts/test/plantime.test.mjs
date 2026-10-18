@@ -607,7 +607,7 @@ test('main: a plans file that never ends, or a pipe with no writer, does not han
   };
   assert.deepEqual(run(['/dev/zero']), { status: 1, err: 'plans file not readable: not a file or pipe', signal: null });
   execFileSync('mkfifo', [join(dir, 'fifo')]);
-  assert.deepEqual(run([join(dir, 'fifo')]), { status: 1, err: 'plans file holds no plan', signal: null });
+  assert.deepEqual(run([join(dir, 'fifo')]), { status: 1, err: 'plans file not readable: nothing read in 10 s', signal: null });
   const piped = execFileSync('bash', ['-c', `node "${script}" "${dir}" <(printf 'ab12 abcd0001 ${T(80)}\\n')`], { encoding: 'utf8', timeout: 15000 });
   assert.match(piped, /## ab12: wall 70m/);
   rmSync(dir, { recursive: true });
@@ -744,4 +744,55 @@ test('lanes: a subagents entry that is a file, and a folder that cannot be read,
   try {
     assert.equal(measure(dir, plans(`ab12 abcd0001 ${T(10)}\n`), rx).data[0].lanesSkipped, 1);
   } finally { chmodSync(join(dir, session, 'subagents', 'locked'), 0o700); rmSync(dir, { recursive: true }); }
+});
+
+test('split: a notice is read up to its summary\'s end, whatever the command or a lane\'s result holds', () => {
+  const t0 = Date.parse(T(0)), t1 = Date.parse(T(100));
+  const hits = (recs) => split(recs, t0, t1, rx).limited;
+  const tn = { origin: { kind: 'task-notification' } };
+  const stop = (cmd, ids = '<task-id>k1</task-id><tool-use-id>b1</tool-use-id>') => `<task-notification>${ids}<status>killed</status><summary>Background command "${cmd}" was stopped after reaching its background time limit</summary></task-notification>`;
+  const ag = { type: 'tool_use', id: 'a1', name: 'Agent', input: { run_in_background: true } };
+  const laneDone = (inner) => user(5, `<task-notification><task-id>ag1</task-id><tool-use-id>a1</tool-use-id><status>completed</status><summary>Agent "x" completed</summary><result>quote: ${inner} done</result></task-notification>`, tn);
+  assert.equal(hits([asst(0, ag), laneDone(stop('make', '<task-id>k7</task-id>'))]), 0, 'a lane\'s result quoting a notice for an unknown call');
+  const b = { type: 'tool_use', id: 'b1', name: 'Bash', input: { command: 'make', run_in_background: true } };
+  assert.equal(hits([asst(0, ag, b), laneDone(stop('make'))]), 0, 'a lane\'s result quoting a notice for a known call');
+  for (const cmd of ["grep '<result>' out.xml; sleep 9999", "grep '<task-notification>' t; sleep 9999", "grep '</task-notification>' t; sleep 9999", "grep '</summary>' t; sleep 9999"]) {
+    const bc = { ...b, input: { command: cmd, run_in_background: true } };
+    const bg = { ...result(2, bc), toolUseResult: { backgroundTaskId: 'k1' } };
+    assert.equal(hits([asst(1, bc), bg, user(40, stop(cmd), tn)]), 1, `${cmd}: a known call`);
+    assert.equal(hits([user(40, stop(cmd), tn)]), 1, `${cmd}: a call the file does not hold`);
+  }
+  const noted = stop('a', '<task-id>n1</task-id>').replace('</summary>', '</summary><note>n</note>');
+  assert.equal(hits([user(5, `${noted}\n${stop('b', '<task-id>n2</task-id>')}`)]), 2, 'a note between two notices');
+});
+
+test('split: a result naming its call by anything but text is a call of its own, and never stops the plan', () => {
+  const { dir, write } = fixture();
+  const deep = `{"type":"user","timestamp":"${T(2)}","message":{"content":[{"type":"tool_result","tool_use_id":${'['.repeat(20000)}${']'.repeat(20000)},"content":"x"}]},"toolUseResult":{"taskId":"k"}}`;
+  write(`${session}.jsonl`, [user(0, '<command-args>plan ab12</command-args>'), asst(1), deep, asst(3)]);
+  write(`${session}/subagents/agent-a.jsonl`, [user(1, 'p', { isSidechain: true }), deep, asst(4)]);
+  const { data } = measure(dir, plans(`ab12 abcd0001 ${T(10)}\n`), rx);
+  assert.equal(data[0].notRun, undefined);
+  assert.equal(data[0].lanes, 1);
+  rmSync(dir, { recursive: true });
+  const t0 = Date.parse(T(0)), t1 = Date.parse(T(100));
+  const timed = (at, id) => ({ type: 'user', timestamp: T(at), message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] }, toolUseResult: { timedOutAfterMs: 1 } });
+  assert.equal(split([timed(2, { a: 1 }), timed(3, { b: 2 })], t0, t1, rx).limited, 2, 'two object ids');
+  assert.equal(split([timed(2, 7), timed(3, '7')], t0, t1, rx).limited, 2, 'a number and a string');
+});
+
+test('main: a named pipe is read when its writer opens late, and while it writes', async () => {
+  const dir = project();
+  const script = new URL('../plantime.mjs', import.meta.url).pathname;
+  const { execFile } = await import('node:child_process');
+  const sh = (body) => new Promise((done) => execFile('bash', ['-c', body], { encoding: 'utf8', timeout: 30000 }, (e, out, err) => done({ status: e ? e.code : 0, out, err })));
+  const line = `ab12 abcd0001 ${T(80)}`;
+  execFileSync('mkfifo', [join(dir, 'late'), join(dir, 'slow')]);
+  const [late, slow] = await Promise.all([
+    sh(`(sleep 1; printf '${line}\\n' > "${dir}/late") & node "${script}" "${dir}" "${dir}/late"; wait`),
+    sh(`(exec 3> "${dir}/slow"; printf '# a\\n' >&3; sleep 6; printf '# b\\n' >&3; sleep 6; printf '${line}\\n' >&3) & node "${script}" "${dir}" "${dir}/slow"; wait`),
+  ]);
+  assert.match(late.out, /## ab12: wall 70m/, late.err);
+  assert.match(slow.out, /## ab12: wall 70m/, slow.err);
+  rmSync(dir, { recursive: true });
 });
