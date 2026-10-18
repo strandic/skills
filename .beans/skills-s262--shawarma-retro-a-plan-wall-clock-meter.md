@@ -1,11 +1,11 @@
 ---
 # skills-s262
 title: 'shawarma retro: a plan wall-clock meter'
-status: todo
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-18T13:58:41Z
 parent: skills-mcfe
 ---
 
@@ -61,3 +61,10 @@ Brief: `docs/plans/2026-10-18-skills-s262-plan-wall-clock-meter/plan.md`, with t
 - New DEFAULT D8: two records in one millisecond keep their file order. Reading: 7 of 7 real stop notices come after their call.
 
 unruled: D8 — default accept (two records in one millisecond keep file order)
+
+## Run stopped: 1 RULING (2026-10-18)
+
+Branch feat/s262-plantime in `.worktrees/s262-plantime`: d7e02d0 tests + stub (red set 1–26, 28, 30–32, 30 × ERR_ASSERTION; guards 27, 29 green, `node --test scripts/test/plantime.test.mjs`), 85ae60e meter (byte-identical to the sketch, `cmp`). Suite `node --test scripts/test/*.test.mjs`: head 545/543/0/2, base 513/511/0/2, same 2 skips. No lint configured; `node --check` on every scripts/*.mjs clean.
+Review wave 1: 3b mutants 83/83 red, red sets equal §7; §3 error surface holds; sentinel grep 0. Findings (reproduced by the orchestrator, `python3 -I cases.py`, `crash.sh`, `f_turn_min.sh` in the lane-3a scratch dir): a non-string Bash command crashes the whole run (exit 1, all plans lost); text nested ≥5000 deep crashes; a plans-file FIFO hangs; wrong output — a start-time turn whose wait crosses the start through a meta/compaction record is counted (346 of 7770 sequences); an orphan lane notification whose `<result>` quotes the harness words reads exec-wait (and a quoted stop notice counts a hit); a peer/coordinator record quoting a notification without a relay tag counts a hit; a quoted `<command-args>plan T` opens the window early; directory links under subagents/ and the session dir are followed or vanish uncounted; a lane with one stray out-of-window first record vanishes; time-limit keys miscount in 5 shapes (overlapping quotes, two notices in one record, no tool_use_id, moved-then-stopped by task id only, call/task id collision). 3b: 9 header rules have no binding test (own breaks survive). Prose: "links … counted", "still reads" past 2 GiB, 16 MB isProbe memory 600 MB not 335 MB.
+
+unruled: the review-round-1 scope — default none (a RULING)
