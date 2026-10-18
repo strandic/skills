@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, rmSync, symlinkSync, chmodSync, copyFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, rmSync, symlinkSync, chmodSync, copyFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -471,7 +471,7 @@ test('lanes: links, loops, pipes and unreadable files are skipped and counted, n
   assert.equal(data.length, 1);
   assert.equal(data[0].lanes, 2);
   assert.deepEqual(data[0].laneBuckets, { model: 10 * M });
-  assert.equal(data[0].lanesSkipped, 4);
+  assert.equal(data[0].lanesSkipped, 5, 'the FIFO, both file links, the locked file and the directory link loop');
   rmSync(dir, { recursive: true });
 });
 
@@ -578,4 +578,170 @@ test('cost: four times the records costs at most six times the time (best of 3)'
     const ratio = time(big) / time(small);
     assert.ok(ratio <= 6, `ratio ${ratio.toFixed(2)}`);
   } finally { rmSync(dir, { recursive: true }); }
+});
+
+// --- review round 1 ------------------------------------------------------------------------
+
+test('measure: a malformed record never stops the run', () => {
+  const { dir, write } = fixture();
+  const deep = `{"type":"user","timestamp":"${T(4)}","message":{"content":[{"type":"text","text":${'['.repeat(6000)}${']'.repeat(6000)}}]}}`;
+  const odd = (id, command) => ({ type: 'tool_use', id, name: 'Bash', input: { command } });
+  write(`${session}.jsonl`, [user(0, '<command-args>plan ab12</command-args>'), asst(1, odd('n1', 42), odd('n2', ['ls']), odd('n3', { a: 1 })),
+    result(2, { id: 'n1' }), deep, asst(5)]);
+  write('beef0001.jsonl', [user(0, '<command-args>plan cd34</command-args>'), asst(3)]);
+  let data;
+  assert.doesNotThrow(() => ({ data } = measure(dir, plans(`ab12 abcd0001 ${T(10)}\ncd34 beef0001 ${T(10)}\n`), rx)));
+  assert.equal(data.length, 2);
+  assert.equal(data[0].wallMs, 10 * M);
+  assert.equal(data[0].buckets['exec:other-shell'], 1 * M, 'a command that is not text is no known kind of command');
+  assert.equal(data[1].wallMs, 10 * M);
+  rmSync(dir, { recursive: true });
+});
+
+test('main: a plans file that never ends, or a pipe with no writer, does not hang', () => {
+  const dir = project();
+  const script = new URL('../plantime.mjs', import.meta.url).pathname;
+  const run = (args, opts = {}) => {
+    try { return { status: 0, out: execFileSync('node', [script, dir, ...args], { encoding: 'utf8', stdio: 'pipe', timeout: 15000, ...opts }) }; }
+    catch (e) { return { status: e.status, err: String(e.stderr).trim(), signal: e.signal }; }
+  };
+  assert.deepEqual(run(['/dev/zero']), { status: 1, err: 'plans file not readable: not a file or pipe', signal: null });
+  execFileSync('mkfifo', [join(dir, 'fifo')]);
+  assert.deepEqual(run([join(dir, 'fifo')]), { status: 1, err: 'plans file holds no plan', signal: null });
+  const piped = execFileSync('bash', ['-c', `node "${script}" "${dir}" <(printf 'ab12 abcd0001 ${T(80)}\\n')`], { encoding: 'utf8', timeout: 15000 });
+  assert.match(piped, /## ab12: wall 70m/);
+  rmSync(dir, { recursive: true });
+});
+
+test('split: a wait that began before the start is no turn, whatever accompanies it at the start', () => {
+  for (const between of [meta(11), compact(11), meta(10)]) {
+    const r = split([asst(0), between, human(12), asst(13), human(15), asst(16)], Date.parse(T(10)), Date.parse(T(20)), rx);
+    assert.equal(r.turns, 1, JSON.stringify(between.timestamp));
+    assert.deepEqual(r.waits.map((w) => w / M), [2]);
+  }
+  // With nothing but accompanying records before it, the wait runs from the file's first record.
+  for (const start of [-1, 0]) {
+    const r = split([meta(0), meta(1), human(3), asst(4)], Date.parse(T(start)), Date.parse(T(20)), rx);
+    assert.equal(r.turns, 1, `start ${start}`);
+    assert.deepEqual(r.waits.map((w) => w / M), [3]);
+  }
+  assert.equal(split([human(3), asst(4)], Date.parse(T(0)), Date.parse(T(20)), rx).turns, 0, 'the first record waited on nothing');
+});
+
+test('classify: the harness\'s words count only outside the result a lane wrote', () => {
+  const t0 = Date.parse(T(0)), t1 = Date.parse(T(100));
+  const lane = (inner) => user(9, `<task-notification>\n<task-id>zz2</task-id>\n<summary>Agent "a" finished</summary>\n<result>${inner}</result>\n</task-notification>`, { origin: { kind: 'task-notification' } });
+  assert.equal(classify(lane('Background command "make" completed'), new Map(), rx), 'lane-wait');
+  assert.equal(classify(lane('Monitor event: "x"'), new Map(), rx), 'lane-wait');
+  const stopped = lane('<summary>Background command "make" was stopped after reaching its background time limit</summary>');
+  assert.equal(split([stopped], t0, t1, rx).limited, 0);
+});
+
+test('split: time-limit hits are keyed by call, in every shape the harness writes', () => {
+  const t0 = Date.parse(T(0)), t1 = Date.parse(T(100));
+  const hits = (recs) => split(recs, t0, t1, rx).limited;
+  const tn = { origin: { kind: 'task-notification' } };
+  const stop = (ids, cmd = 'x') => `<task-notification>${ids}<summary>Background command "${cmd}" was stopped after reaching its background time limit</summary></task-notification>`;
+  // A completed command whose own text holds the stop words and the summary's close.
+  const quoted = `<task-notification><task-id>q0</task-id><summary>Background command "echo '" was stopped after reaching its background time limit</summary>'" completed (exit code 0)</summary></task-notification>`;
+  assert.equal(hits([user(5, quoted, tn)]), 0, 'a completed command quoting the stop words');
+  assert.equal(hits([user(5, stop('<task-id>q1</task-id>') + '\n' + stop('<task-id>q2</task-id>'))]), 2, 'two notices in one record, two calls');
+  const bare = { type: 'user', timestamp: T(5), message: { content: [{ type: 'tool_result', content: 'x' }] }, toolUseResult: { timedOutAfterMs: 1 } };
+  assert.equal(hits([bare, { ...bare, timestamp: T(6) }]), 2, 'results naming no call are calls of their own');
+  const a = use('Bash', { command: 'sleep 999' });
+  const movedText = { ...result(2, a), message: { content: [{ type: 'tool_result', tool_use_id: a.id, content: 'Command did not complete within its 120s timeout and was moved to the background (ID: k1). Output is being written to: /x' }] } };
+  assert.equal(hits([asst(0, a), movedText, user(50, stop('<task-id>k1</task-id>'), tn)]), 1, 'moved (its id in the text), then stopped: one call');
+  const away = { id: 'x9' };
+  assert.equal(hits([result(2, away, { toolUseResult: { timedOutAfterMs: 1, backgroundTaskId: 'k9' } }), user(50, stop('<task-id>k9</task-id>'), tn)]), 1, 'a call the file does not hold, moved then stopped');
+  assert.equal(hits([user(40, stop('<task-id>k8</task-id><tool-use-id>u8</tool-use-id>'), tn), user(50, stop('<task-id>k8</task-id>'), tn)]), 1, 'one unknown call named by both ids, then by its task id');
+  const kinds = new Map();
+  classify(asst(0, { type: 'tool_use', id: 'task:k5', name: 'Agent', input: {} }), kinds, rx);
+  assert.equal(classify(user(5, '<task-notification><task-id>k5</task-id><summary>Background command "x" completed</summary></task-notification>', tn), kinds, rx), 'exec-wait', 'a call id is never a task id');
+  for (const kind of ['peer', 'coordinator']) {
+    const r = user(5, `Relayed: ${stop('<task-id>p1</task-id>')}`, { origin: { kind } });
+    assert.equal(classify(r, new Map(), rx), kind === 'peer' ? 'lane-wait' : 'idle-for-coordinator', kind);
+    assert.equal(hits([r]), 0, `a ${kind} record quoting a notice`);
+  }
+});
+
+test('planStarts: only a command the owner gave opens the window', () => {
+  const recs = [
+    human(1, 'see <command-args>plan pi0y</command-args>'),
+    user(2, 'quoted <command-args>plan pi0y</command-args>'),
+    user(3, '<command-args>plan pi0y</command-args>', { origin: { kind: 'peer' } }),
+    user(4, '<command-args>plan pi0y</command-args>', { origin: { kind: 'task-notification' } }),
+    user(5, '<command-args>plan pi0y</command-args>', { origin: { kind: 'channel' } }),
+    user(6, '<command-name>/shawarma</command-name>\n<command-args>plan pi0y</command-args>', { origin: { kind: 'human' } }),
+  ];
+  assert.deepEqual(planStarts(recs, 'pi0y').map((t) => (t - Date.parse(T(0))) / M), [6]);
+});
+
+test('lanes: directory links and a linked session folder are skipped and counted, never followed', () => {
+  const dir = project();
+  const sub = join(dir, session, 'subagents');
+  const elsewhere = join(dir, 'elsewhere');
+  renameSync(join(sub, 'workflows'), elsewhere);
+  symlinkSync(elsewhere, join(sub, 'workflows'));
+  const { data } = measure(dir, plans(`ab12 abcd0001 ${T(80)}\n`), rx);
+  assert.equal(data[0].lanes, 1);
+  assert.equal(data[0].lanesSkipped, 1);
+  const away = join(dir, 'away');
+  renameSync(join(dir, session), away);
+  symlinkSync(away, join(dir, session));
+  const linked = measure(dir, plans(`ab12 abcd0001 ${T(80)}\n`), rx).data;
+  assert.equal(linked[0].lanes, 0);
+  assert.equal(linked[0].lanesSkipped, 1);
+  rmSync(dir, { recursive: true });
+});
+
+test('measure: a transcripts dir that can be listed but not searched reads its error code', () => {
+  const dir = project();
+  chmodSync(dir, 0o400);
+  try {
+    assert.deepEqual(measure(dir, plans(`ab12 abcd0001 ${T(80)}\n`), rx).data, [{ ticket: 'ab12', notRun: 'session transcript not readable: EACCES' }]);
+  } finally { chmodSync(dir, 0o700); rmSync(dir, { recursive: true }); }
+});
+
+test('measure: the window opens at the first command before the brief; lanes and hits by the window', () => {
+  const { dir, write } = fixture();
+  const cmd = (at) => user(at, '<command-args>plan ab12</command-args>');
+  const u = use('Bash', { command: 'sleep 999' });
+  write(`${session}.jsonl`, [cmd(10), asst(11, u), result(12, u, { toolUseResult: { timedOutAfterMs: 1 } }), cmd(40), asst(41), cmd(90)]);
+  write(`${session}/subagents/agent-in.jsonl`, [user(20, 'p', { isSidechain: true }), asst(21, u), result(22, u, { toolUseResult: { timedOutAfterMs: 1 } })]);
+  write(`${session}/subagents/agent-late.jsonl`, [user(85, 'p', { isSidechain: true }), '{bad', asst(86)]);
+  write(`${session}/subagents/agent-stray.jsonl`, [user(-600, 'p', { isSidechain: true }), user(30, 'p', { isSidechain: true }), asst(35)]);
+  const [first] = measure(dir, plans(`ab12 abcd0001 ${T(80)}\n`), rx).data;
+  assert.equal(first.wallMs, 70 * M, 'the first command');
+  assert.equal(first.planCommands, 2, 'the command after the brief is not counted');
+  assert.equal(first.lanes, 2, 'a lane starting after the brief is not one; a lane with a record in the window is');
+  assert.equal(first.unreadableRecords, 0, 'a lane outside the window adds no unread records');
+  assert.equal(first.laneBuckets.model, 6 * M);
+  assert.equal(first.timeLimitHits, 2, 'the same call in the session and a lane: two files, two');
+  const [late] = measure(dir, plans(`ab12 abcd0001 ${T(80)} ${T(30)}\n`), rx).data;
+  assert.equal(late.planCommands, 1, 'a command before a given start is not in the window');
+  write('beef0001.jsonl', [cmd(90), asst(91)]);
+  assert.deepEqual(measure(dir, plans(`ab12 beef0001 ${T(80)}\n`), rx).data, [{ ticket: 'ab12', notRun: 'no `plan ab12` command before the brief time' }]);
+  write('cafe0001.jsonl', ['{bad', '{bad']);
+  assert.deepEqual(measure(dir, plans(`ab12 cafe0001 ${T(80)}\n`), rx).data, [{ ticket: 'ab12', notRun: 'no `plan ab12` command before the brief time (records not read: 2)' }]);
+  rmSync(dir, { recursive: true });
+});
+
+test('split: a compaction between owner records joins the turn; a turn after the window is not counted', () => {
+  const joined = split([asst(0), human(10), compact(11), human(12), asst(13)], Date.parse(T(0)), Date.parse(T(20)), rx);
+  assert.equal(joined.turns, 1);
+  const after = split([asst(0), human(5), asst(6), human(15), asst(16)], Date.parse(T(0)), Date.parse(T(10)), rx);
+  assert.equal(after.turns, 1);
+});
+
+test('lanes: a subagents entry that is a file, and a folder that cannot be read, are counted', () => {
+  const { dir, write } = fixture();
+  write(`${session}.jsonl`, [user(0, '<command-args>plan ab12</command-args>'), asst(1)]);
+  write(`${session}/subagents`, ['x']);
+  assert.equal(measure(dir, plans(`ab12 abcd0001 ${T(10)}\n`), rx).data[0].lanesSkipped, 1);
+  rmSync(join(dir, session), { recursive: true });
+  write(`${session}/subagents/locked/agent-a.jsonl`, [user(1, 'p', { isSidechain: true }), asst(2)]);
+  chmodSync(join(dir, session, 'subagents', 'locked'), 0o000);
+  try {
+    assert.equal(measure(dir, plans(`ab12 abcd0001 ${T(10)}\n`), rx).data[0].lanesSkipped, 1);
+  } finally { chmodSync(join(dir, session, 'subagents', 'locked'), 0o700); rmSync(dir, { recursive: true }); }
 });
