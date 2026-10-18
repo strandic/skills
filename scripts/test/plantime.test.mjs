@@ -607,7 +607,7 @@ test('main: a plans file that never ends, or a pipe with no writer, does not han
   };
   assert.deepEqual(run(['/dev/zero']), { status: 1, err: 'plans file not readable: not a file or pipe', signal: null });
   execFileSync('mkfifo', [join(dir, 'fifo')]);
-  assert.deepEqual(run([join(dir, 'fifo')]), { status: 1, err: 'plans file not readable: nothing read in 10 s', signal: null });
+  assert.deepEqual(run([join(dir, 'fifo')]), { status: 1, err: 'plans file not readable: nothing read for 10 s', signal: null });
   const piped = execFileSync('bash', ['-c', `node "${script}" "${dir}" <(printf 'ab12 abcd0001 ${T(80)}\\n')`], { encoding: 'utf8', timeout: 15000 });
   assert.match(piped, /## ab12: wall 70m/);
   rmSync(dir, { recursive: true });
@@ -794,5 +794,27 @@ test('main: a named pipe is read when its writer opens late, and while it writes
   ]);
   assert.match(late.out, /## ab12: wall 70m/, late.err);
   assert.match(slow.out, /## ab12: wall 70m/, slow.err);
+  rmSync(dir, { recursive: true });
+});
+
+test('split: every notice in a record is read, past its note, usage or text between, until a lane\'s result', () => {
+  const t0 = Date.parse(T(0)), t1 = Date.parse(T(100));
+  const hits = (text) => split([user(5, text, { origin: { kind: 'task-notification' } })], t0, t1, rx).limited;
+  const words = (cmd) => `<summary>Background command "${cmd}" was stopped after reaching its background time limit</summary>`;
+  const stop = (id, tail = '') => `<task-notification><task-id>${id}</task-id>${words('x')}${tail}</task-notification>`;
+  assert.equal(hits(stop('u1', '<usage>u</usage>') + stop('u2')), 2, 'usage after the summary');
+  assert.equal(hits(stop('u1', '<note>n</note><usage>u</usage>') + stop('u2')), 2, 'note and usage');
+  assert.equal(hits(`${stop('v1')}\nRead the output file to retrieve the result.\n${stop('v2')}`), 2, 'text between two notices');
+  const lane = '<task-notification><task-id>ag</task-id><summary>Agent "a" done</summary><result>r</result></task-notification>';
+  assert.equal(hits(lane + stop('w1')), 0, 'after a lane\'s result, the rest is the lane\'s');
+  assert.equal(hits(`<task-notification><task-id>s1</task-id>${words('x')}junk<result>r</result></task-notification>`), 0, 'a summary that never ends');
+});
+
+test('lanes: a folder named like a transcript is searched like any other', () => {
+  const { dir, write } = fixture();
+  write(`${session}.jsonl`, [user(0, '<command-args>plan ab12</command-args>'), asst(1)]);
+  write(`${session}/subagents/d.jsonl/agent-a.jsonl`, [user(1, 'p', { isSidechain: true }), asst(3)]);
+  const { data } = measure(dir, plans(`ab12 abcd0001 ${T(10)}\n`), rx);
+  assert.deepEqual([data[0].lanes, data[0].lanesSkipped], [1, 0]);
   rmSync(dir, { recursive: true });
 });
