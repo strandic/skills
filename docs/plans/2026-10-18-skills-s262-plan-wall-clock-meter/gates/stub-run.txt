@@ -1,0 +1,880 @@
+TAP version 13
+# Subtest: classify: a tool result takes the kind of its call
+not ok 1 - classify: a tool result takes the kind of its call
+  ---
+  duration_ms: 2.023333
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:39:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'other' !== 'model'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'model'
+  actual: 'other'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:58:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.start (node:internal/test_runner/test:1096:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17)
+  ...
+# Subtest: classify: what woke the session
+not ok 2 - classify: what woke the session
+  ---
+  duration_ms: 0.313292
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:64:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    "SECRET-TEXT"
+    
+    'other' !== 'human'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'human'
+  actual: 'other'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:116:41)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:385:3)
+  ...
+# Subtest: classify: a background command's notification is a wait on the command, a lane's on the lane
+not ok 3 - classify: a background command's notification is a wait on the command, a lane's on the lane
+  ---
+  duration_ms: 0.203625
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:119:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'other'
+    - 'exec-wait'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'exec-wait'
+  actual: 'other'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:126:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: classify: records that only accompany a wake-up are deferred
+not ok 4 - classify: records that only accompany a wake-up are deferred
+  ---
+  duration_ms: 0.12975
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:151:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    'other' !== 'defer'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'defer'
+  actual: 'other'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:162:13)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: a deferred gap goes to the wake-up record that follows it
+not ok 5 - split: a deferred gap goes to the wake-up record that follows it
+  ---
+  duration_ms: 0.627209
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:167:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + {}
+    - {
+    -   'other-session-wait': 121,
+    -   model: 1
+    - }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    other-session-wait: 121
+    model: 1
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:171:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: a deferred gap followed by the model is other, never model
+not ok 6 - split: a deferred gap followed by the model is other, never model
+  ---
+  duration_ms: 0.239167
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:174:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + {}
+    - {
+    -   model: 1,
+    -   other: 30
+    - }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    other: 30
+    model: 1
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:176:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: a deferred gap at the end of the window is other
+not ok 7 - split: a deferred gap at the end of the window is other
+  ---
+  duration_ms: 0.104333
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:179:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + {}
+    - {
+    -   other: 30
+    - }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    other: 30
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:181:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: an idle compaction is owner wait; a mid-turn one is compaction
+not ok 8 - split: an idle compaction is owner wait; a mid-turn one is compaction
+  ---
+  duration_ms: 0.57075
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:184:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + {}
+    - {
+    -   human: 400,
+    -   model: 1
+    - }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    human: 400
+    model: 1
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:187:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: gaps that cross the window edges are dropped
+not ok 9 - split: gaps that cross the window edges are dropped
+  ---
+  duration_ms: 0.14475
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:193:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + {}
+    - {
+    -   human: 10,
+    -   model: 10
+    - }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    human: 10
+    model: 10
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:196:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: an owner record right after the window opens starts a turn
+not ok 10 - split: an owner record right after the window opens starts a turn
+  ---
+  duration_ms: 0.151917
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:199:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:202:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: a record at the opener's own instant is not a turn after it
+not ok 11 - split: a record at the opener's own instant is not a turn after it
+  ---
+  duration_ms: 0.099708
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:206:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:209:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: waitStats: median and max of any number of waits
+not ok 12 - waitStats: median and max of any number of waits
+  ---
+  duration_ms: 0.180041
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:213:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      {
+    +   max: 0,
+    +   median: 0
+    -   max: 9,
+    -   median: 2
+      }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    median: 2
+    max: 9
+  actual:
+    median: 0
+    max: 0
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:215:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: owner turns count runs of owner records; a compaction or reminder between adds none
+not ok 13 - split: owner turns count runs of owner records; a compaction or reminder between adds none
+  ---
+  duration_ms: 0.102916
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:220:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 3
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 3
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:223:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: tool calls that hit their time limit, by the harness's record only
+not ok 14 - split: tool calls that hit their time limit, by the harness's record only
+  ---
+  duration_ms: 0.223791
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:233:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    timedOutAfterMs
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:238:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: split: an AskUserQuestion answer is an owner turn; an interrupt is not
+not ok 15 - split: an AskUserQuestion answer is an owner turn; an interrupt is not
+  ---
+  duration_ms: 0.133584
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:286:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + {}
+    - {
+    -   human: 40,
+    -   interrupt: 9,
+    -   model: 2
+    - }
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    human: 40
+    model: 2
+    interrupt: 9
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:290:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: planStarts: plan commands for exactly this ticket
+not ok 16 - planStarts: plan commands for exactly this ticket
+  ---
+  duration_ms: 0.131291
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:297:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   1,
+    -   2,
+    -   3,
+    -   4
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: 1
+    1: 2
+    2: 3
+    3: 4
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:311:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: parsePlans: fields, comments, and refusals by line number
+not ok 17 - parsePlans: fields, comments, and refusals by line number
+  ---
+  duration_ms: 0.149375
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:318:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+    + []
+    - [
+    -   {
+    -     brief: 1792224908000,
+    -     session: 'd0d3',
+    -     start: null,
+    -     ticket: 'pi0y'
+    -   },
+    -   {
+    -     brief: 1792224000000,
+    -     session: 'ffee',
+    -     start: 1792220400000,
+    -     ticket: 'ab12'
+    -   }
+    - ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0:
+      ticket: 'pi0y'
+      session: 'd0d3'
+      brief: 1792224908000
+      start: ~
+    1:
+      ticket: 'ab12'
+      session: 'ffee'
+      brief: 1792224000000
+      start: 1792220400000
+  actual:
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:319:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: isIso: real instants only
+not ok 18 - isIso: real instants only
+  ---
+  duration_ms: 0.105042
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:347:1'
+  failureType: 'testCodeFailure'
+  error: '2026-10-17T10:15:08+02:00'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:348:107)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: sessionFile: a unique prefix; refusals do not name the path
+not ok 19 - sessionFile: a unique prefix; refusals do not name the path
+  ---
+  duration_ms: 0.685125
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:352:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + ''
+    - '/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/plantime-IWX9r2/aaaa1111-x.jsonl'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: '/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/plantime-IWX9r2/aaaa1111-x.jsonl'
+  actual: ''
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:355:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: records: unreadable lines and untimed records are counted, the rest sorted
+not ok 20 - records: unreadable lines and untimed records are counted, the rest sorted
+  ---
+  duration_ms: 0.333208
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:365:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 4
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 4
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:369:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: isProbe: the default probe regex's verdict on every command, without its backtracking
+not ok 21 - isProbe: the default probe regex's verdict on every command, without its backtracking
+  ---
+  duration_ms: 17.057041
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:380:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'exec:other-shell'
+    - 'exec:probe'
+            ^
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'exec:probe'
+  actual: 'exec:other-shell'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:390:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: cost: classifying four times the command or the notice costs at most six times the time (best of 3)
+not ok 22 - cost: classifying four times the command or the notice costs at most six times the time (best of 3)
+  ---
+  duration_ms: 0.159333
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:394:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    false !== true
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:397:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: measure: one plan, its lanes nested at any depth, and a plan with no command
+not ok 23 - measure: one plan, its lanes nested at any depth, and a plan with no command
+  ---
+  duration_ms: 2.299459
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:434:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 3
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 3
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:437:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: measure: a given start time overrides the plan command; a start after the brief is refused
+not ok 24 - measure: a given start time overrides the plan command; a start after the brief is refused
+  ---
+  duration_ms: 0.938667
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:451:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:455:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: lanes: links, loops, pipes and unreadable files are skipped and counted, never followed
+not ok 25 - lanes: links, loops, pipes and unreadable files are skipped and counted, never followed
+  ---
+  duration_ms: 5.607208
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:461:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:471:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: unreadable inputs read NOT RUN by error code
+not ok 26 - unreadable inputs read NOT RUN by error code
+  ---
+  duration_ms: 0.965459
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:478:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:481:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: output holds durations and counts only: no message text, command, session id or path
+ok 27 - output holds durations and counts only: no message text, command, session id or path
+  ---
+  duration_ms: 1.856208
+  type: 'test'
+  ...
+# Subtest: measure: records not read are counted in the session and its lanes
+not ok 28 - measure: records not read are counted in the session and its lanes
+  ---
+  duration_ms: 0.910958
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:504:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:511:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: measure writes nothing
+ok 29 - measure writes nothing
+  ---
+  duration_ms: 2.044083
+  type: 'test'
+  ...
+# Subtest: main: flags and usage
+not ok 30 - main: flags and usage
+  ---
+  duration_ms: 1.776667
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:527:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:532:10)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: the CLI prints from any path to the script: a link, a %, a \#
+not ok 31 - the CLI prints from any path to the script: a link, a %, a \#
+  ---
+  duration_ms: 32.210709
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:541:1'
+  failureType: 'testCodeFailure'
+  error: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/plantime.mjs'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ''
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:551:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+# Subtest: cost: four times the records costs at most six times the time (best of 3)
+not ok 32 - cost: four times the records costs at most six times the time (best of 3)
+  ---
+  duration_ms: 129.105458
+  type: 'test'
+  location: '/private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:561:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    0 !== 1
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 1
+  actual: 0
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///private/var/folders/w1/6jz5gyfs2nz5xdwckcc_1zm00000gp/T/tmp.XQtIwxvtMR/scripts/test/plantime.test.mjs:575:12)
+    Test.runInAsyncScope (node:async_hooks:227:14)
+    Test.run (node:internal/test_runner/test:1201:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:831:18)
+    Test.postRun (node:internal/test_runner/test:1330:19)
+    Test.run (node:internal/test_runner/test:1258:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:831:7)
+  ...
+1..32
+# tests 32
+# suites 0
+# pass 2
+# fail 30
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 264.857167

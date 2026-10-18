@@ -44,3 +44,20 @@ DEFAULTs (go or silence accepts):
 - D7 Unsourced, 0 local records: teammate-message → other-session-wait; auto-continuation → external; `<tick>` → scheduled; `<remote-review>` → lane-wait.
 
 unruled: Q1 — default none (a RULING)
+
+## Rulings (2026-10-18)
+
+The owner, verbatim: "Go with reco".
+- R4 (Q1): option 1. `"cleanupPeriodDays": 365` was set in ~/.claude-personal/settings.json on the owner's word (`grep -n cleanupPeriodDays ~/.claude-personal/settings.json` → `55:  "cleanupPeriodDays": 365,`; the file parses as JSON). Source: the installed CLI 2.1.302's settings schema reads `cleanupPeriodDays: int().positive().optional()`, "Number of days to retain chat transcripts before automatic cleanup (default: 30)". Whether it actually keeps files past 30 days stays `unexecuted` until Nov 4 2026, when the oldest round-6 transcript turns 48 days old.
+- D1–D7 accepted.
+
+## Brief (2026-10-18)
+
+Brief: `docs/plans/2026-10-18-skills-s262-plan-wall-clock-meter/plan.md`, with the whole-file sketches in `sketch/` and the gate tools in `gates/`. Re-spiked on R4. Attack lanes 3–8 ran after R4, finding 30 problems; all were fixed or recorded. Readings, each beside its command, are in the brief. In brief:
+- `node --test scripts/test/plantime.test.mjs` → 32/32. Against the stub → 30 red, all AssertionError; tests 27 and 29 are guards.
+- Suite → 545 tests, 543 pass, 0 fail, 2 skipped.
+- G1–G3 PASS on rounds 6 and 7. G4: meter 150 = reader 150. Mutants: 83 of 83 red.
+- New since the questions ending: the meter counts background commands stopped at their background limit (the 2.1.285 changelog), once per call.
+- New DEFAULT D8: two records in one millisecond keep their file order. Reading: 7 of 7 real stop notices come after their call.
+
+unruled: D8 — default accept (two records in one millisecond keep file order)
