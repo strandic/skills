@@ -11,7 +11,8 @@ const mk = (kind, m, id) => kind === 'owner' ? { type: 'user', timestamp: T(m), 
   : { type: 'user', timestamp: T(m), message: { content: [{ type: 'tool_result', tool_use_id: id }] } };
 // Hand rule: a "wake" is owner or ask (owner kinds); meta never breaks; model/interrupt end a turn. A turn starts at the
 // first owner-kind record after a non-owner one (or the first after the start instant); it counts when its first
-// record's gap lies inside the window (previous record at or after the start). Records at the start instant are skipped.
+// record's wait lies inside the window: the last record before it that is not meta is at or after the start (meta
+// passes its gap on, so it starts a wait only as the file's first record). Records at the start instant are skipped.
 function hand(seq, start) {
   let turns = 0, open = false, prevT = null, lastId = null;
   seq.forEach(([k, m]) => {
@@ -19,7 +20,7 @@ function hand(seq, start) {
       if (!open) { open = true; if (prevT !== null && prevT >= start) turns++; }
     } else if (m > start && (k === 'model' || k === 'interrupt' || k === 'ask')) open = false;
     if (k === 'model') lastId = true;
-    prevT = m;
+    if (k !== 'meta' || prevT === null) prevT = m;
   });
   return turns;
 }

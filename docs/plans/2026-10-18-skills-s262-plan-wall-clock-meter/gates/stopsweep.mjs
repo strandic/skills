@@ -1,8 +1,9 @@
-// node stopsweep.mjs <abs path to plantime.mjs>: the stop-notice match against the old regex (an independent
-// implementation) on every string of up to 5 tokens; the meter's match is read through split's count.
+// node stopsweep.mjs <abs path to plantime.mjs>: the stop-notice match against a regex written from the header's rule
+// (an independent implementation: the first <summary> opens with the words, the last </summary> closes them, two quotes)
+// on every string of up to 5 tokens; the meter's match is read through split's count.
 const { split, DEFAULTS } = await import(process.argv[2]);
 const rx = Object.fromEntries(Object.entries(DEFAULTS).map(([k, v]) => [k, new RegExp(v)]));
-const RE = /<summary>Background command "[\s\S]*" was stopped after reaching its background time limit<\/summary>/;
+const RE = /^((?!<summary>)[\s\S])*<summary>Background command "[\s\S]*" was stopped after reaching its background time limit<\/summary>((?!<\/summary>)[\s\S])*$/;
 const toks = ['<summary>Background command "', '" was stopped after reaching its background time limit</summary>', '"', 'x', '</summary>', '<summary>', ' was stopped after reaching its background time limit</summary>'];
 let n = 0, differ = 0;
 const T = new Date(Date.UTC(2026, 0, 1)).toISOString();
