@@ -24,14 +24,15 @@
  * even count is the lower middle. `timeLimitHits` counts tool calls the harness stopped or moved to the
  * background at their time limit, and background commands it stopped at their background time limit
  * (its notice of it). Only the harness's part of a notice is read: its tags up to the summary's end
- * (the first `</summary>` the harness's next tag follows), never the `<result>` a lane wrote. Each notice
- * in a record is read alone; after a `<result>`, the rest of the record is the lane's. Each call counts
- * once per transcript file, so a call moved at its limit and later stopped at the next is one, whether
- * the notice names it by its call id or by the task id its result carried; a call in the session and
- * its notice in a lane are two files, so two. A call the file does not hold is known by the id the
- * record names, and by the task id once a record has named both; a record naming no id, or naming it by
- * anything but text, is a call of its own. `unreadableRecords` counts lines that are not JSON and turn records with no real timestamp, in the
- * whole session file and in each lane with a record in the window. A lane file with bad lines and no
+ * (the first `</summary>` the harness's next tag follows; a summary that never ends so is no stop notice),
+ * never the `<result>` a lane wrote. Each notice in a record is read alone; after a `<result>`, the rest
+ * of the record is the lane's, so a notice after it is not read. Each call counts once per transcript
+ * file, so a call moved at its limit and later stopped at the next is one, whether the notice names it
+ * by its call id or by the task id its result carried; a call in the session and its notice in a lane
+ * are two files, so two. A call the file does not hold is known by the id the record names, and by the
+ * task id once a record has named both; a record naming no id, or naming it by anything but text, is a
+ * call of its own. `unreadableRecords` counts lines that are not JSON and turn records with no real
+ * timestamp, in the whole session file and in each lane with a record in the window. A lane file with bad lines and no
  * turn record is a skipped lane; one with no turn record and no bad line (empty, blank, or other record
  * types only) is no lane. Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), so
  * a plan older than that reads NOT RUN. A plan the meter could not measure for any other reason reads
@@ -40,11 +41,12 @@
  * Each gap between two consecutive records is charged to the record that ends it (`bucket`).
  * A gap that crosses the window's start or end is dropped, so `attributed` can be less than `wall`.
  * Lane transcripts (subagents with a record in the window) are split the same way and summed; lanes
- * that overlap are counted twice. Symbolic links, and anything named `*.jsonl` that is not a regular
- * file, under `subagents/` are skipped and counted in `lanesSkipped`, as is a session folder that is a
- * link; links are never followed. The plans file is a regular file or a pipe. A named pipe is read
- * until its writer closes it, and refused after 10 s with nothing read; a pipe the shell hands over
- * (`<(…)`) is, on some systems (macOS), read until its command ends. Errors name no path.
+ * that overlap are counted twice. Symbolic links, and anything named `*.jsonl` that is neither a regular
+ * file nor a folder (a folder is searched like any other), under `subagents/` are skipped and counted in
+ * `lanesSkipped`, as is a session folder that is a link; links are never followed. The plans file is a
+ * regular file or a pipe. A named pipe is read until its writer closes it, and refused after 10 s with
+ * nothing new to read; a pipe the shell hands over (`<(…)`) is, on some systems (macOS), read until its
+ * command ends. Errors name no path.
  */
 import { readFileSync, readdirSync, lstatSync, realpathSync, statSync, openSync, readSync, closeSync, constants } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -134,9 +136,9 @@ function harnessEnd(text, from) {
   return r < 0 ? text.length : r;
 }
 /** A record's task notifications, each read alone and only the harness's part of each: the tags up to
- *  the summary's end, never the `<result>` a lane wrote. A notice closed right after that part (a note
- *  aside) may be followed by another; after a `<result>`, the rest of the record is the lane's. A record
- *  that is one by its origin and holds no tag is one notification. */
+ *  the summary's end, never the `<result>` a lane wrote. A notice closed after that part (its note and
+ *  usage aside) may be followed by another, after any text; after a `<result>`, the rest of the record is
+ *  the lane's. A record that is one by its origin and holds no tag is one notification. */
 function notices(text) {
   let i = text.indexOf(OPEN_TAG);
   if (i < 0) return [text.slice(0, harnessEnd(text, 0))];
@@ -148,11 +150,13 @@ function notices(text) {
     let j = end;
     const skip = () => { while (j < text.length && /\s/.test(text[j])) j++; };
     skip();
-    if (text.startsWith('<note>', j)) { const e = text.indexOf('</note>', j); if (e < 0) break; j = e + 7; skip(); }
+    // The harness's note and usage may follow the summary; a `<result>` is the lane's and ends the reading.
+    for (let tag; (tag = ['note', 'usage'].find((t) => text.startsWith(`<${t}>`, j))); skip()) {
+      const e = text.indexOf(`</${tag}>`, j);
+      j = e < 0 ? text.length : e + tag.length + 3;
+    }
     if (!text.startsWith(CLOSE_TAG, j)) break;
-    j += CLOSE_TAG.length;
-    skip();
-    i = text.startsWith(OPEN_TAG, j) ? j : -1;
+    i = text.indexOf(OPEN_TAG, j + CLOSE_TAG.length);
   }
   return out;
 }
@@ -332,15 +336,15 @@ const LIMIT_TEXT = /^(?:<error>)?(?:Command did not complete within its \d+s tim
 // The harness's notice for a background command stopped at its own time limit (CLI 2.1.285 and later):
 // `<summary>Background command "<command>" was stopped after reaching its background time limit</summary>`.
 // The harness does not escape the command, so the summary is read from its first `<summary>` to the
-// summary's end (`notices`), the last `</summary>` of the harness's part. Searches, not a regex:
-// `"[\s\S]*"` would retry from every opener, quadratic in a long notice.
+// summary's end (`notices`), where the harness's part ends; a summary that never ends so is no stop
+// notice. Searches, not a regex: `"[\s\S]*"` would retry from every opener, quadratic in a long notice.
 const STOPPED_OPEN = '<summary>Background command "';
 const STOPPED_END = '" was stopped after reaching its background time limit';
+const STOPPED_CLOSE = `${STOPPED_END}</summary>`;
 const isStopNotice = (h) => {
   const i = h.indexOf('<summary>');
-  const j = h.lastIndexOf('</summary>');
   // The command's two quotes are two characters: one quote cannot open and close it.
-  return i >= 0 && h.startsWith(STOPPED_OPEN, i) && j >= i + STOPPED_OPEN.length + STOPPED_END.length && h.startsWith(STOPPED_END, j - STOPPED_END.length);
+  return i >= 0 && h.startsWith(STOPPED_OPEN, i) && h.endsWith(STOPPED_CLOSE) && h.length - STOPPED_CLOSE.length >= i + STOPPED_OPEN.length;
 };
 
 /** The calls a record says ran out of time, by the harness's record of it: a tool result with
@@ -533,7 +537,7 @@ export function measure(dir, plans, rx) {
 const PAUSE = new Int32Array(new SharedArrayBuffer(4));
 const QUIET = 10000;
 /** The plans file: a regular file, or a pipe. A named pipe is opened without blocking and read until its
- *  writer closes it, the writer free to open it late; 10 s with nothing read is refused. Anything else (a
+ *  writer closes it, the writer free to open it late; 10 s with nothing new to read is refused. Anything else (a
  *  device, a socket) is refused rather than waited on. A pipe the shell hands over (`<(…)`) may read as
  *  blocking on some systems (macOS): it is then read until its command ends. */
 function readPlans(path) {
@@ -554,7 +558,7 @@ function readPlans(path) {
       // On a pipe with no writer a read gives 0 at once: before any data, the writer may not have opened it yet.
       if (n === 0 && (!st.isFIFO() || parts.length)) return Buffer.concat(parts).toString('utf8');
       if (n > 0) { parts.push(Buffer.from(buf.subarray(0, n))); until = Date.now() + QUIET; continue; }
-      if (Date.now() > until) throw Object.assign(new Error(), { code: 'nothing read in 10 s' });
+      if (Date.now() > until) throw Object.assign(new Error(), { code: 'nothing read for 10 s' });
       Atomics.wait(PAUSE, 0, 0, 10);
     }
   } catch (e) { throw new Error(`plans file not readable: ${why(e)}`); }
