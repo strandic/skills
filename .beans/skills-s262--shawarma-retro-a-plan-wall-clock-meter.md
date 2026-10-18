@@ -94,3 +94,7 @@ Round 3 written, uncommitted (`reports/r3-meter.diff`): `node --test scripts/tes
 Beyond the ruled list: a summary that never ends (no `</summary>` followed by a harness tag) is no stop notice; 2bb0014 counted one by the last `</summary>`.
 
 unruled: round-3 contract hunks — default none (a RULING)
+
+## Run: round 3 committed; third fresh review lane running (2026-10-18)
+
+The owner, verbatim: "Go" → R11 (a summary that never ends is no stop notice) and round 3's hunks. Branch commits c97b44a (tests), 65fb971 (fix), f6bb3ce (`gates/stopsweep.mjs`), 75692c7 (§9 R10, R11). A fresh review lane runs on 65fb971.
