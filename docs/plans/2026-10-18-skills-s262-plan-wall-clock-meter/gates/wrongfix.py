@@ -6,7 +6,7 @@ W = [
  ('W1', "'exec-wait', 'other-session-wait', 'idle-for-coordinator'", "'exec-wait', 'idle-for-coordinator'"),  # another session's message is not a wake-up
  ('W2', "for (const [cg, fallback] of carried) if (WAKE.has(k)) total += cg; else add(fallback, cg);", "for (const [cg] of carried) add('human', cg);"),  # deferred gaps are owner wait
  ('W3', "if (d.isCompactSummary) return 'compaction';", "if (d.isCompactSummary) return 'human';"),  # compaction is owner wait
- ('W4', "|| (task !== undefined && kinds.get(`task:${task}`))", ""),  # notifications by task id only are lanes
+ ('W4', "|| (task !== undefined && tasksOf(kinds).get(task)?.call)", ""),  # notifications by task id only are lanes
  ('W5', "  if (OWNER_ORIGINS.has(origin) && !d.isMeta) return 'human';\n", ""),  # owner text quoting tags is read by its tags
 ]
 src = open(f'{wt}/scripts/plantime.mjs').read()
