@@ -9,8 +9,8 @@ Written into a brief's §7 at plan step 2.
 
 Attack lines, one per row, each one input or one verb sequence with the oracle that grades it — the expected reading stays in the planner's notes; a class word (spike.md q3) is an `enumerate:` row with its source; one line per repeat over input the diff adds or changes, its worst-case input named. The plan-time attack lane (plan step 2) also flags each spike.md rule the diff triggers that §2 does not apply, and each ticket checklist item with no §3 row, §4 test, §5 follow-up or §8 reason. Every lane, before running a line, checks its named oracle: one sharing a parser, a ref or an environment with what it grades is returned as a finding, not run, and the line is changed before it runs:
 
-- `<attack> → oracle <name>`
-- `enumerate: <finite list, source> → oracle <name>`
+- `<id> <attack> → oracle <name>`
+- `<id> enumerate: <finite list, source> → oracle <name>`
 
 Mutants for 3b, one per row:
 

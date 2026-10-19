@@ -9,6 +9,54 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-19
+
+shawarma round 8.
+
+### Added
+- `freeze_check.py` runs plan step 5's mechanical freeze conditions on a brief, checks F1–F9:
+  - the nine sections exist, in order;
+  - each attack line has a reading or reads `NOT RUN`, and each `NOT RUN` is in the review
+    lane's cell;
+  - Sources and Partition rows have readings;
+  - the lane cells match lanes.md;
+  - every class word has a line id (FAIL in §3 and the lane cells, WARN in code comments);
+  - every §5 rule has its fields (`--fields` prints them);
+  - the header names every lesson in the listing (`--listing`).
+
+  Plan step 5's freeze list is now one sentence plus this script.
+- `check_pr.py` checks a PR body, checks P1–P6:
+  - its sections;
+  - the Decisions and Findings tables and their labels;
+  - every RULING/DEFAULT id is one the brief records;
+  - the pasted `git log` is re-run;
+  - every test the tests commit added but HEAD lacks is named in §9.
+
+  run.md's PR-key sentences moved into its `--skeleton`. `test_checks.py` holds 36 tests
+  for both scripts.
+- Asks go on the ticket under `## Ask <date> · <kind>` and are counted by
+  `check_pr.py --asks`. The hand-kept stats lines are gone.
+
+### Changed
+- Spike and plan:
+  - an outside writer is one of the unit kinds;
+  - enumerations come from the consumer's spec;
+  - framed text is parsed by the consumer's grammar;
+  - older releases still running count as writers;
+  - a red needs a reason the unfixed code cannot also produce;
+  - options are executed at the values offered.
+- §2 planner-saw items and attack lines carry ids. §9 is the record of decisions.
+- An unsettled re-read is a RULING stop. The triggers for a fresh review lane are named.
+- Retro: escapes are attributed at any age, and a PR's own known residues are counted.
+- Load paths (tokens):
+
+  | path | before | after |
+  |---|---|---|
+  | plan | ~7.1k | ~7.1k |
+  | interview | ~7.3k | ~7.4k |
+  | run | ~7.1k | ~6.9k |
+  | retro | ~1.8k | ~1.9k |
+
 ## [0.7.0] - 2026-10-15
 
 shawarma round 7.

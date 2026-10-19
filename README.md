@@ -65,7 +65,8 @@ answer, or a DEFAULT, which stands unless you strike it.
 
 The rules live in [`skills/shawarma/`](skills/shawarma/): [`SKILL.md`](skills/shawarma/SKILL.md)
 holds the shared core and says which other file each command reads, and when (plan, run,
-retro, the design interview, the spike, cost probes, the brief template, the lane cells). This is a guided tour, not a
+retro, the design interview, the spike, cost probes, the brief template, the lane cells), plus two
+checks: `freeze_check.py` for a brief and `check_pr.py` for a PR. This is a guided tour, not a
 substitute. The session you invoke the skill in is the **orchestrator**: it alone touches
 git, the ticket, real data and the PR. The other work goes to **lanes**, which are
 subagents with a narrow prompt and a fixed set of files.
