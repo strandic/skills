@@ -25,8 +25,9 @@
  * background at their time limit, and background commands it stopped at their background time limit
  * (its notice of it). Only the harness's part of a notice is read: its tags up to the summary's end
  * (the first `</summary>` the harness's next tag follows; a summary that never ends so is no stop notice),
- * never the `<result>` a lane wrote. Each notice in a record is read alone; after a `<result>`, the rest
- * of the record is the lane's, so a notice after it is not read. Each call counts once per transcript
+ * never the `<result>` a lane wrote. Each notice in a record is read alone; once a notice holds a
+ * `<result>` (or anything but a note or usage) before its close, the rest of the record is the lane's,
+ * so a notice after it is not read; text between two closed notices is skipped. Each call counts once per transcript
  * file, so a call moved at its limit and later stopped at the next is one, whether the notice names it
  * by its call id or by the task id its result carried; a call in the session and its notice in a lane
  * are two files, so two. A call the file does not hold is known by the id the record names, and by the
