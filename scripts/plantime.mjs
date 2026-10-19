@@ -1,53 +1,16 @@
 #!/usr/bin/env node
 /**
- * Where a shawarma plan's wall-clock goes, read from Claude Code transcripts.
- * Prints durations and counts only, never message content: transcripts may hold private data.
+ * plantime: where a shawarma plan's wall-clock time went, read from Claude Code transcripts.
+ * Prints durations and counts only, never message text: transcripts may hold private data.
  *
  *   node scripts/plantime.mjs <transcripts dir> <plans file> [--json] [--suite|--probe|--lint|--vcs <regex>]
  *
- * <transcripts dir> is one project's folder under the Claude Code config dir's `projects/`: one
- * `<session id>.jsonl` per session, its subagents under `<session id>/subagents/`.
- * <plans file> has one plan per line, fields separated by whitespace; a line or field starting with `#` starts a comment:
+ * <transcripts dir>: one project's folder under Claude Code's `projects/`.
+ * <plans file>: one plan per line, `#` starts a comment:
  *   <ticket> <session id or unique prefix> <brief commit time> [<start time>]
- * <ticket> as typed in the plan command. The session prefix is 4+ characters of 0-9, a-f and `-`.
- * Times are ISO 8601 date-times with an offset or `Z`; the brief commit's is `git log -1 --format=%cI <commit>`.
- * The window starts at the first `plan <ticket>` command in the session before the brief time unless a
- * start time is given; only a command the owner gave counts (no origin or the owner's, its text opening
- * with the command's tag, or a typed `/…shawarma plan <ticket>`), never one a record quotes.
- * Owner turns count the owner's turns whose wait lies inside the window. Records at the opener's own
- * instant are part of the opener; the first owner record after that instant starts a turn even with
- * nothing between, and later owner records with only accompanying records (meta, reminders,
- * compactions) between join the turn before. A turn's wait runs from the last record before it that is
- * not an accompanying one, or with none, from the file's first record; a turn whose wait crosses the
- * window's start is not counted, nor are the owner records that join it. An AskUserQuestion answer is
- * an owner turn; an interrupt (the harness's record, which has no origin) is not. The median of an
- * even count is the lower middle. `timeLimitHits` counts tool calls the harness stopped or moved to the
- * background at their time limit, and background commands it stopped at their background time limit
- * (its notice of it). Only the harness's part of a notice is read: its tags up to the summary's end
- * (the first `</summary>` the harness's next tag follows; a summary that never ends so is no stop notice),
- * never the `<result>` a lane wrote. Each notice in a record is read alone; once a notice holds a
- * `<result>` (or anything but a note or usage) before its close, the rest of the record is the lane's,
- * so a notice after it is not read; text between two closed notices is skipped. Each call counts once per transcript
- * file, so a call moved at its limit and later stopped at the next is one, whether the notice names it
- * by its call id or by the task id its result carried; a call in the session and its notice in a lane
- * are two files, so two. A call the file does not hold is known by the id the record names, and by the
- * task id once a record has named both; a record naming no id, or naming it by anything but text, is a
- * call of its own. `unreadableRecords` counts lines that are not JSON and turn records with no real
- * timestamp, in the whole session file and in each lane with a record in the window. A lane file with bad lines and no
- * turn record is a skipped lane; one with no turn record and no bad line (empty, blank, or other record
- * types only) is no lane. Claude Code deletes transcripts after `cleanupPeriodDays` (30 by default), so
- * a plan older than that reads NOT RUN. A plan the meter could not measure for any other reason reads
- * NOT RUN with the error's name, and the other plans still run.
+ * Times are ISO 8601 with an offset or `Z`; the brief commit's is `git log -1 --format=%cI <commit>`.
  *
- * Each gap between two consecutive records is charged to the record that ends it (`bucket`).
- * A gap that crosses the window's start or end is dropped, so `attributed` can be less than `wall`.
- * Lane transcripts (subagents with a record in the window) are split the same way and summed; lanes
- * that overlap are counted twice. Symbolic links, and anything named `*.jsonl` that is neither a regular
- * file nor a folder (a folder is searched like any other), under `subagents/` are skipped and counted in
- * `lanesSkipped`, as is a session folder that is a link; links are never followed. The plans file is a
- * regular file or a pipe. A named pipe is read until its writer closes it, and refused after 10 s with
- * nothing new to read; a pipe the shell hands over (`<(…)`) is, on some systems (macOS), read until its
- * command ends. Errors name no path.
+ * Full reference (terms, buckets, figures, rules): scripts/plantime.md.
  */
 import { readFileSync, readdirSync, lstatSync, realpathSync, statSync, openSync, readSync, closeSync, constants } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -136,10 +99,12 @@ function harnessEnd(text, from) {
   const r = text.indexOf('<result>', p.index);
   return r < 0 ? text.length : r;
 }
-/** A record's task notifications, each read alone and only the harness's part of each: the tags up to
- *  the summary's end, never the `<result>` a lane wrote. A notice closed after that part (its note and
- *  usage aside) may be followed by another, after any text; after a `<result>`, the rest of the record is
- *  the lane's. A record that is one by its origin and holds no tag is one notification. */
+/** A record's task notifications. Each is read alone, and only the harness's part of each: its tags up
+ *  to the summary's end (`harnessEnd`), never the `<result>` a lane wrote. After that part, the
+ *  notification's note and usage are passed over; then its close must follow. If anything else comes
+ *  first (a `<result>`, say), the rest of the record is the lane's and no later notification is read.
+ *  Text between two closed notifications is skipped. A record that is a notification by its origin and
+ *  holds no tag is one notification. */
 function notices(text) {
   let i = text.indexOf(OPEN_TAG);
   if (i < 0) return [text.slice(0, harnessEnd(text, 0))];
@@ -351,8 +316,8 @@ const isStopNotice = (h) => {
 /** The calls a record says ran out of time, by the harness's record of it: a tool result with
  *  `timedOutAfterMs` or its words opening the result, or each of its notices that a background command
  *  was stopped at its background limit. A call the transcript does not hold is keyed by the id the record
- *  names, or by its task id once a record has named both; a record naming none is a call of its own.
- *  Elapsed time never counts. */
+ *  names, or by its task id once a record has named both; a record naming none, or naming it by anything
+ *  but text, is a call of its own. Elapsed time never counts. */
 function limitCalls(d, k, kinds) {
   if (d.type !== 'user') return [];
   const c = d.message?.content;
