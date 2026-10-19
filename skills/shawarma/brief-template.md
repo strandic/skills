@@ -22,7 +22,7 @@ The change, as a code sketch wherever shorter than prose. Every sketch is marked
 
 **Attack readings** (one per §7 line): `<line> → <reading>` or `NOT RUN (why)`. A reading that changed a sketch says which lines; a reading that holds names its §4 test.
 
-**What the planner saw** — spike findings that did not stop the plan: the reading, and why it contradicts no ruling, gate rule or contract.
+**What the planner saw** — spike findings that did not stop the plan, each with an id (S1, …): the reading, and why it contradicts no ruling, gate rule or contract.
 
 ## 3. Contract (frozen)
 
@@ -35,7 +35,7 @@ Signatures, data shapes, doc-comment rules. If the change has an error surface: 
 
 Numbered and named, file per test, one reason to go red each. Synthetic data only.
 
-- *red* — fails on the tests commit; its executed assertion.
+- *red* — fails on the tests commit, for a reason the unfixed code cannot also produce; its executed assertion.
 - *guard* — green before and after; pins what must not change.
 
 **Existing tests that change** (plan step 2):
@@ -49,7 +49,7 @@ Predicted red set on the tests commit (plan step 2's run, pasted): **…**; guar
 
 - suite, lint and review per run steps 3–4
 - live-data run: <what, where; read-only, aggregates only — or `DRY-RUN ON STAND-IN` where the house rules allow no access, said in the PR>; readings with no rule are observations, recorded here at plan time and in the PR's Verification at run time
-- rules, written now — for each: the rule · the command line it runs, on a tracked script, and the output fields it reads · the dataset and slice that binds, read in aggregate or case by case · its settle clause (when read, how many readings; none = once) · its dry-run reading with the fix patched in (or `DRY-RUN ON STAND-IN`) · its FAIL reading on the named data (spike q3) · the executed reading when its command cannot run (a tool or an input missing, or its guarded step skipped: the rule reads a trace that the step ran), which must differ from its PASS
+- rules, written now, each with a bold id (**R1**) and the fields `freeze_check.py --fields` prints
 - orchestrator follow-ups: <re-runs, other tickets>
 
 ## 6. Worst impact

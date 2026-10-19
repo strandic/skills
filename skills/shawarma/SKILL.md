@@ -12,7 +12,11 @@ Before any branch, read the repo's `docs/plans/README.md` if it exists: every me
 
 ## Asking the human
 
-One format, in prose, free-text answers welcome: the reading · the mechanism · which is wrong — rule, ticket or code · the options, one-line consequence and executed reading (or `unexecuted`) each, recommendation first · where the residue goes. A **RULING** changes a numbered ruling, a ruled residue, a frozen line, a gate, a lesson the plan cites, or accepts a shape plan step 3(c) names; the ask quotes what it touches and waits. Anything else is a **DEFAULT**: `go` or silence accepts the recommendation; one the human strikes becomes a RULING. A DEFAULT may add a test, never flip one. For a pre-registered threshold, recommend a reading; never draft the replacement number before the ruling.
+One format, in prose, free-text answers welcome: the reading · the mechanism · which is wrong — rule, ticket or code · the options, one-line consequence and executed reading (or `unexecuted`) each, run at the values offered, recommendation first · where the residue goes. A **RULING** changes a numbered ruling, a ruled residue, a frozen line, a gate, a lesson the plan cites, or accepts a shape plan step 3(c) names; the ask quotes what it touches and waits. Anything else is a **DEFAULT**: `go` or silence accepts the recommendation; one the human strikes becomes a RULING. A DEFAULT may add a test, never flip one. For a pre-registered threshold, recommend a reading; never draft the replacement number before the ruling.
+
+## State files
+
+At plan step 1 and run Wave 0, write `.shawarma/active` (Write tool) at the root of the step's tree, beside `.shawarma/.gitignore` holding `*`: the plan dir, then `plan <step>` or `run W<n>`; rewrite it each step or wave; delete it at every stop. Each RULING and DEFAULT appends `<date> | <label> | <decision> | <why>` to the plan dir's `decisions.md`, mirroring §9 once `run` starts.
 
 ## Triage
 
