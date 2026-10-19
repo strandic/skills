@@ -818,3 +818,13 @@ test('lanes: a folder named like a transcript is searched like any other', () =>
   assert.deepEqual([data[0].lanes, data[0].lanesSkipped], [1, 0]);
   rmSync(dir, { recursive: true });
 });
+
+test('split: the stop words need a command between two quotes; line breaks between a notice\'s tags are read past', () => {
+  const t0 = Date.parse(T(0)), t1 = Date.parse(T(100));
+  const hits = (text) => split([user(5, text, { origin: { kind: 'task-notification' } })], t0, t1, rx).limited;
+  const words = ' was stopped after reaching its background time limit</summary>';
+  assert.equal(hits(`<task-notification><summary>Background command "${words}</task-notification>`), 0, 'one quote cannot open and close the command');
+  assert.equal(hits(`<task-notification><summary>Background command ""${words}</task-notification>`), 1, 'an empty command between two quotes');
+  const stop = (id, tail) => `<task-notification>\n<task-id>${id}</task-id>\n<summary>Background command "x"${words}${tail}</task-notification>`;
+  assert.equal(hits(`${stop('n1', '\n<note>n</note>\n<usage>u</usage>\n')}\n${stop('n2', '\n')}`), 2, 'line breaks around the note and usage');
+});
