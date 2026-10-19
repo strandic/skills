@@ -1,11 +1,11 @@
 ---
 # skills-s262
 title: 'shawarma retro: a plan wall-clock meter'
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-18T13:58:41Z
+updated_at: 2026-10-19T07:05:51Z
 parent: skills-mcfe
 ---
 
@@ -114,3 +114,7 @@ DEFAULT rows in the PR's Decisions table, field "label": D1–D13, W0.
 ## Run: round 5 (the meter's reference) committed; gate passed again (2026-10-19)
 
 The owner found the header dense, then proposed keeping only the usage in it and moving the rest to a Markdown file with a flow diagram; verbatim "Go ahead" → R13. Branch commits 508a4c6 (`scripts/plantime.md`, test 50), c82e6f3 (header), 9e9496e (§9 R13). No code line changed. Test 50 fails on three drifted copies (a bucket dropped from the doc, a bucket added to the code, a key added to the output). Gate on 9e9496e: G1 PASS 6/6, 7/7; G2 PASS, PASS; G3 PASS 6/6, 7/7 (W1–W3 FAIL 1/7, W4, W5 PASS 7/7); G4 161 = 161 (08:58:35–08:58:47); G5 tests green, 400k × 1600 → 1.59 s, 1016 MB; rounds 6 and 7 `--json` identical to 3d78caa. Suite 563 / 561 / 0 / 2. PR #3 updated.
+
+## Closed (2026-10-19)
+
+PR #3 merged (rebase) at 2026-10-19T07:05:01Z; `scripts/plantime.mjs`, `scripts/plantime.md` and the tests are on main at 7fef086. Per R3 the ticket closes with the script landed. Follow-ups stay as recorded: D5 (round-8 retro names the command), R4 (check the round-6 transcripts after Nov 4 2026), D2 (ask-round marker, skills-lxpq).
