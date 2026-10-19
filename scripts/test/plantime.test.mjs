@@ -11,7 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readdirSync, rmSync, symlinkSync, chmodSync, copyFileSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync, chmodSync, copyFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -827,4 +827,24 @@ test('split: the stop words need a command between two quotes; line breaks betwe
   assert.equal(hits(`<task-notification><summary>Background command ""${words}</task-notification>`), 1, 'an empty command between two quotes');
   const stop = (id, tail) => `<task-notification>\n<task-id>${id}</task-id>\n<summary>Background command "x"${words}${tail}</task-notification>`;
   assert.equal(hits(`${stop('n1', '\n<note>n</note>\n<usage>u</usage>\n')}\n${stop('n2', '\n')}`), 2, 'line breaks around the note and usage');
+});
+
+test('doc: scripts/plantime.md names every bucket the meter can charge and every --json key', () => {
+  const src = readFileSync(new URL('../plantime.mjs', import.meta.url), 'utf8');
+  const doc = readFileSync(new URL('../plantime.md', import.meta.url), 'utf8');
+  // The bucket names are the lower-case literals these functions return or choose between.
+  const body = (name) => { const i = src.indexOf(`function ${name}(`); return src.slice(i, src.indexOf('\n}\n', i)); };
+  const buckets = new Set();
+  for (const f of ['bashKind', 'toolKind', 'classify', 'noticeKind', 'split'])
+    for (const st of body(f).matchAll(/return\s+[^;]*;|\? '[^']*' : '[^']*'/g))
+      for (const [, lit] of st[0].matchAll(/'([^']*)'/g)) if (/^[a-z]/.test(lit)) buckets.add(lit);
+  assert.ok(buckets.size >= 20, `found ${buckets.size} buckets`);
+  const { dir, write } = fixture();
+  write(`${session}.jsonl`, [user(0, '<command-args>plan ab12</command-args>'), asst(1)]);
+  const { data } = measure(dir, plans(`ab12 abcd0001 ${T(10)}\ncd34 ffff0009 ${T(10)}\n`), rx);
+  rmSync(dir, { recursive: true });
+  const keys = new Set([...Object.keys(data[0]), ...Object.keys(data[1])]);
+  assert.ok(keys.has('notRun') && keys.has('laneBuckets'));
+  const missing = [...buckets, ...keys].filter((k) => !doc.includes(`\`${k}\``));
+  assert.deepEqual(missing, []);
 });
