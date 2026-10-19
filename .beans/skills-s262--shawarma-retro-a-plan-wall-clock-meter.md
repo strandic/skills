@@ -110,3 +110,7 @@ unruled: round-4 hunks — default none (a RULING)
 
 The owner, verbatim: "Go" → R12 (round 4), D12, D13. Branch commits fd8a595 (test 49), 0dc06cd (header), 32572b6 (`l3pop2.py`, `stopsweep.mjs`), 3d78caa (§9). Gate on 3d78caa, each by its §5 command: G1 PASS 6/6, PASS 7/7; G2 PASS, PASS; G3 PASS 6/6, PASS 7/7 (wrongfix W1–W3 FAIL 1/7, W4, W5 PASS 7/7); G4 oracle 161 = meter 161 (08:24:23–08:24:35); G5 tests 22 and 32 green, probes 400k × 1600 → 1.66 s, 1016 MB. Suite: base 513 / 511 / 0 / 2, head 562 / 560 / 0 / 2. PR: https://github.com/strandic/skills/pull/3 (Decisions and Findings tables there).
 DEFAULT rows in the PR's Decisions table, field "label": D1–D13, W0.
+
+## Run: round 5 (the meter's reference) committed; gate passed again (2026-10-19)
+
+The owner found the header dense, then proposed keeping only the usage in it and moving the rest to a Markdown file with a flow diagram; verbatim "Go ahead" → R13. Branch commits 508a4c6 (`scripts/plantime.md`, test 50), c82e6f3 (header), 9e9496e (§9 R13). No code line changed. Test 50 fails on three drifted copies (a bucket dropped from the doc, a bucket added to the code, a key added to the output). Gate on 9e9496e: G1 PASS 6/6, 7/7; G2 PASS, PASS; G3 PASS 6/6, 7/7 (W1–W3 FAIL 1/7, W4, W5 PASS 7/7); G4 161 = 161 (08:58:35–08:58:47); G5 tests green, 400k × 1600 → 1.59 s, 1016 MB; rounds 6 and 7 `--json` identical to 3d78caa. Suite 563 / 561 / 0 / 2. PR #3 updated.
