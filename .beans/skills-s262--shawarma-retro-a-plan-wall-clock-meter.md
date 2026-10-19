@@ -98,3 +98,10 @@ unruled: round-3 contract hunks — default none (a RULING)
 ## Run: round 3 committed; third fresh review lane running (2026-10-18)
 
 The owner, verbatim: "Go" → R11 (a summary that never ends is no stop notice) and round 3's hunks. Branch commits c97b44a (tests), 65fb971 (fix), f6bb3ce (`gates/stopsweep.mjs`), 75692c7 (§9 R10, R11). A fresh review lane runs on 65fb971.
+
+## Run: round 4 ruled; stopped before commit (2026-10-19)
+
+The third fresh review lane (on 65fb971) found no behaviour defect (no crash, hang, leak or class change; every earlier repro fixed). It found check gaps: `isStopNotice`'s length check and the whitespace skip after a note or usage are bound by no test (mutants X5, X7 pass 48/48, reproduced; test 14's one-quote case lost its power under R8's summary end); `gates/stopsweep.mjs` builds one notice per record; `gates/l3pop2.py` (G4's second count) reads one notice per record by the old match; the header's "after a `<result>`" sentence is broader than the code (a `<result>` between closed notices is skipped); D11's class is slightly wider now that every notice is read; three g3.py hostile-input differences were not declined. The owner, verbatim: "Go with reco" → a fourth round, tests and gate tools only; the meter's code is unchanged (header only).
+Round 4 written, uncommitted (`reports/r4.diff`): test 49; `node --test scripts/test/plantime.test.mjs` → 49/49; on X5 and X7 test 49 fails (1 !== 0, 1 !== 2); suite → 562 / 560 / 0 / 2. New stopsweep (multi-notice records): 65fb971 `{ cases: 647861, differ: 0 }`; X5 → 8158; X7 → 2643; 2bb0014 → 13841; db0d4eb → 129549. Updated l3pop2.py vs the meter on those 647,861 records → 0 differ (old l3pop2 → 52,097); the old one crashed on a non-text `tool_use_id` (TypeError), the new one counts it alone (synthetic: oracle 4 = meter 4). G4 on real data: oracle 158 = meter 158 (07:36).
+
+unruled: round-4 hunks — default none (a RULING)
