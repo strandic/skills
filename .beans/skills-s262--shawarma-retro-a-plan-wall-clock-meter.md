@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-19T07:05:51Z
+updated_at: 2026-10-19T16:20:02Z
 parent: skills-mcfe
 ---
 
@@ -118,3 +118,7 @@ The owner found the header dense, then proposed keeping only the usage in it and
 ## Closed (2026-10-19)
 
 PR #3 merged (rebase) at 2026-10-19T07:05:01Z; `scripts/plantime.mjs`, `scripts/plantime.md` and the tests are on main at 7fef086. Per R3 the ticket closes with the script landed. Follow-ups stay as recorded: D5 (round-8 retro names the command), R4 (check the round-6 transcripts after Nov 4 2026), D2 (ask-round marker, skills-lxpq).
+
+## Round 8 reading (2026-10-19)
+
+tools/plantime_r8.py over this window's plans: 54.8 h of plan wall-clock, 86% of it waiting on the human (aggregates only). Record: bigbrain docs/retros/2026-10-18-shawarma-round-8/ record.md.

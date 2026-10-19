@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-19T16:20:02Z
 parent: skills-mcfe
 ---
 
@@ -17,3 +17,7 @@ Owner wait is the largest bucket (46% of plan wall-clock; one plan 7 of 8 h). Th
 ## Round 7
 
 R4 adds a re-ask when research widens a ruled question: it can add a round. Research refinement: match the number of questions to complexity, not fewer overall. Owner turns per plan this window: 0–20.
+
+## Round 8 note (2026-10-19)
+
+Asks are now headed `## Ask <date> · <kind>` on the ticket and counted by check_pr.py --asks (v0.8.0), which gives this meter its input from round 9 on. Reading this round, by hand: 12 of 12 newer asks were answered with the recommendation. Minutes waiting per round are not metered yet. Record: bigbrain docs/retros/2026-10-18-shawarma-round-8/ record.md.
