@@ -1,11 +1,11 @@
 ---
 # skills-p4oc
 title: 'shawarma next retro: plan as loaded at most 5k tokens'
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-10-16T18:15:45Z
+updated_at: 2026-10-19T16:19:51Z
 parent: skills-sp16
 ---
 
@@ -16,7 +16,7 @@ Make size the next retro's stated objective: `plan` as loaded at most 5k tokens 
 - every cut validated on the trap bank: no trap lost
 
 - [x] target ruled before the retro
-- [ ] deletion pass proposed with its evidence
+- [x] deletion pass proposed with its evidence
 - [x] trap bank run: no trap lost
 - [x] reading recorded by the size meter
 
@@ -37,3 +37,7 @@ R0 ruled ≤ 6.5k by moving text only. Measured on the installed draft (`scripts
 ## From skills-pi0y (2026-10-16)
 
 R1 there: a ~70-word state-files section joins SKILL.md; plan-brief and run ~7.1k → ~7.2k (size_paths.py + plugin details, scratch sketch). Round 8 absorbs it.
+
+## Summary of Changes
+
+Round 8 (v0.8.0, a352910), ruling R0: the 6.5k target is retired as out of reach without rewording; plan-brief holds at ~7.1k (size_paths.py + plugin details). R9's restore (~7.2k) was reverted after the run-6 noise check (R10). Record: bigbrain docs/retros/2026-10-18-shawarma-round-8/ record.md.

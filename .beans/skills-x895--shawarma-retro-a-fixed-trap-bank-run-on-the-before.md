@@ -5,7 +5,7 @@ status: todo
 type: task
 priority: normal
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-19T16:20:02Z
 parent: skills-sp16
 blocking:
     - skills-jk6n
@@ -34,3 +34,10 @@ Not done: a one-off replay ran instead (2 tickets, rubric committed first, draft
 ## Round 7
 
 Bank built in bigbrain (6 cases, 14 traps), run on both arms by a separate replay workflow, then the disagreeing cases re-run: the before-text flips three traps on identical text (noise ±0.5 per trap); no reproducible loss. Remaining: retro-workflow.js runs the bank itself; a wave-rules-only and a lanes-only case (critic note).
+
+## Round 8 note (2026-10-19)
+
+The bank ran outside retro-workflow.js again, six runs (scripts in bigbrain bigbrain docs/retros/2026-10-18-shawarma-round-8/ replays/wf/scratch/, gitignored). For round 9:
+- **63at T2 is the case to watch.** Pooled T2 at 1: before 5/8, draft 5/15 (Fisher one-sided p ≈ 0.18). The scorer is noisy too: the same reference output was scored down on T1 and T2 once each.
+- **Planner git must not reach the shared config.** In run 6 a planner wrote core.worktree into the main checkout's .git/config (worktrees share it), and the main checkout read its scratch tree until the line was removed. Give each arm its own clone (git clone --local), not a worktree, or at least diff the main .git/config after each replay.
+- A one-off ±0.5 reading needs ≥ 6 runs per arm to read; two runs misled round 8's R7–R9.
