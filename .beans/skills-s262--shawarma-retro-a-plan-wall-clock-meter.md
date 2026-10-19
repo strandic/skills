@@ -105,3 +105,8 @@ The third fresh review lane (on 65fb971) found no behaviour defect (no crash, ha
 Round 4 written, uncommitted (`reports/r4.diff`): test 49; `node --test scripts/test/plantime.test.mjs` → 49/49; on X5 and X7 test 49 fails (1 !== 0, 1 !== 2); suite → 562 / 560 / 0 / 2. New stopsweep (multi-notice records): 65fb971 `{ cases: 647861, differ: 0 }`; X5 → 8158; X7 → 2643; 2bb0014 → 13841; db0d4eb → 129549. Updated l3pop2.py vs the meter on those 647,861 records → 0 differ (old l3pop2 → 52,097); the old one crashed on a non-text `tool_use_id` (TypeError), the new one counts it alone (synthetic: oracle 4 = meter 4). G4 on real data: oracle 158 = meter 158 (07:36).
 
 unruled: round-4 hunks — default none (a RULING)
+
+## Run: round 4 committed; gate passed; PR opened (2026-10-19)
+
+The owner, verbatim: "Go" → R12 (round 4), D12, D13. Branch commits fd8a595 (test 49), 0dc06cd (header), 32572b6 (`l3pop2.py`, `stopsweep.mjs`), 3d78caa (§9). Gate on 3d78caa, each by its §5 command: G1 PASS 6/6, PASS 7/7; G2 PASS, PASS; G3 PASS 6/6, PASS 7/7 (wrongfix W1–W3 FAIL 1/7, W4, W5 PASS 7/7); G4 oracle 161 = meter 161 (08:24:23–08:24:35); G5 tests 22 and 32 green, probes 400k × 1600 → 1.66 s, 1016 MB. Suite: base 513 / 511 / 0 / 2, head 562 / 560 / 0 / 2. PR: https://github.com/strandic/skills/pull/3 (Decisions and Findings tables there).
+DEFAULT rows in the PR's Decisions table, field "label": D1–D13, W0.
