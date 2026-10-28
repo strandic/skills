@@ -275,5 +275,7 @@ Mutants for 3b (executed on the final sketch; output `mutants-v3.txt` in the pla
 
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
 |---|---|---|---|---|---|
+| W0 | 2026-10-28 | default | base | `efbca68` → `5bc8e50` | `git diff --name-only efbca68 HEAD` ∩ the sketch and §4 files → `.claude-plugin/marketplace.json` (version lines only; `git apply --check sketch/marketplace.diff` → applies). CLI 2.1.301 → 2.1.312: the whole sketch, copied in, `claude-personal plugin test mods/shawarma-companion` → `39 pass`, `0 fail`. Stubbed reds not re-run: the run stopped at W0-Q1 first. |
+| W0-Q1 | 2026-10-28 | pending | §3 2b, 2d; §4 tests 1, 2, 10, 31 | — | RULING stop: the decisions.md files the skill writes since round 8 put an id beside the label (`Q1 RULING`, `D1–D8 DEFAULT`) or no label word at all (`R1 (Q1, …)`, `D1 (constants)`), and some are Markdown tables with a leading `\|`. The sketch's parser, run over all 28 such files on this machine, counts 26 ruled and 59 default out of 421 dated rows; 22 files read `0 ruled, 0 default`, a false row. Ask on the ticket. |
 
-unruled: none
+unruled: W0-Q1 — default: the row counts dated rows as `<n> decisions`
