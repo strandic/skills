@@ -122,3 +122,22 @@ unruled: none
 ## Triage (2026-10-17)
 
 Brief committed (37e94a1), awaiting go; `run` waits for skills-hekn (R4). The CLI moved past the planned build: `claude-personal --version` → 2.1.302 (brief: 2.1.301). Wave 0 re-reads the type file and re-runs the predicted reds on the installed build, recorded as §9's first row.
+
+## Ask 2026-10-28 · ruling
+
+Run stopped at Wave 0 (branch `feat/pi0y-shawarma-companion`, `.worktrees/pi0y`, commit 0bb5d03, brief §9 rows W0 and W0-Q1).
+
+**What this is about:** the row's decision count. The brief's parser (§3 2b) counts a line only when its label field is exactly `RULING` or `DEFAULT`. The skill that shipped in round 8 writes `<date> | <label> | <decision> | <why>` and never says what the label holds, so real files say `Q1 RULING`, `D1–D8 DEFAULT`, `R1 (Q1, excerpt bound)`, `D1 (constants)`, and some are Markdown tables starting with `|`.
+
+**Reading.** The sketch's `parseDecisions` over all 28 decisions.md files on this machine (bigbrain, BioJoule): 26 ruled, 59 default, 487 unreadable, out of 421 dated rows. 22 of 28 files read `0 ruled, 0 default`. The row would tell you no decision has been made on a plan with 20. That is wrong output (plan step 3 (c)), and the fix changes a frozen §3 line, so it is a RULING.
+
+**Which is wrong:** both the brief (it assumed a bare label) and the skill text (it never defines the label). The skill only changes at a retro.
+
+**Options** (each executed over the same 28 files):
+1. **(reco) Count dated rows: the row reads `<n> decisions`.** A decision is a line starting with a date (a leading `|` allowed); other lines are skipped, not counted as unreadable. Reading: 421 rows, 0 files at zero. Always true, but no ruled/default split. Changes §3 2b and 2d, and the expected strings of tests 1, 2, 10, 31.
+2. **Look for the word in the label field.** `RULING` or `DEFAULT` anywhere in it, dated lines only. Reading: 107 ruled, 184 default, 130 rows unreadable; 5 of 28 files still read zero decisions (labels like `R1 (Q1, …)` carry no word). The split is wrong on those files.
+3. **Keep the brief as frozen; fix the skill at round 9** (define the label as `<id> RULING` or `<id> DEFAULT`). Reading: until round 9, and for every file already written, 22 of 28 files show `0 ruled, 0 default`.
+
+**Where the residue goes:** with option 1, a round-9 item for the skill to define the label; the split can come back in a later mod version once files carry it. I can add that to skills-h8hp or to a new bean.
+
+unruled: W0-Q1 — default (1)
