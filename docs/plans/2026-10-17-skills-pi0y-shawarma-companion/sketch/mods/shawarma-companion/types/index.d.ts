@@ -11,10 +11,8 @@ export type Snapshot = {
   isEarlier: boolean
   /** True when the marker is newer than this session's start but no Write or Edit of this session wrote it. */
   isUnconfirmed: boolean
-  ruled: number
-  defaults: number
-  /** Lines of decisions.md that are neither blank nor a decision row. */
-  unreadable: number
+  /** Dated rows of decisions.md. */
+  decisions: number
   /** Absolute plan dir. */
   planDir: string
   /** A short line naming the file that could not be read, when one could not. */
