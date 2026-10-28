@@ -1,14 +1,14 @@
 ---
 # skills-pi0y
 title: 'shawarma companion mod: live plan/run banner and pane'
-status: todo
+status: in-progress
 type: feature
 priority: normal
 tags:
     - shawarma
     - mod
 created_at: 2026-10-16T18:08:30Z
-updated_at: 2026-10-17T12:49:47Z
+updated_at: 2026-10-28T10:49:29Z
 ---
 
 A Claude Code mod that shows, while a shawarma plan or run is active, which ticket is in progress, what step it is at, and the decisions made so far. It ships in this repo's marketplace as a second plugin next to `strandic`.
