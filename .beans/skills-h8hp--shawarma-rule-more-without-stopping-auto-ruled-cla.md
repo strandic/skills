@@ -12,7 +12,7 @@ parent: skills-mcfe
 
 Owner question, 2026-10-28: the owner follows the recommendation most of the time. Is that because the recommendations are sound, or because the ask format makes them shine (weak alternatives, more detail on the recommended one)? And what can the method decide alone?
 
-Analysis 2026-10-28, read-only, over 446 asks: 60 bigbrain beans (`## Ask` sections), 21 decisions.md files, 3 BioJoule questions.md, the bigbrain and salesforce-lwc retros, and the lessons files. Classification was done by hand (±10% noise). BioJoule option text lives on Linear and was not read. The CSV (asks.csv) was in the session scratchpad; regenerate it before the retro relies on it.
+Analysis 2026-10-28, read-only, over 446 asks: 60 bigbrain beans (`## Ask` sections), 21 decisions.md files, 3 BioJoule questions.md, the bigbrain and salesforce-lwc retros, and the lessons files. Classification was done by hand (±10% noise). BioJoule option text lives on Linear and was not read. The table is saved in bigbrain at `docs/retros/2026-10-28-shawarma-round-9/asks/` (asks.csv, the extraction spec, the per-source parts; not yet committed there).
 
 ## Measured
 
