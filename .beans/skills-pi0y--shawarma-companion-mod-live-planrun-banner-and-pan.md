@@ -143,3 +143,11 @@ Run stopped at Wave 0 (branch `feat/pi0y-shawarma-companion`, `.worktrees/pi0y`,
 **Where the residue goes:** with option 1, a round-9 item for the skill to define the label; the split can come back in a later mod version once files carry it. I can add that to skills-h8hp or to a new bean.
 
 unruled: W0-Q1 — default (1)
+
+## Ruling on W0-Q1 (2026-10-28)
+
+Owner, verbatim: "Go with reco, add the residue to h8hp"
+
+- **W0-R1.** Option 1: the row counts dated decisions.md rows and reads `<n> decisions`; the label is not read. Brief §9 row W0-R1 on the branch (commit 66aa980) holds the amended text; the amended sketch reads 39 pass, and 421 decisions over the 28 real logs, none at zero.
+- **W0-D1 (default).** `1 decision` when there is one.
+- Residue: on skills-h8hp ("rule more without stopping").
