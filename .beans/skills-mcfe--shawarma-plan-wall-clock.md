@@ -3,8 +3,11 @@
 title: 'shawarma: plan wall-clock'
 status: todo
 type: epic
+priority: normal
+tags:
+    - shawarma
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-09T11:54:42Z
+updated_at: 2026-10-28T10:26:07Z
 ---
 
 Where a plan's wall-clock goes, and the method-level fixes. Sibling of skills-sp16 (size).
