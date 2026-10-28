@@ -32,20 +32,20 @@ export function redSet(plan: string): string | null {
   return line ?? null
 }
 
-export type Decisions = { ruled: number; defaults: number; unreadable: number }
+export type Decisions = { decisions: number }
 
-/** Rows `<date> | RULING|DEFAULT | <decision> | <why>`; blank lines skipped. */
+/**
+ * One decision per row `<date> | <label> | <decision> | <why>`: a line that
+ * starts with a `YYYY-MM-DD` date followed by `|`, a leading `|` allowed (a
+ * Markdown table). The label is not read: the skill does not define it yet.
+ * Every other line (heading, table header, wrapped text) is skipped.
+ */
 export function parseDecisions(text: string): Decisions {
-  const out = { ruled: 0, defaults: 0, unreadable: 0 }
+  let decisions = 0
   for (const line of text.split('\n')) {
-    if (line.trim() === '') continue
-    const fields = line.split('|').map(field => field.trim())
-    const label = fields.length >= 4 ? fields[1] : undefined
-    if (label === 'RULING') out.ruled += 1
-    else if (label === 'DEFAULT') out.defaults += 1
-    else out.unreadable += 1
+    if (/^\d{4}-\d{2}-\d{2}\s*\|/.test(line.trim().replace(/^\|\s*/, ''))) decisions += 1
   }
-  return out
+  return { decisions }
 }
 
 /** `# <ticket> — <title>` from plan.md's first line, else null. */
@@ -79,9 +79,7 @@ export type RowInput = {
   since: number
   isEarlier: boolean
   isUnconfirmed?: boolean
-  ruled: number
-  defaults: number
-  unreadable: number
+  decisions: number
   context?: number
   problem?: string
 }
@@ -100,8 +98,7 @@ export function rowText(row: RowInput, columns: number, now: number = row.since)
   const tail = [
     row.step,
     `since ${clockTime(row.since, now)}`,
-    `${row.ruled} ruled, ${row.defaults} default`,
-    ...(row.unreadable > 0 ? [`${row.unreadable} unreadable in decisions.md`] : []),
+    `${row.decisions} ${row.decisions === 1 ? 'decision' : 'decisions'}`,
     ...(row.problem !== undefined ? [row.problem] : []),
     ...(row.context !== undefined ? [`ctx ${row.context}%`] : []),
   ].join(' · ')
