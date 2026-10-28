@@ -151,3 +151,43 @@ Owner, verbatim: "Go with reco, add the residue to h8hp"
 - **W0-R1.** Option 1: the row counts dated decisions.md rows and reads `<n> decisions`; the label is not read. Brief §9 row W0-R1 on the branch (commit 66aa980) holds the amended text; the amended sketch reads 39 pass, and 421 decisions over the 28 real logs, none at zero.
 - **W0-D1 (default).** `1 decision` when there is one.
 - Residue: on skills-h8hp ("rule more without stopping").
+
+## Ask 2026-10-28 · ruling (review round 1)
+
+Run stopped at Wave 3 (branch commit f7c95ad, brief §9 rows W3-Q1 to W3-Q3). Both review lanes ran and executed their attacks.
+
+### W3-Q1 · the count and title go stale while idle
+
+> **What this is about:** While a plan is idle, the mod checks every 15 seconds whether the marker file changed. It never checks the decision log or the plan file. So if another session adds decisions or renames the plan, the row keeps showing the old count and title until this session runs a tool or ends a turn, which can be hours. Nothing on the row says the number is old. Option 1 (recommended): the 15-second check also looks at the decision log and the plan file; that costs a little more file activity per check. Option 2: keep it as is and say in the README that the count can be old while the session is idle. Option 3: show the time of the count, so the reader can tell its age.
+
+Reading (adversarial lane, real engine 2.1.312): 2 rows appended to decisions.md and plan.md rewritten; after 40 s idle the row still read `… reload probe · … · 1 decision` (the file held 3). In the test kit, unchanged after 1 h. Cause: §3 2e stats only the drawn marker.
+1. **(reco)** The check also stats `plan.md` and `decisions.md`, and refreshes when either mtime changed. 3e's per-period bound goes from 2 fs calls to 6. `unexecuted`.
+2. Keep 2e; the README says the count and title update at the next tool call or turn end. Reading: stale for 1 h in the kit. This accepts wrong output (a false count, no label).
+3. Add `as of HH:MM` to the count. `unexecuted`; the row gets longer.
+
+### W3-Q2 · the cost bound per tool call
+
+> **What this is about:** The brief promised the mod does at most 10 file checks after each tool call. Measured, it does 12 when two marker files exist and 17 right after it writes its own marker, because it looks at the same file twice. Nothing visible goes wrong. Option 1 (recommended): stop looking at the same file twice, which should bring it back under 10. Option 2: keep the code and raise the promised number.
+
+Reading (code-review lane, probes P5, P5b): 12 fs calls per plain Bash call with both the known marker and the cwd marker present; 17 per marker Write with one marker (`markerTimes` runs twice and checks the same path twice when the known marker is the cwd marker).
+1. **(reco)** Dedupe the candidate paths and reuse the before-call times. `unexecuted`; the fix commit pastes the new count.
+2. Amend 3e to 12 per Bash call and 17 per marker Write. Executed (the readings above).
+
+### W3-Q3 · odd decision logs
+
+> **What this is about:** The mod counts a decision for every line that starts with a date followed by a bar. A hand-written log could put such a line inside a code example or a comment, and the mod would count it, with nothing on the row to say the count might be off. Logs that use only carriage returns between lines also count too few. None of the 147 real logs on this machine has any of these shapes. Option 1 (recommended): keep the rule, also split lines on carriage returns, and correct the brief's promise that a wrong count always comes with a label. Option 2: also skip code examples and comments, which makes the parser bigger.
+
+Reading (adversarial lane): one real row plus one inside a ``` fence → `2 decisions`, no label (true 1); indented code, HTML comments and a wrapped line starting `<date> |` do the same. Three rows separated only by `\r` → 1. Shape scan over 147 real decisions.md files (counts only): 2,499 dated rows; 0 in fences, comments, indented blocks, lists or quotes; 0 CR-only.
+1. **(reco)** Keep 2b's dated-row rule; split on `\r\n`, `\r` or `\n` (regression test red first); §6 is amended: "a hand-written decisions.md can make the count wrong with no label". `unexecuted`.
+2. Also skip fenced blocks, indented blocks and HTML comments. `unexecuted`; more parser, more tests.
+
+### Defaults in this round (stand unless struck)
+
+- **D-a, own write on a failed Edit (wrong output, fix executed by the code-review lane).** A failed or no-op Edit of a marker path that was not a candidate before the call is recorded as this session's write, so another session's marker shows with no label. Fix: resolve the path before the call and record its time in the before-map. Executed: the two reproductions pass, no existing test goes red. Ships with both reproductions as tests, red on the pre-fix code.
+- **D-b, C1 control characters (U+0080–U+009F).** The engine refuses the row or pane, which then shows nothing. Fix: add `\u007F-\u009F` to `clean`. Executed: 46 pass, 0 fail with the lane's tests.
+- **D-c, hooks that do not catch their own errors** (pane render over 4 MiB, row render when `session.usage` fails, `/shawarma-companion` when the pane cannot open, session start when the command cannot register). None shows false output; the command failure reaches the person. Fix: catch in each, as §3's error surface already says.
+- **D-d, three tests for the check timer** (a timer left running after the row goes, a second timer when the row comes back, a restart after a reload). The code passes them today; they pin it.
+- **D-e, wording:** the README's 15-second sentence (limited to the marker), "the label shows whether…" (it doesn't tell the two cases apart), "shows only the decisions" (also the title and step), the `earlier session:` meaning (the marker's modification time is older than the session, which a copy keeping old times also gives); three comments in `types/index.d.ts`.
+- **Tickets:** the row width counts characters, not screen cells (a CJK title wraps); the test fake keys files by raw path, so `./` spellings cannot show in the suite.
+
+unruled: W3-Q1, W3-Q2, W3-Q3 — default (1) for each
