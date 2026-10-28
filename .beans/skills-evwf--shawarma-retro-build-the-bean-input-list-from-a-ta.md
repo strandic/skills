@@ -21,3 +21,7 @@ Prep done 2026-10-28: every open shawarma bean now carries the `shawarma` tag (m
 - [ ] Decide where the rule lives: the skill repo's house rules (it names a beans command, which the skill must not restate) or `retro-workflow.js` as an arg (`openItems`), with retro.md naming the arg.
 - [ ] A bean the retro dropped but kept open (iim2, 9064: "Stays open for a round that has one") is listed as such, so it does not read as forgotten.
 - [ ] Round 9 uses the query. Check that u376 and lhdg get dispositions.
+
+## Correction (2026-10-28)
+
+A query already exists as a house rule: bigbrain `docs/plans/README.md:139-141` ("read the skill repo's open tickets (`beans list --json`, those naming shawarma or 'next retro'): each one addressed to the retro is ruled, done or noted on that ticket within the retro"). u376 and lhdg both name shawarma, so the rule matched them. The miss happened in applying it: round 8's inputs.md lists beans by hand, with no command output. The first item narrows to: paste the command and its output into `inputs.md`, and check the dispositions table against that output. The tag filter is optional on top.
