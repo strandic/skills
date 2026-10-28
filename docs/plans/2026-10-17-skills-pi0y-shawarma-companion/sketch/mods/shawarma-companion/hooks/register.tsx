@@ -62,7 +62,7 @@ async function snapshot($: EngineInterface): Promise<Snapshot | null> {
     const isUnconfirmed = !isEarlier && !(await read($, own)).includes(`${marker}@${stat.mtimeMs}@${text}`)
     const base = { marker, since: stat.mtimeMs, isEarlier, isUnconfirmed }
     if (parsed === null) {
-      return { ...base, title: '', step: '', ruled: 0, defaults: 0, unreadable: 0,
+      return { ...base, title: '', step: '', decisions: 0,
         planDir: '', problem: `${marker} is malformed` }
     }
     const plan = await readOr($, `${parsed.planDir}/plan.md`)

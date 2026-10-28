@@ -70,7 +70,7 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = []) {
 
 const plan: [string, File] = [`${DIR}/plan.md`, { text: '# skills-x — the thing\n\n## 1. What\n\nwhy\n', mtimeMs: 0 }]
 const decisions: [string, File] = [`${DIR}/decisions.md`, {
-  text: '2026-10-16 | RULING | a | b\n2026-10-16 | DEFAULT | c | d\n', mtimeMs: 0 }]
+  text: '2026-10-16 | Q1 RULING | a | b\n2026-10-16 | D1 DEFAULT | c | d\n', mtimeMs: 0 }]
 
 const write = ($: any, path: string, content: string) =>
   $.tool.call({ tool: 'Write', file_path: path, content } as any)
@@ -94,13 +94,13 @@ describe('band', () => {
   test('marker this session wrote, plan and decisions: the row', { options: ON }, async ($, on) => {
     world(on, new Map([plan, decisions]))
     await write($, MARKER, MARKER_TEXT('run W3 review'))
-    expect(await bandText($)).toBe(`skills-x — the thing · run W3 review · ${SINCE(1)} · 1 ruled, 1 default`)
+    expect(await bandText($)).toBe(`skills-x — the thing · run W3 review · ${SINCE(1)} · 2 decisions`)
   })
 
   test('marker written through Bash, even naming the path: unconfirmed label', { options: ON }, async ($, on) => {
     world(on, new Map([plan]))
     await bash($, 'echo plan 2 spike > .shawarma/active')
-    expect(await bandText($)).toBe(`unconfirmed: skills-x — the thing · plan 2 spike · ${SINCE(1)} · 0 ruled, 0 default`)
+    expect(await bandText($)).toBe(`unconfirmed: skills-x — the thing · plan 2 spike · ${SINCE(1)} · 0 decisions`)
   })
 
   test('marker changed by a call that did not name it: unconfirmed label', { options: ON }, async ($, on) => {
@@ -159,9 +159,9 @@ describe('band, more', () => {
   test('an edit of decisions.md updates the count', { options: ON }, async ($, on) => {
     world(on, new Map([plan]))
     await write($, MARKER, MARKER_TEXT('run W3'))
-    expect(await bandText($)).toMatch(/0 ruled, 0 default/)
-    await write($, `${DIR}/decisions.md`, '2026-10-16 | RULING | a | b\n')
-    expect(await bandText($)).toMatch(/1 ruled, 0 default/)
+    expect(await bandText($)).toMatch(/ · 0 decisions$/)
+    await write($, `${DIR}/decisions.md`, '2026-10-16 | R1 (Q1, bound) | a | b\n')
+    expect(await bandText($)).toMatch(/ · 1 decision$/)
   })
 
   test('plan dir missing: the row says so', { options: ON }, async ($, on) => {
@@ -325,7 +325,7 @@ describe('pane', () => {
     await write($, MARKER, MARKER_TEXT('run W3'))
     const text = await pane($)
     expect(text).toMatch(/### Recap\n\nthe recap/)
-    expect(text).toMatch(/- 2026-10-16 \| RULING \| a \| b/)
+    expect(text).toMatch(/- 2026-10-16 \| Q1 RULING \| a \| b/)
     expect(text).toMatch(/### Amendments\n\n\| W0 \| row \|/)
     expect(text).toMatch(/### Red set\n\nPredicted red set: \*\*t1, t2\*\*/)
   })
@@ -379,9 +379,13 @@ describe('model', () => {
     expect(redSet('## 4. Tests\n\nnone\n')).toBe(null)
   })
 
-  test('parseDecisions counts unreadable lines', async () => {
-    expect(parseDecisions('x | RULING | a | b\n\nnot a row\nx | ruling | a | b\nx | DEFAULT | a\n'))
-      .toEqual({ ruled: 1, defaults: 0, unreadable: 3 })
+  test('parseDecisions counts dated rows only', async () => {
+    expect(parseDecisions([
+      '# T-1 decisions', '', '`<date> | <label> | <decision> | <why>`',
+      '2026-10-21 | Q1 RULING | a | b', '2026-10-21 | D1–D8 DEFAULT | c | d', '2026-10-21 | R1 (Q1, bound) | e | f',
+      '| date | label | decision | why |', '| ---- | ----- | -------- | --- |', '| 2026-10-24 | D1 DEFAULT | g | h |',
+      '  wrapped text of the row above', 'x | RULING | a | b', 'On 2026-10-21 the owner ruled', '2026-10-21 no pipe',
+    ].join('\n'))).toEqual({ decisions: 4 })
   })
 
   test('clockTime adds the day only when it is not today', async () => {
@@ -392,7 +396,7 @@ describe('model', () => {
 
   test('rowText cuts the title first, never past columns', async () => {
     const row = { title: 'a long ticket title', step: 'run W3', since: 0, isEarlier: false,
-      ruled: 0, defaults: 0, unreadable: 0 }
+      decisions: 0 }
     for (const columns of [0, 1, 10, 30, 40, 200]) {
       expect(rowText(row, columns).length <= Math.max(columns, 0)).toBe(true)
     }
