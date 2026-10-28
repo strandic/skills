@@ -36,3 +36,7 @@ The 93% has two causes. (1) Many asks are not decisions: the rules already decid
 - [ ] **Count it automatically.** Add follow rate per class and struck DEFAULTs to `check_pr.py --asks`. A class followed 100% over two retro windows with no reversal is proposed for auto-ruling. This is skills-lxpq's pre-registered measure, made per class.
 
 Related: skills-lxpq (fewer ask rounds, measured), skills-u376 (DEFAULT standing after a stated time), skills-tlmu (ask format), skills-8yf4 (EGM unranked options), skills-p03h (one ask per batch).
+
+## Residue from skills-pi0y W0-R1 (2026-10-28)
+
+- [ ] **Define the decisions.md label.** SKILL.md "State files" writes `<date> | <label> | <decision> | <why>` and never says what `<label>` holds. Real logs read `Q1 RULING`, `D1–D8 DEFAULT`, `R1 (Q1, excerpt bound)`, `D1 (constants)`, and some are Markdown tables. Over the 28 logs on this machine: 421 dated rows; a strict `RULING`/`DEFAULT` field matches 85, a word search 291, and 5 files carry no label word at all. Proposed: `<id> RULING` or `<id> DEFAULT`, one row per decision (no `D1–D8` ranges), plain lines, no table. The companion mod (pi0y) counts dated rows only until then; its ruling/default split can come back once logs carry the label. This also feeds this bean's per-class follow-rate count, which needs the label to sort asks.
