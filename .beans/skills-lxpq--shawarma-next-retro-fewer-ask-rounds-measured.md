@@ -4,8 +4,10 @@ title: 'shawarma next retro: fewer ask rounds, measured'
 status: todo
 type: task
 priority: normal
+tags:
+    - shawarma
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-19T16:20:02Z
+updated_at: 2026-10-28T10:26:07Z
 parent: skills-mcfe
 ---
 

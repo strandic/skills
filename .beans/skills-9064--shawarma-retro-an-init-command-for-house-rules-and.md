@@ -4,8 +4,10 @@ title: 'shawarma retro: an init command for house rules and CODING_STANDARDS.md'
 status: todo
 type: feature
 priority: normal
+tags:
+    - shawarma
 created_at: 2026-10-13T12:56:49Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-28T10:26:07Z
 blocked_by:
     - skills-iim2
 ---

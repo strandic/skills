@@ -3,8 +3,11 @@
 title: 'shawarma: repeatable evals and a smaller plan load'
 status: todo
 type: epic
+priority: normal
+tags:
+    - shawarma
 created_at: 2026-09-24T15:53:31Z
-updated_at: 2026-09-24T15:53:31Z
+updated_at: 2026-10-28T10:26:07Z
 ---
 
 Two linked goals from a 2026-09-24 review of how the shawarma method is evaluated and why it keeps growing. Every child answers a closed question — "did this change lose anything the old text caught?" — never the open one, "does the method work?", which has no stopping rule (this repo's seven-steps-primer eval history is the cautionary case).

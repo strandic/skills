@@ -4,8 +4,10 @@ title: 'shawarma retro: a CODING_STANDARDS.md review lane'
 status: todo
 type: feature
 priority: normal
+tags:
+    - shawarma
 created_at: 2026-10-13T12:56:39Z
-updated_at: 2026-10-15T17:52:47Z
+updated_at: 2026-10-28T10:26:07Z
 ---
 
 Let shawarma use a per-project CODING_STANDARDS.md to review the code's shape. It complements, and does not replace, the behaviour checks the method already runs. Source: Matt Pocock's "fixing the PR bottleneck" talk (aihero.dev/skills). His points: the implementer agent is already overloaded, so standards go to a separate reviewer with its own context; checks can lie through tests that restate the implementation, tests tied to code structure, and mocks that cannot fail.

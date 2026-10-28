@@ -4,8 +4,10 @@ title: 'shawarma retro: a fixed trap bank, run on the before-text and the draft'
 status: todo
 type: task
 priority: normal
+tags:
+    - shawarma
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-10-19T16:20:02Z
+updated_at: 2026-10-28T10:26:07Z
 parent: skills-sp16
 blocking:
     - skills-jk6n
