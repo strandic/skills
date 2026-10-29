@@ -22,32 +22,41 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
  * A fake tree beneath the plugin: fs, git, cwd and usage answer from it. Its
  * tools act on it: Write sets a file (mtime from a counter; content holding
  * `#race` is then replaced inside the same call by another writer), Edit
- * replaces `old_string` with `new_string`, Bash `rm <path>`
+ * replaces `old_string` with `new_string` (not found: an error, nothing
+ * changed, as the real Edit), Bash `rm <path>`
  * deletes one, Bash `echo <step> > .shawarma/active` or `sh mark.sh <step>`
- * writes the cwd's marker, any other Bash changes nothing.
+ * writes the cwd's marker, any other Bash changes nothing. `fs.stat` rejects
+ * `ENOENT` on a missing path, as the real one. Each name in `fail` makes that
+ * call throw: `cwd`, `usage`, `open`, `register`, or `read <path>`; `cwd after
+ * call` makes `cwd` throw once a tool call has run.
  */
-function world(on: On, files: Files, cwd = ROOT, log: string[] = []) {
+function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set()) {
   let tick = STARTED + 60_000
   const clock = mock.clock(on, { now: STARTED + 120_000 })
-  on('fs.exists', (_$, e) => ({ value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
-  on('fs.read', (_$, e) => (log.push(`read ${e.path}`), { value: files.get(e.path)?.text ?? '' }))
-  on('fs.stat', (_$, e) => (log.push(`stat ${e.path}`), {
-    value: { kind: 'file', size: 1, mtimeMs: files.get(e.path)?.mtimeMs ?? 0, isLink: false },
-  }))
-  on('session.cwd', () => ({ value: cwd }))
+  const failing = (name: string) => { if (fail.has(name)) throw new Error(`${name} failed`) }
+  on('fs.exists', (_$, e) => (log.push(`exists ${e.path}`), { value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
+  on('fs.read', (_$, e) => (log.push(`read ${e.path}`), failing(`read ${e.path}`), { value: files.get(e.path)?.text ?? '' }))
+  on('fs.stat', (_$, e) => {
+    log.push(`stat ${e.path}`)
+    const file = files.get(e.path)
+    if (file === undefined) throw new Error(`ENOENT: no such file, stat '${e.path}'`)
+    return { value: { kind: 'file', size: 1, mtimeMs: file.mtimeMs, isLink: false } }
+  })
+  on('session.cwd', () => (failing('cwd'), { value: cwd }))
   on('process.run', (_$, e) => ({
     value: { exitCode: 0, stdout: `${e.init?.cwd ?? cwd}\n`, stderr: '',
       isStdoutTruncated: false, isStderrTruncated: false },
   }))
-  on('session.usage', () => ({
+  on('session.usage', () => (failing('usage'), {
     value: { startedAt: STARTED, context: { tokens: 1, window: 100, percent: 42 } } as any,
   }))
   on('ui.render', ($, e) => { const { Box } = $.ui.resolve(e); return <Box /> })
   on('session.start', () => ({ cwd }) as any)
   on('turn.complete', () => ({ text: '' }))
-  on('command.register', (_$, e) => { log.push(`command ${e.name}`); return { value: undefined } as any })
-  on('ui.open', (_$, e) => { log.push(`open ${e.id}`); return { value: { isPlaced: true } } as any })
+  on('command.register', (_$, e) => { failing('register'); log.push(`command ${e.name}`); return { value: undefined } as any })
+  on('ui.open', (_$, e) => { failing('open'); log.push(`open ${e.id}`); return { value: { isPlaced: true } } as any })
   on('tool.call', (_$, e: any) => {
+    if (fail.has('cwd after call')) fail.add('cwd')
     tick += 1000
     const at = (path: string) => (path.startsWith('/') ? path : `${cwd}/${path}`)
     if (e.tool === 'Write') files.set(at(e.file_path), { text: e.content, mtimeMs: tick })
@@ -55,7 +64,10 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = []) {
       files.set(at(e.file_path), { text: MARKER_TEXT('run OTHER'), mtimeMs: tick + 1 })
     }
     if (e.tool === 'Edit') {
-      const old = files.get(at(e.file_path))?.text ?? ''
+      const old = files.get(at(e.file_path))?.text
+      if (old === undefined || !old.includes(e.old_string)) {
+        return { result: { type: 'text', text: 'String to replace not found', isError: true } } as any
+      }
       files.set(at(e.file_path), { text: old.replace(e.old_string, e.new_string), mtimeMs: tick })
     }
     if (e.tool === 'Bash' && e.command.startsWith('rm ')) files.delete(e.command.slice(3))
@@ -282,15 +294,16 @@ describe('check every 15 s (R5)', () => {
     expect(await bandText($)).toBe(undefined)
   })
 
-  test('unchanged marker: stat only, no re-read', { options: ON }, async ($, on) => {
+  test('unchanged files: at most 6 fs calls a period, no re-read (3e)', { options: ON }, async ($, on) => {
     const log: string[] = []
     const clock = world(on, new Map([plan]), ROOT, log)
     await write($, MARKER, MARKER_TEXT('run W1'))
-    const count = (kind: string) => log.filter(line => line.startsWith(kind)).length
-    const [reads, stats] = [count('read '), count('stat ')]
+    const n0 = log.length
     await clock.advance(60_000)
-    expect(count('read ')).toBe(reads)
-    expect(count('stat ')).toBe(stats + 4)
+    const calls = log.slice(n0)
+    expect(calls.filter(line => line.startsWith('read ')).length).toBe(0)
+    expect(calls.filter(line => line === `stat ${MARKER}`).length).toBe(4)
+    expect(calls.length <= 4 * 6).toBe(true)
   })
 
   test('no row drawn: no check runs', { options: ON }, async ($, on) => {
@@ -343,7 +356,7 @@ describe('pane', () => {
     await write($, MARKER, MARKER_TEXT('run W1'))
     await bandText($)
     await $.ui.press({ plugin: 'shawarma-companion', key: 'row' })
-    expect(log.filter(line => !/^(stat|read) /.test(line))).toEqual(['command shawarma-companion', 'open shawarma-companion'])
+    expect(log.filter(line => !/^(exists|stat|read) /.test(line))).toEqual(['command shawarma-companion', 'open shawarma-companion'])
   })
 
   test('pane off: no command, no button', { options: { ...ON, pane: false } }, async ($, on) => {
@@ -353,7 +366,7 @@ describe('pane', () => {
     await write($, MARKER, MARKER_TEXT('run W1'))
     const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND } as any)
     expect(await ui.find({ type: 'Button' })).toBe(undefined)
-    expect(log.filter(line => !/^(stat|read) /.test(line))).toEqual([])
+    expect(log.filter(line => !/^(exists|stat|read) /.test(line))).toEqual([])
   })
 })
 
@@ -401,5 +414,162 @@ describe('model', () => {
       expect(rowText(row, columns).length <= Math.max(columns, 0)).toBe(true)
     }
     expect(rowText(row, 200).startsWith('a long ticket title · run W3')).toBe(true)
+  })
+})
+
+describe('review round 1', () => {
+  const TREE = `${ROOT}/.worktrees/w`
+  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read) /.test(line))
+  const pane = async ($: any) => {
+    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return ui
+  }
+
+  // W3-R1: the check also stats plan.md and decisions.md.
+  test('decisions.md written while idle: the count follows within 15 s', { options: ON }, async ($, on) => {
+    const files = new Map([plan])
+    const clock = world(on, files)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    files.set(`${DIR}/decisions.md`, { ...decisions[1], mtimeMs: STARTED + 200_000 })
+    await clock.advance(15_000)
+    expect(await bandText($)).toMatch(/ · 2 decisions$/)
+  })
+
+  test('plan.md retitled while idle: the title follows within 15 s', { options: ON }, async ($, on) => {
+    const files = new Map([plan])
+    const clock = world(on, files)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    files.set(`${DIR}/plan.md`, { text: '# skills-x — renamed\n', mtimeMs: STARTED + 200_000 })
+    await clock.advance(15_000)
+    expect(await bandText($)).toMatch(/^skills-x — renamed · run W1/)
+  })
+
+  // W3-R2: at most 10 fs calls per tool call.
+  test('a Bash call with two markers: at most 10 fs calls (3e)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([plan, [MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }],
+      [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]],
+      [`${TREE}/docs/plans/2026-10-16-skills-x-thing/decisions.md`, decisions[1]]]), ROOT, log)
+    await write($, `${TREE}/.shawarma/active`, MARKER_TEXT('run W0'))
+    const n0 = log.length
+    await bash($, 'true')
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  test('a marker Write, one marker: at most 10 fs calls (3e)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([plan, decisions]), ROOT, log)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    const n0 = log.length
+    await write($, MARKER, MARKER_TEXT('run W2'))
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  // W3-R3: CR and CRLF line ends.
+  test('parseDecisions splits on \\r\\n, \\r and \\n', async () => {
+    const rows = ['2026-10-21 | Q1 RULING | a | b', '2026-10-21 | D1 DEFAULT | c | d', '| 2026-10-21 | D2 DEFAULT | e | f |']
+    expect(parseDecisions(rows.join('\r'))).toEqual({ decisions: 3 })
+    expect(parseDecisions(rows.join('\r\n'))).toEqual({ decisions: 3 })
+  })
+
+  // W3-D1: a failed Edit records no own write.
+  test('a failed Edit of another session\'s worktree marker is not own', { options: ON }, async ($, on) => {
+    world(on, new Map([[`${TREE}/.shawarma/active`, { text: MARKER_TEXT('run OTHER'), mtimeMs: STARTED + 5 }],
+      [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]]]))
+    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W9', new_string: 'run W10' } as any)
+    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run OTHER/)
+  })
+
+  // W3-D2: C1 controls.
+  test('clean blanks C1 controls', async () => {
+    expect(clean('a\u0085b\u009bc\u0080d')).toBe('a b c d')
+    expect(clean('a\u009f\nb', true)).toBe('a \nb')
+  })
+
+  test('a C1 control in the title: the row is still drawn', { options: ON }, async ($, on) => {
+    world(on, new Map([[`${DIR}/plan.md`, { text: '# skills-x \u009b31mred\n', mtimeMs: 0 }]]))
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toMatch(/run W1/)
+  })
+
+  test('a C1 control in decisions.md: the pane is still drawn', { options: ON }, async ($, on) => {
+    world(on, new Map([plan, [`${DIR}/decisions.md`, { text: '2026-10-16 | Q1 RULING | a\u009b | b\n', mtimeMs: 0 }]]))
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect((await (await pane($)).find({ type: 'Markdown' }))?.props.text).toMatch(/### Decisions/)
+  })
+
+  // W3-D3: every hook catches its own errors.
+  test('pane: a read that fails draws a short line, not an error', { options: ON }, async ($, on) => {
+    const fail = new Set<string>()
+    world(on, new Map([plan, decisions]), ROOT, [], fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    fail.add(`read ${DIR}/decisions.md`)
+    const ui = await pane($).catch((err: unknown) => String(err))
+    expect(typeof ui).not.toBe('string')
+    expect((await (ui as any).find({ type: 'Text' }))?.text).toMatch(/could not be read/)
+  })
+
+  test('row: a failing usage call with context on draws nothing, not an error', { options: { ...ON, context: true } }, async ($, on) => {
+    const fail = new Set<string>()
+    world(on, new Map([plan]), ROOT, [], fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    fail.add('usage')
+    expect(await bandText($).catch((err: unknown) => `threw ${String(err)}`)).toBe(undefined)
+  })
+
+  test('command: the pane failing to open is said, not thrown', { options: ON }, async ($, on) => {
+    world(on, new Map([plan]), ROOT, [], new Set(['open']))
+    const out = await $.command.run({ command: 'shawarma-companion', args: '' } as any).catch((err: unknown) => ({ text: `threw ${String(err)}` }))
+    expect(out.text).toMatch(/^Shawarma pane could not open: /)
+  })
+
+  test('session start: a failed command registration still draws the row', { options: ON }, async ($, on) => {
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('plan 2'), mtimeMs: STARTED - 1 }], plan]), ROOT, [], new Set(['register']))
+    await $.session.start({ source: 'startup', cwd: ROOT } as any).catch(() => undefined)
+    expect(await bandText($)).toMatch(/^earlier session: .* plan 2/)
+  })
+
+  test('tool call: the cwd failing after the call still returns the result', { options: ON }, async ($, on) => {
+    world(on, new Map([plan]), ROOT, [], new Set(['cwd after call']))
+    const out: any = await $.tool.call({ tool: 'Write', file_path: 'notes.txt', content: 'x' } as any).catch((err: unknown) => ({ threw: String(err) }))
+    expect(out?.result?.text).toBe('ok')
+  })
+
+  // W3-D4: the check timer.
+  test('the check stops when the row goes', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = world(on, new Map([plan]), ROOT, log)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    await bash($, `rm ${MARKER}`)
+    const n0 = log.length
+    await clock.advance(60_000)
+    expect(log.slice(n0).filter(line => line === `stat ${MARKER}`)).toEqual([])
+  })
+
+  test('row, gone, row again: one check, not two', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = world(on, new Map([plan]), ROOT, log)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    await bash($, `rm ${MARKER}`)
+    await write($, MARKER, MARKER_TEXT('run W2'))
+    const n0 = log.length
+    await clock.advance(60_000)
+    expect(log.slice(n0).filter(line => line === `stat ${MARKER}`).length).toBe(4)
+  })
+
+  test('reload with a row kept in state: the first drawing restarts the check', { options: ON }, async ($, on) => {
+    const files = new Map([plan, [MARKER, { text: MARKER_TEXT('run W1'), mtimeMs: STARTED + 61_000 }]])
+    const clock = world(on, files)
+    const kept = { marker: MARKER, title: 'skills-x — the thing', step: 'run W1', since: STARTED + 61_000,
+      isEarlier: false, isUnconfirmed: false, decisions: 0, planDir: DIR, planAt: 0, decisionsAt: null }
+    on('state.get', { plugin: 'shawarma-companion' } as any, async (_$, e: any, next: any) => {
+      const r = await next(e)
+      return e.key === 'snap' && r.value.version === 0 ? { value: { value: kept, version: 0 } } : r
+    })
+    expect(await bandText($)).toMatch(/run W1/)
+    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 999_000 })
+    await clock.advance(15_000)
+    expect(await bandText($)).toMatch(/^unconfirmed: .* run W2/)
   })
 })
