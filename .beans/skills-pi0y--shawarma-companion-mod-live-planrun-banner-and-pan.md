@@ -208,3 +208,53 @@ Owner: "go with recos". Each of W3-Q1 to W3-Q3 took option 1 (W3-R1 to W3-R3). D
   - skills-1tr4: the row width counts characters, not screen cells.
   - skills-qvnv: the test fake keys files by raw path.
 - A fresh review lane is running on the fix commit before the gate.
+
+## Ask 2026-10-29 · ruling (fix review, third round)
+
+Run stopped at Wave 3 (branch commit 1470d2c, brief §9 row W3-Q4). The fresh review lane checked fix 4bfe7b1 by running attacks. All six round-1 fixes hold, and the 12 regression tests are red on the old code for their stated reasons. The lane found new problems. Fixing them needs a third review round, and a third round needs your ruling.
+
+### W3-Q4 · a third round of fixes
+
+> **What this is about:** The review of the fixes found a few more rare cases.
+> - **Lost marker:** in one case the mod shows another session's marker instead of the one this session just wrote. This one is new in the fix.
+> - **Old Mac line endings in the plan:** a plan file whose lines end in a carriage return only shows a garbled title.
+> - **Broken marker:** with a malformed marker, the pane reads files at the top of the disk.
+> - **Stale "plan dir not found":** the warning stays after the plan folder is created, until the next tool call.
+> - **One file check too many:** a failed write of a missing marker makes 11 file checks; the promised limit is 10.
+> - **Click on the row:** when the pane fails to open from a click on the row, an error escapes.
+>
+> Option 1 (recommended): fix all six, with a test for each that fails on today's code, then one more short review of just those changes before the gate. Option 2: fix only the lost marker and the click, file tickets for the rest. Option 3: ship as it is and file tickets for all six.
+
+Readings (lane, test kit, CLI 2.1.312; repros under the session scratchpad `lane-fix1/`):
+
+| finding | reading | kind |
+|---|---|---|
+| F2, lost marker | worktree marker Written while its stat fails (EACCES) before the call → row `unconfirmed: … run CWD`; expected `… run W1`, no label | wrong output, labelled; regression |
+| F4, CR-only plan.md | row title `skills-x — the thing  ## 1. What  why`; pane `_§1 not found._`; pane shows 1 decision line while the row counts 2 | wrong output, no label |
+| F5, malformed marker | pane calls `stat /plan.md`, `read /plan.md` and draws it | wrong output, pane |
+| F6, plan dir appears | `plan dir not found` after 60 s idle, until the next Bash call | wrong problem line |
+| F1, cost | 11 fs calls (bound 10) when a failed Write or Edit names a missing marker, the cwd marker exists, the plan dir is missing | bound |
+| F3, press | `a rejection nothing handled: no implementation for ui.open` | error surface |
+
+1. **(reco)** Fix all six, a red-first test each:
+   - F2: set `known` even when the before-call stat fails; a Write still claims own only when the file holds its text.
+   - F4: one line splitter on `\r\n|\r|\n` for the title, `section` and the pane.
+   - F5: the pane draws the malformed line and reads nothing.
+   - F6: while the row says the dir is missing, the check also tests whether the dir exists (one more call; at most 6 a period).
+   - F1: test the plan dir only when plan.md is missing, and skip decisions.md when the dir is missing. Projected 9 calls for that shape. `unexecuted`.
+   - F3: the press catches the error.
+
+   Then a fresh lane on those changes only, then the gate. `unexecuted`.
+2. Fix F2 and F3 only. File a ticket for F1, F4, F5 and F6. This ships wrong output in rare shapes.
+3. Ship as it is. File a ticket for all six. F2 is a regression this PR introduces.
+
+### Defaults in this round (stand unless struck)
+
+> **What this is about:** These are small follow-ups that do not change what the mod shows. One file check failing once blanks the row until the next tool call; that is allowed, but goes on a ticket. Some invisible characters and emoji cuts draw oddly; that goes on the existing row-width ticket. One test only checks the average cost of four checks; it gets a per-check test.
+
+- **D-f.** F7: one failed check blanks the row until the next tool call. §6 allows this. TICKET: keep the check running.
+- **D-g.** F8: U+202E, U+200B, U+FEFF and U+FFF9 are drawn, and a cut can split an emoji (draws U+FFFD). Noted on skills-1tr4 (the row width counts characters, not screen cells), since both are about cutting and drawing the row.
+- **D-h.** Oracle note: the 3e check test sums 4 periods against 24. Add a test of each period against 6.
+- **K1** (an Edit racing another writer inside the call is taken as own) is already accepted by the brief.
+
+unruled: W3-Q4 — default (1)
