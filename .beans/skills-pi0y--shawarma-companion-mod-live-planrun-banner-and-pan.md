@@ -191,3 +191,20 @@ Reading (adversarial lane): one real row plus one inside a ``` fence → `2 deci
 - **Tickets:** the row width counts characters, not screen cells (a CJK title wraps); the test fake keys files by raw path, so `./` spellings cannot show in the suite.
 
 unruled: W3-Q1, W3-Q2, W3-Q3 — default (1) for each
+
+## Ruled 2026-10-29 · review round 1
+
+Owner: "go with recos". Each of W3-Q1 to W3-Q3 took option 1 (W3-R1 to W3-R3). Defaults D-a to D-e stand (W3-D1 to W3-D5), plus W3-D6: a failed stat counts as "missing" only when `fs.exists` agrees.
+
+- Branch commits:
+  - 0e405d8: the rulings.
+  - ac438c1: the tests. Before the fix: 44 pass, 12 fail, each at its own assertion.
+  - 4bfe7b1: the fix. `claude-personal plugin test mods/shawarma-companion` gives 56 pass, 0 fail.
+- File checks, measured:
+  - 6 per Bash call with two markers (was 12).
+  - 7 per marker Write (was 17).
+  - 4 per 15 s check (bound 6).
+- Tickets filed:
+  - skills-1tr4: the row width counts characters, not screen cells.
+  - skills-qvnv: the test fake keys files by raw path.
+- A fresh review lane is running on the fix commit before the gate.
