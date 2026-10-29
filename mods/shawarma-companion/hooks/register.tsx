@@ -21,11 +21,24 @@ let check: Timer | null = null
 /** Set from `options.band` at register: the check runs only while a row can be drawn. */
 let isBandOn = false
 
-async function readOr(
-  $: EngineInterface,
-  path: string,
-): Promise<string | null> {
-  return (await $.fs.exists(path)) ? String(await $.fs.read(path)) : null
+/**
+ * `mtimeMs` of `path`, or null when it is missing. A failed stat is taken for
+ * "missing" only when `fs.exists` agrees; any other failure throws.
+ */
+async function mtimeOr($: EngineInterface, path: string): Promise<number | null> {
+  return $.fs.stat(path).then(
+    stat => stat.mtimeMs,
+    async (err: unknown) => {
+      if (await $.fs.exists(path)) throw err
+      return null
+    },
+  )
+}
+
+/** The file's text and `mtimeMs`, or nulls when it is missing: one stat, one read. */
+async function readOr($: EngineInterface, path: string): Promise<{ text: string | null; at: number | null }> {
+  const at = await mtimeOr($, path)
+  return { text: at === null ? null : String(await $.fs.read(path)), at }
 }
 
 /** The marker at the cwd's git root, or null outside a repo. */
@@ -39,42 +52,48 @@ async function cwdMarker($: EngineInterface): Promise<string | null> {
   return top == null ? null : `${top}${MARKER_TAIL}`
 }
 
-/** mtime per candidate marker that exists now. */
-async function markerTimes($: EngineInterface): Promise<Map<string, number>> {
-  const times = new Map<string, number>()
-  for (const marker of [await read($, known), await cwdMarker($)]) {
-    if (marker !== null && (await $.fs.exists(marker))) {
-      times.set(marker, (await $.fs.stat(marker)).mtimeMs)
-    }
-  }
-  return times
-}
+/**
+ * A Write or Edit that named a marker path: the path, its `mtimeMs` before the
+ * call (null: missing), and for a Write the text it sent.
+ */
+type Claim = { path: string; before: number | null; expected: string | null }
 
-async function snapshot($: EngineInterface): Promise<Snapshot | null> {
-  const candidates = [await read($, known), await cwdMarker($)]
+/**
+ * The first candidate marker that exists, each candidate stat'ed once. A
+ * `claim` whose path is that marker and whose `mtimeMs` changed across the
+ * call, holding the Write's text if any, is recorded as own before labelling.
+ */
+async function snapshot($: EngineInterface, claim: Claim | null = null): Promise<Snapshot | null> {
+  const candidates = new Set([await read($, known), await cwdMarker($)])
   for (const marker of candidates) {
-    if (marker === null || !(await $.fs.exists(marker))) continue
+    if (marker === null) continue
+    const at = await mtimeOr($, marker)
+    if (at === null) continue
     const text = String(await $.fs.read(marker))
+    if (claim?.path === marker && claim.before !== at && (claim.expected === null || text === claim.expected)) {
+      await update($, own, list => [...list, `${marker}@${at}@${text}`].slice(-50))
+    }
     const parsed = parseMarker(text, marker)
-    const stat = await $.fs.stat(marker)
     const { startedAt } = await $.session.usage()
-    const isEarlier = stat.mtimeMs < startedAt
-    const isUnconfirmed = !isEarlier && !(await read($, own)).includes(`${marker}@${stat.mtimeMs}@${text}`)
-    const base = { marker, since: stat.mtimeMs, isEarlier, isUnconfirmed }
+    const isEarlier = at < startedAt
+    const isUnconfirmed = !isEarlier && !(await read($, own)).includes(`${marker}@${at}@${text}`)
+    const base = { marker, since: at, isEarlier, isUnconfirmed }
     if (parsed === null) {
       return { ...base, title: '', step: '', decisions: 0,
-        planDir: '', problem: `${marker} is malformed` }
+        planDir: '', planAt: null, decisionsAt: null, problem: `${marker} is malformed` }
     }
     const plan = await readOr($, `${parsed.planDir}/plan.md`)
     const decisions = await readOr($, `${parsed.planDir}/decisions.md`)
     const dirName = parsed.planDir.split('/').pop() ?? parsed.planDir
-    const hasDir = await $.fs.exists(parsed.planDir)
+    const hasDir = plan.at !== null || decisions.at !== null || (await $.fs.exists(parsed.planDir))
     return {
       ...base,
-      ...parseDecisions(decisions ?? ''),
-      title: (plan !== null ? parseTitle(plan) : null) ?? dirName,
+      ...parseDecisions(decisions.text ?? ''),
+      title: (plan.text !== null ? parseTitle(plan.text) : null) ?? dirName,
       step: parsed.step,
       planDir: parsed.planDir,
+      planAt: plan.at,
+      decisionsAt: decisions.at,
       ...(hasDir ? {} : { problem: `plan dir not found: ${parsed.planDir}` }),
     }
   }
@@ -82,8 +101,8 @@ async function snapshot($: EngineInterface): Promise<Snapshot | null> {
 }
 
 /** Never throws: a failed read draws nothing rather than a stale row. */
-async function refresh($: EngineInterface): Promise<void> {
-  const next = await snapshot($).catch((err: unknown) => {
+async function refresh($: EngineInterface, claim: Claim | null = null): Promise<void> {
+  const next = await snapshot($, claim).catch((err: unknown) => {
     $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
     return null
   })
@@ -101,46 +120,34 @@ function watch($: EngineInterface, row: Snapshot | null): void {
   }
 }
 
-/** Stat-only: a full re-read only when the drawn marker went or changed. */
+/**
+ * Stat-only: a full re-read only when the drawn marker, plan.md or
+ * decisions.md appeared, went or changed (W3-R1): a stat each, and an
+ * exists for each one missing.
+ */
 async function stale($: EngineInterface): Promise<void> {
   const row = await read($, snap)
   if (row === null) return watch($, null)
-  const at = (await $.fs.exists(row.marker)) ? (await $.fs.stat(row.marker)).mtimeMs : null
-  if (at !== row.since) await refresh($)
-}
-
-/**
- * Learns the marker a Write/Edit named and, when this call changed it, records
- * it as own; redraws. A Write's own text must be what the file now holds, so
- * another writer landing inside the call is not taken for this session.
- */
-async function afterCall(
-  $: EngineInterface,
-  path: string | null,
-  expected: string | null,
-  before: Map<string, number>,
-): Promise<void> {
-  if (path !== null && path.endsWith(MARKER_TAIL)) {
-    await update($, known, () => path)
-    const at = (await markerTimes($)).get(path)
-    if (at !== undefined && before.get(path) !== at) {
-      const text = String(await $.fs.read(path))
-      if (expected === null || text === expected) {
-        await update($, own, list => [...list, `${path}@${at}@${text}`].slice(-50))
-      }
-    }
+  if (
+    (await mtimeOr($, row.marker)) !== row.since ||
+    (row.planDir !== '' &&
+      ((await mtimeOr($, `${row.planDir}/plan.md`)) !== row.planAt ||
+        (await mtimeOr($, `${row.planDir}/decisions.md`)) !== row.decisionsAt))
+  ) {
+    await refresh($)
   }
-  await refresh($)
 }
 
 export const register: Register = (on, options) => {
   isBandOn = options.band === true
   on('session.start', async ($, e, next) => {
     if (options.pane === true) {
-      await $.command.register({
-        name: 'shawarma-companion',
-        description: 'Show the active shawarma plan or run: recap, decisions, amendments',
-      })
+      await $.command
+        .register({
+          name: 'shawarma-companion',
+          description: 'Show the active shawarma plan or run: recap, decisions, amendments',
+        })
+        .catch((err: unknown) => $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
     }
     await refresh($)
     return next(e)
@@ -148,16 +155,22 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     if (!WRITERS.has(e.tool)) return next(e)
-    const before = await markerTimes($).catch(() => new Map<string, number>())
+    // A marker write counts as this session's only when a Write/Edit named the
+    // marker's path (R6) and its mtime changed across the call: the path is
+    // stat'ed before it, so a failed Edit records nothing (W3-D1). Any other
+    // change seen across the call is unconfirmed.
+    const claim = await (async (): Promise<Claim | null> => {
+      const named = 'file_path' in e && typeof e.file_path === 'string' ? e.file_path : null
+      if (named === null) return null
+      const path = named.startsWith('/') ? named : `${await $.session.cwd()}/${named}`
+      if (!path.endsWith(MARKER_TAIL)) return null
+      const expected = e.tool === 'Write' && typeof e.content === 'string' ? e.content : null
+      return { path, before: await mtimeOr($, path), expected }
+    })().catch(() => null)
     const result = await next(e)
     // Bookkeeping after the call never fails the call: a miss draws nothing.
-    const named = 'file_path' in e && typeof e.file_path === 'string' ? e.file_path : null
-    const path =
-      named === null || named.startsWith('/') ? named : `${await $.session.cwd()}/${named}`
-    // A marker write counts as this session's only when a Write/Edit named the
-    // marker's path (R6). Any other change seen across the call is unconfirmed.
-    const expected = e.tool === 'Write' && typeof e.content === 'string' ? e.content : null
-    await afterCall($, path, expected, before).catch(() => update($, snap, () => null))
+    if (claim !== null) await update($, known, () => claim.path).catch(() => undefined)
+    await refresh($, claim)
     return result
   })
 
@@ -167,8 +180,10 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'shawarma-companion' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Shawarma' })
-    return { text: 'Shawarma pane opened.' }
+    return $.ui.open({ id: PANE, title: 'Shawarma' }).then(
+      () => ({ text: 'Shawarma pane opened.' }),
+      (err: unknown) => ({ text: `Shawarma pane could not open: ${String(err)}` }),
+    )
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -178,7 +193,10 @@ export const register: Register = (on, options) => {
     // first drawing after it restarts the check.
     watch($, row)
     const context =
-      options.context === true ? (await $.session.usage()).context.percent : undefined
+      options.context === true
+        ? await $.session.usage().then(usage => usage.context.percent, () => null)
+        : undefined
+    if (context === null) return next(e)
     const { Button, Text } = $.ui.resolve(e)
     const text = (
       <Text dimColor={row.isEarlier || row.isUnconfirmed}>
@@ -197,8 +215,12 @@ export const register: Register = (on, options) => {
     const { Box, Markdown, Text } = $.ui.resolve(e)
     const row = await read($, snap)
     if (row === null) return <Text dimColor>No shawarma plan or run is active.</Text>
-    const plan = await readOr($, `${row.planDir}/plan.md`)
-    const decisions = await readOr($, `${row.planDir}/decisions.md`)
+    const files = await Promise.all([readOr($, `${row.planDir}/plan.md`), readOr($, `${row.planDir}/decisions.md`)])
+      .catch((err: unknown) => String(err))
+    if (typeof files === 'string') {
+      return <Text dimColor>{clean(`The plan files could not be read: ${files}`)}</Text>
+    }
+    const [{ text: plan }, { text: decisions }] = files
     const parts = [
       `**${row.title}** · ${row.step}`,
       plan === null ? '_No brief yet: the plan is in progress._' : `### Recap\n\n${section(plan, 1) ?? '_§1 not found._'}`,
