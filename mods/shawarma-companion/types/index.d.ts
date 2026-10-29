@@ -7,14 +7,18 @@ export type Snapshot = {
   step: string
   /** The marker's mtime, ms since the epoch. */
   since: number
-  /** True when the marker is older than this session. */
+  /** True when the marker's modification time is before this session's start (a copy that keeps old times reads the same). */
   isEarlier: boolean
-  /** True when the marker is newer than this session's start but no Write or Edit of this session wrote it. */
+  /** True when the marker is newer than this session's start and no Write or Edit of this session was seen writing it: another session, or this one by other means. */
   isUnconfirmed: boolean
-  /** Dated rows of decisions.md. */
+  /** Lines of decisions.md that start with a date and `|`: the row's count. */
   decisions: number
-  /** Absolute plan dir. */
+  /** Absolute plan dir; empty when the marker is malformed. */
   planDir: string
+  /** plan.md's `mtimeMs` when read, null when missing: the check compares it. */
+  planAt: number | null
+  /** decisions.md's `mtimeMs` when read, null when missing: the check compares it. */
+  decisionsAt: number | null
   /** A short line naming the file that could not be read, when one could not. */
   problem?: string
 }
