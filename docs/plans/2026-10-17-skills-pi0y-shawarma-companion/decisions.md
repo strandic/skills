@@ -14,3 +14,4 @@
 2026-10-29 | W3-D3 DEFAULT | the four hooks catch their own errors | §3 error surface
 2026-10-29 | W3-D4 DEFAULT | three timer tests | pin the check
 2026-10-29 | W3-D5 DEFAULT | README and type comment wording | prose fixes
+2026-10-29 | W3-D6 DEFAULT | a failed stat is 'missing' only when fs.exists agrees | the kit hides the ENOENT text; 6/7 fs calls per tool call, 4 per period

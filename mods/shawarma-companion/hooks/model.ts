@@ -20,9 +20,9 @@ export function parseMarker(text: string, markerPath: string): Marker | null {
   return { planDir: dir.startsWith('/') ? dir : `${root}/${dir}`, step }
 }
 
-/** Control characters, which a surface refuses to draw, as spaces; `\n` kept only when asked. */
+/** Control characters (C0, DEL, C1), which a surface refuses to draw, as spaces; `\n` kept only when asked. */
 export function clean(text: string, keepNewlines = false): string {
-  return text.replace(keepNewlines ? /[\u0000-\u0009\u000B-\u001F\u007F]/g : /[\u0000-\u001F\u007F]/g, ' ')
+  return text.replace(keepNewlines ? /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g : /[\u0000-\u001F\u007F-\u009F]/g, ' ')
 }
 
 /** The `Predicted red set` line of §4, else null. */
@@ -38,11 +38,12 @@ export type Decisions = { decisions: number }
  * One decision per row `<date> | <label> | <decision> | <why>`: a line that
  * starts with a `YYYY-MM-DD` date followed by `|`, a leading `|` allowed (a
  * Markdown table). The label is not read: the skill does not define it yet.
- * Every other line (heading, table header, wrapped text) is skipped.
+ * Every other line (heading, table header, wrapped text) is skipped. Lines
+ * end in `\r\n`, `\r` or `\n`.
  */
 export function parseDecisions(text: string): Decisions {
   let decisions = 0
-  for (const line of text.split('\n')) {
+  for (const line of text.split(/\r\n|\r|\n/)) {
     if (/^\d{4}-\d{2}-\d{2}\s*\|/.test(line.trim().replace(/^\|\s*/, ''))) decisions += 1
   }
   return { decisions }

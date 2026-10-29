@@ -35,7 +35,7 @@ The row sits above the prompt. It reads:
 - **title** is the first line of `plan.md`, without the `# `. If there is no `plan.md` yet, it is the plan folder's name.
 - **step** is the marker's second line, for example `plan 2 spike` or `run W3`.
 - **since** is the time the marker was last written. It gets a `MM-DD ` date in front when that was not today.
-- **decisions** is the number of dated rows in `decisions.md`. A dated row is a line that starts with a date (`YYYY-MM-DD`) followed by `|`. A Markdown table row counts too. The row reads `1 decision` when there is one. The count does not split rulings from defaults.
+- **decisions** is the number of dated rows in `decisions.md`. A dated row is a line that starts with a date (`YYYY-MM-DD`) followed by `|`. A Markdown table row counts too. The row reads `1 decision` when there is one. The count does not split rulings from defaults. A hand-written `decisions.md` can make the count wrong with no label: a dated row inside a code block or an HTML comment counts too.
 
 Two parts are added at the end when they apply:
 
@@ -46,14 +46,14 @@ If the marker is malformed, the row reads only `shawarma: <marker path> is malfo
 
 The row never runs wider than the window. The title is cut first, then the end of the line.
 
-The row updates after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While the row is shown, the mod also checks the marker every 15 seconds. So a change made outside the session shows within 15 seconds.
+The row updates after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While the row is shown, the mod also checks the marker, `plan.md` and `decisions.md` every 15 seconds. So a change another session makes to one of those three files shows within 15 seconds. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
 
 ## The labels
 
-The label tells you whether this session wrote the marker. Both labels are dimmed.
+The label tells you whether this session was seen writing the marker. Both labels are dimmed.
 
-- **`earlier session:`** The marker is older than this session. It was written before this session started.
-- **`unconfirmed:`** The marker changed after this session started, but this session did not see itself write it. "Write it" means a Write or Edit tool call on the marker's path. The label shows whether another session wrote the marker or this session wrote it another way, for example through Bash.
+- **`earlier session:`** The marker's modification time is before this session started. Usually it was written by an earlier session. A copy that keeps old file times reads the same.
+- **`unconfirmed:`** The marker changed after this session started, but this session was not seen writing it. "Writing it" means a Write or Edit tool call on the marker's path that changed the file. The label does not tell you who wrote it: another session, or this session another way, for example through Bash.
 
 No label means this session wrote the marker with a Write or Edit of its path.
 
@@ -67,7 +67,7 @@ The pane shows:
 - the amendments: section 9 of `plan.md`;
 - the predicted red set: the `Predicted red set` line of section 4 of `plan.md`.
 
-If `plan.md` does not exist yet, the pane says there is no brief yet and shows only the decisions.
+If `plan.md` does not exist yet, the pane says there is no brief yet and shows only the title, the step and the decisions.
 
 Open it with the command `/shawarma-companion`, or press the row.
 
