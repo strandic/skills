@@ -54,19 +54,19 @@ async function cwdMarker($: EngineInterface): Promise<string | null> {
 
 /**
  * A Write or Edit that named a marker path: the path, its `mtimeMs` before the
- * call (null: missing; undefined: the stat failed), and for a Write the text
- * it sent.
+ * call (null: no time, missing or the stat failed), whether the call answered
+ * with no error, and for a Write the text it sent.
  */
-type Claim = { path: string; before: number | null | undefined; expected: string | null }
+type Claim = { path: string; before: number | null; isDone: boolean; expected: string | null }
 
 /**
- * Own when the marker's `mtimeMs` changed across the call and, for a Write,
- * the file holds its text. With no time from before the call (W3-R4), only a
- * Write's text can show it: an Edit is never own then.
+ * Own when the call answered with no error and the marker's `mtimeMs` changed
+ * across it. A Write also needs the file to hold its text; an Edit needs a time
+ * from before the call, since an Edit cannot create the file (W3-R5).
  */
 function isOwn(claim: Claim, at: number, text: string): boolean {
-  if (claim.expected !== null) return claim.before !== at && text === claim.expected
-  return claim.before !== undefined && claim.before !== at
+  if (!claim.isDone || claim.before === at) return false
+  return claim.expected !== null ? text === claim.expected : claim.before !== null
 }
 
 /**
@@ -173,18 +173,20 @@ export const register: Register = (on, options) => {
     if (!WRITERS.has(e.tool)) return next(e)
     // A marker write counts as this session's only when a Write/Edit named the
     // marker's path (R6) and its mtime changed across the call: the path is
-    // stat'ed before it, so a failed Edit records nothing (W3-D1). A failed
-    // stat keeps the path (W3-R4). Any other change seen across the call is
-    // unconfirmed.
+    // stat'ed before it, one call, any failure giving no time (W3-D1, W3-R5).
+    // A failed stat keeps the path (W3-R4). Any other change seen across the
+    // call is unconfirmed.
     const claim = await (async (): Promise<Claim | null> => {
       const named = 'file_path' in e && typeof e.file_path === 'string' ? e.file_path : null
       if (named === null) return null
       const path = named.startsWith('/') ? named : `${await $.session.cwd()}/${named}`
       if (!path.endsWith(MARKER_TAIL)) return null
       const expected = e.tool === 'Write' && typeof e.content === 'string' ? e.content : null
-      return { path, before: await mtimeOr($, path).catch(() => undefined), expected }
+      const before = await $.fs.stat(path).then(stat => stat.mtimeMs, () => null)
+      return { path, before, isDone: false, expected }
     })().catch(() => null)
     const result = await next(e)
+    if (claim !== null) claim.isDone = result.isError !== true && result.deny === undefined
     // Bookkeeping after the call never fails the call: a miss draws nothing.
     if (claim !== null) await update($, known, () => claim.path).catch(() => undefined)
     await refresh($, claim)
