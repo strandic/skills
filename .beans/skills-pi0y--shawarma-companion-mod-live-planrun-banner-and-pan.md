@@ -258,3 +258,53 @@ Readings (lane, test kit, CLI 2.1.312; repros under the session scratchpad `lane
 - **K1** (an Edit racing another writer inside the call is taken as own) is already accepted by the brief.
 
 unruled: W3-Q4 — default (1)
+
+## Ruled 2026-11-01 · W3-Q4 → W3-R4 (owner: "Go with reco")
+
+Branch commits:
+- bd5f858: the ruling.
+- 6e4a22f: the tests. On the code before the fix: 59 pass, 7 fail.
+- 5f94d6b: the fix. 65 pass, 0 fail; tsc exit 0.
+
+Ticket filed: skills-cm2l (one failed check empties the row until the next tool call). Note added to skills-1tr4 (the row width counts characters, not screen cells).
+
+## Ask 2026-11-01 · ruling (fix review, fourth round)
+
+Run stopped at Wave 3 (branch commit 50dc523, brief §9 row W3-Q5). The fresh lane on 5f94d6b confirmed all six round-3 fixes, and found three more cases in the same area.
+
+### W3-Q5 · one more small round
+
+> **What this is about:** These are three cases in how the mod decides "this session wrote the marker", plus one cost slip.
+> - **One file check too many, again:** my last fix moved the extra file check rather than removing it. A failed write of a missing marker, while the plan folder exists but has no plan file yet (the normal early state), now makes 11 checks; the limit is 10.
+> - **A race:** if this session tries to edit a marker that isn't there, and another session creates it at that moment, the mod shows it with no label, as if this session wrote it. An edit can't create a file, so it should never count.
+> - **A failed write:** a write that failed can still count as this session's when the file already holds the same text.
+>
+> **Option 1 (recommended):** one small change fixes all three. The check before the call no longer asks "is the file missing?", which saves the extra file check. An edit counts as this session's only if the marker existed before. A write that failed never counts. Each gets a test that fails on today's code, then a short review of that change only, then the gate.
+> **Option 2:** raise the limit to 11 file checks, file tickets for the other two, and go to the gate.
+> **Option 3:** go to the gate as it is. This leaves the code over the promised limit, which the brief doesn't allow without your ruling.
+
+Readings (lane, test kit, CLI 2.1.312; repros in the session scratchpad `lane-fix3/fix/.../tests/probes.test.tsx`):
+
+| finding | reading | kind |
+|---|---|---|
+| N1 | P1a/P1b/P1c: 11 fs calls: `stat TM, exists TM, stat TM, exists TM, stat MARKER, read MARKER, stat plan.md, exists plan.md, exists <dir>, stat decisions.md, read decisions.md` (before this round: 10, 10, 11) | 3e bound |
+| N2 | P5c: `skills-x — the thing · run OTHER · …`, no label; expected `unconfirmed:` | wrong output, no label (pre-existing) |
+| N3 | P5b: `skills-x — the thing · run W1 #fail · …`, no label; before this round `unconfirmed:` | wrong output, no label (allowed by W3-R4's wording) |
+
+1. **(reco)** The claim's before-call stat drops its `fs.exists`: a failed stat gives "no time". An Edit is own only with a time from before the call. A Write is own only when the tool result is not an error and the file holds its text. Projected for the N1 shape: 10 calls (P1a), 10 (P1c). `unexecuted`. Then a fresh lane on that diff only, then the gate.
+2. Amend 3e to 11 per tool call; TICKET N2 and N3; gate. `unexecuted`.
+3. Gate as it is. 3e reads FAIL in one shape.
+
+### Defaults in this round (stand unless struck)
+
+> **What this is about:** Two rare cases that don't show false text, and two notes on the tests.
+> - If the marker this session named keeps failing to be read, the row stays empty. That is allowed, so it becomes a ticket.
+> - If the plan folder is deleted while idle, the row doesn't say "plan dir not found" until the next tool call. Ticket.
+> - One test's failure on the old code shows only as a file-level error. It gets an assertion of its own.
+
+- **D-i.** N4: a named marker whose stat always fails blanks the row for the rest of the session (§6 allows an empty row). TICKET.
+- **D-j.** N5: a plan dir removed while idle does not bring back `plan dir not found` until the next tool call (pre-existing). TICKET.
+- **D-k.** Oracle note: the F3 press test's own assertion is green on the old code; only the kit's file-level check is red. Add an assertion tied to the test: a `ui.open` hook counting the attempt, and the press resolving.
+- Verification only: a check period that triggers a refresh costs 13 calls (6 for the check, 7 for the refresh). §3 3e bounds periods "with an unchanged marker", so this is within it.
+
+unruled: W3-Q5 — default (1)
