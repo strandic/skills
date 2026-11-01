@@ -19,3 +19,7 @@
 2026-11-01 | W3-D7 DEFAULT | ticket: keep the check running after one failed period | fix review F7
 2026-11-01 | W3-D8 DEFAULT | note invisible characters and emoji cuts on skills-1tr4 | fix review F8
 2026-11-01 | W3-D9 DEFAULT | test each check period against 6 fs calls | fix review oracle note
+2026-11-01 | W3-R5 RULING | before-call stat without exists; an Edit is own only with a time from before; a failed Write is never own | Owner: "Go with reco". 11 fs calls in "no brief yet"; two own-write cases with no label.
+2026-11-01 | W3-D10 DEFAULT | ticket: a named marker that never stats blanks the row | fix review N4
+2026-11-01 | W3-D11 DEFAULT | ticket: plan dir removed while idle | fix review N5
+2026-11-01 | W3-D12 DEFAULT | the F3 test gets its own assertion | fix review oracle note
