@@ -15,3 +15,7 @@
 2026-10-29 | W3-D4 DEFAULT | three timer tests | pin the check
 2026-10-29 | W3-D5 DEFAULT | README and type comment wording | prose fixes
 2026-10-29 | W3-D6 DEFAULT | a failed stat is 'missing' only when fs.exists agrees | the kit hides the ENOENT text; 6/7 fs calls per tool call, 4 per period
+2026-11-01 | W3-R4 RULING | a third review round fixes F1–F6 (lost marker, CR plan.md, malformed pane, stale dir line, 11 fs calls, press error) | Owner: "Go with reco".
+2026-11-01 | W3-D7 DEFAULT | ticket: keep the check running after one failed period | fix review F7
+2026-11-01 | W3-D8 DEFAULT | note invisible characters and emoji cuts on skills-1tr4 | fix review F8
+2026-11-01 | W3-D9 DEFAULT | test each check period against 6 fs calls | fix review oracle note
