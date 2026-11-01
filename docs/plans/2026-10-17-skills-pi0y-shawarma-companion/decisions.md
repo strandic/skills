@@ -23,3 +23,4 @@
 2026-11-01 | W3-D10 DEFAULT | ticket: a named marker that never stats blanks the row | fix review N4
 2026-11-01 | W3-D11 DEFAULT | ticket: plan dir removed while idle | fix review N5
 2026-11-01 | W3-D12 DEFAULT | the F3 test gets its own assertion | fix review oracle note
+2026-11-01 | W4-R1 RULING | fold a check_pr.py ID_RE fix (wave-prefixed ids) into this PR, red test first, fresh lane, gate re-run | Owner: "Go with 2 and fold it in". The PR check read all 20 run-time ids as none.
