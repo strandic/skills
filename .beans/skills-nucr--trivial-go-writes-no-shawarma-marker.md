@@ -3,8 +3,9 @@
 title: Trivial go writes no shawarma marker
 status: todo
 type: bug
+priority: normal
 created_at: 2026-11-01T16:02:37Z
-updated_at: 2026-11-01T16:02:37Z
+updated_at: 2026-11-01T16:11:25Z
 ---
 
 > **What this is about:** a trivial ticket's run never writes `.shawarma/active`, so the companion mod (skills-pi0y) shows nothing for it.
@@ -18,3 +19,7 @@ updated_at: 2026-11-01T16:02:37Z
 **Fix:** a trivial go writes the marker at the root of its tree (line 2 e.g. `run trivial`) and deletes it at its stop, like any run.
 
 **Done when:** SKILL.md names the trivial go in "State files"; a trivial run shows the band row with the mod loaded.
+
+
+
+**Queued for the round-9 retro (2026-11-01).** Skill-text changes land through retro rounds (every SKILL.md/run.md change since v0.3.0: `git log -- skills/shawarma/SKILL.md skills/shawarma/run.md`). Fold with its sibling (skills-nucr = trivial go writes no marker; skills-ox8b = Bash-written marker invisible to the mod): both touch the SKILL.md "State files" line. Until then, a session started inside the worktree makes the mod read that worktree's marker.

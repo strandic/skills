@@ -3,8 +3,9 @@
 title: Shawarma marker written by Bash is invisible to the companion mod
 status: todo
 type: bug
+priority: normal
 created_at: 2026-11-01T16:02:37Z
-updated_at: 2026-11-01T16:02:37Z
+updated_at: 2026-11-01T16:11:25Z
 ---
 
 > **What this is about:** agents write `.shawarma/active` with Bash `printf` instead of the Write tool, so the companion mod (skills-pi0y) can't find a marker in a worktree.
@@ -20,3 +21,7 @@ updated_at: 2026-11-01T16:02:37Z
 **Done when:** the skill text carries the rule and its reason at each write site; a run from the main checkout into a worktree shows the band row with the mod loaded.
 
 Alternative, not chosen: the mod scans `.worktrees/*/.shawarma/active` or parses Bash commands.
+
+
+
+**Queued for the round-9 retro (2026-11-01).** Skill-text changes land through retro rounds (every SKILL.md/run.md change since v0.3.0: `git log -- skills/shawarma/SKILL.md skills/shawarma/run.md`). Fold with its sibling (skills-nucr = trivial go writes no marker; skills-ox8b = Bash-written marker invisible to the mod): both touch the SKILL.md "State files" line. Until then, a session started inside the worktree makes the mod read that worktree's marker.
