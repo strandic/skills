@@ -28,7 +28,9 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
  * writes the cwd's marker, any other Bash changes nothing. `fs.stat` rejects
  * `ENOENT` on a missing path, as the real one. Each name in `fail` makes that
  * call throw: `cwd`, `usage`, `open`, `register`, or `read <path>`; `cwd after
- * call` makes `cwd` throw once a tool call has run.
+ * call` makes `cwd` throw once a tool call has run; `stat once <path>` makes
+ * the next stat of that path fail with EACCES. A Write whose content holds
+ * `#fail` errors and changes nothing.
  */
 function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set()) {
   let tick = STARTED + 60_000
@@ -38,6 +40,7 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
   on('fs.read', (_$, e) => (log.push(`read ${e.path}`), failing(`read ${e.path}`), { value: files.get(e.path)?.text ?? '' }))
   on('fs.stat', (_$, e) => {
     log.push(`stat ${e.path}`)
+    if (fail.delete(`stat once ${e.path}`)) throw new Error(`EACCES: permission denied, stat '${e.path}'`)
     const file = files.get(e.path)
     if (file === undefined) throw new Error(`ENOENT: no such file, stat '${e.path}'`)
     return { value: { kind: 'file', size: 1, mtimeMs: file.mtimeMs, isLink: false } }
@@ -59,6 +62,9 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
     if (fail.has('cwd after call')) fail.add('cwd')
     tick += 1000
     const at = (path: string) => (path.startsWith('/') ? path : `${cwd}/${path}`)
+    if (e.tool === 'Write' && e.content.includes('#fail')) {
+      return { result: { type: 'text', text: 'Write failed', isError: true } } as any
+    }
     if (e.tool === 'Write') files.set(at(e.file_path), { text: e.content, mtimeMs: tick })
     if (e.tool === 'Write' && e.content.includes('#race')) {
       files.set(at(e.file_path), { text: MARKER_TEXT('run OTHER'), mtimeMs: tick + 1 })
@@ -571,5 +577,98 @@ describe('review round 1', () => {
     files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 999_000 })
     await clock.advance(15_000)
     expect(await bandText($)).toMatch(/^unconfirmed: .* run W2/)
+  })
+})
+
+describe('review round 3 (W3-R4)', () => {
+  const TREE = `${ROOT}/.worktrees/w`
+  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read) /.test(line))
+  const paneText = async ($: any) => {
+    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return (await ui.find({ type: 'Markdown' }))?.props.text ?? (await ui.find({ type: 'Text' }))?.text
+  }
+
+  test('F2 a Write whose before-call stat fails still makes its marker the one drawn', { options: ON }, async ($, on) => {
+    world(on, new Map([plan,
+      [`${TREE}/.shawarma/active`, { text: MARKER_TEXT('run OLD'), mtimeMs: STARTED + 5 }],
+      [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, { text: '# tree plan\n', mtimeMs: 0 }],
+      [MARKER, { text: MARKER_TEXT('run CWD'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${TREE}/.shawarma/active`]))
+    await write($, `${TREE}/.shawarma/active`, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toMatch(/^tree plan · run W1 · /)
+  })
+
+  test('F2 an Edit whose before-call stat fails is not own', { options: ON }, async ($, on) => {
+    world(on, new Map([plan, [MARKER, { text: MARKER_TEXT('run W1'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${MARKER}`]))
+    await $.tool.call({ tool: 'Edit', file_path: MARKER, old_string: 'run W1', new_string: 'run W2' } as any)
+    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run W2/)
+  })
+
+  test('F4 a CR-only plan.md: title, recap and decision lines', { options: ON }, async ($, on) => {
+    world(on, new Map([[`${DIR}/plan.md`, { text: '# skills-x — the thing\r\r## 1. What\r\rwhy\r', mtimeMs: 0 }],
+      [`${DIR}/decisions.md`, { text: '2026-10-16 | Q1 RULING | a | b\r2026-10-16 | D1 DEFAULT | c | d\r', mtimeMs: 0 }]]))
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toBe(`skills-x — the thing · run W1 · ${SINCE(1)} · 2 decisions`)
+    const text = await paneText($)
+    expect(text).toMatch(/### Recap\n\nwhy/)
+    expect(text).toMatch(/- 2026-10-16 \| Q1 RULING \| a \| b\n- 2026-10-16 \| D1 DEFAULT \| c \| d/)
+  })
+
+  test('F5 a malformed marker: the pane says so and reads no plan file', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([['/plan.md', { text: '# root plan\n\n## 1. What\n\nROOT FILE\n', mtimeMs: 0 }]]), ROOT, log)
+    await write($, MARKER, 'bad\n')
+    const n0 = log.length
+    const text = await paneText($)
+    expect(text).toBe(`shawarma: ${MARKER} is malformed`)
+    expect(fsCalls(log, n0)).toEqual([])
+  })
+
+  test('F6 plan dir created while idle: the problem line goes within 15 s', { options: ON }, async ($, on) => {
+    const files = new Map<string, File>()
+    const clock = world(on, files)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toMatch(/plan dir not found/)
+    files.set(`${DIR}/notes.txt`, { text: '', mtimeMs: 0 })
+    await clock.advance(15_000)
+    expect(await bandText($)).toBe(`2026-10-16-skills-x-thing · run W1 · ${SINCE(1)} · 0 decisions`)
+  })
+
+  test('F1 a failed Edit of a missing marker, cwd marker, plan dir missing: at most 10 fs calls', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }]]), ROOT, log)
+    const n0 = log.length
+    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W0', new_string: 'run W1' } as any)
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  test('F1 a failed Write of a new marker, cwd marker, plan dir missing: at most 10 fs calls', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }]]), ROOT, log)
+    const n0 = log.length
+    await write($, `${TREE}/.shawarma/active`, `${MARKER_TEXT('run W0')}#fail`)
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  test('F3 a press on the row when the pane cannot open: nothing escapes', { options: ON }, async ($, on) => {
+    const fail = new Set<string>()
+    const log: string[] = []
+    world(on, new Map([plan]), ROOT, log, fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    await bandText($)
+    fail.add('open')
+    await $.ui.press({ plugin: 'shawarma-companion', key: 'row' })
+    expect(await bandText($)).toMatch(/run W1/)
+  })
+
+  test('D9 each check period: at most 6 fs calls, plan dir missing', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = world(on, new Map(), ROOT, log)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    for (let period = 0; period < 3; period += 1) {
+      const n0 = log.length
+      await clock.advance(15_000)
+      expect(fsCalls(log, n0).length <= 6).toBe(true)
+    }
   })
 })
