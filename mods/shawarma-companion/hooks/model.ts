@@ -25,6 +25,11 @@ export function clean(text: string, keepNewlines = false): string {
   return text.replace(keepNewlines ? /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g : /[\u0000-\u001F\u007F-\u009F]/g, ' ')
 }
 
+/** Lines ending in `\r\n`, `\r` or `\n`. */
+export function lines(text: string): string[] {
+  return text.split(/\r\n|\r|\n/)
+}
+
 /** The `Predicted red set` line of §4, else null. */
 export function redSet(plan: string): string | null {
   const body = section(plan, 4)
@@ -38,12 +43,11 @@ export type Decisions = { decisions: number }
  * One decision per row `<date> | <label> | <decision> | <why>`: a line that
  * starts with a `YYYY-MM-DD` date followed by `|`, a leading `|` allowed (a
  * Markdown table). The label is not read: the skill does not define it yet.
- * Every other line (heading, table header, wrapped text) is skipped. Lines
- * end in `\r\n`, `\r` or `\n`.
+ * Every other line (heading, table header, wrapped text) is skipped.
  */
 export function parseDecisions(text: string): Decisions {
   let decisions = 0
-  for (const line of text.split(/\r\n|\r|\n/)) {
+  for (const line of lines(text)) {
     if (/^\d{4}-\d{2}-\d{2}\s*\|/.test(line.trim().replace(/^\|\s*/, ''))) decisions += 1
   }
   return { decisions }
@@ -51,16 +55,16 @@ export function parseDecisions(text: string): Decisions {
 
 /** `# <ticket> — <title>` from plan.md's first line, else null. */
 export function parseTitle(plan: string): string | null {
-  const first = plan.split('\n', 1)[0] ?? ''
+  const first = lines(plan)[0] ?? ''
   return first.startsWith('# ') ? first.slice(2).trim() : null
 }
 
 /** The body under the first `## <n>.` heading, up to the next `## `. */
 export function section(plan: string, n: number): string | null {
-  const lines = plan.split('\n')
-  const start = lines.findIndex(line => line.startsWith(`## ${n}.`))
+  const all = lines(plan)
+  const start = all.findIndex(line => line.startsWith(`## ${n}.`))
   if (start === -1) return null
-  const rest = lines.slice(start + 1)
+  const rest = all.slice(start + 1)
   const end = rest.findIndex(line => line.startsWith('## '))
   return (end === -1 ? rest : rest.slice(0, end)).join('\n').trim()
 }
