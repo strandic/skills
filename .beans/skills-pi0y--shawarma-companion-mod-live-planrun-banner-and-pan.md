@@ -346,3 +346,43 @@ Gate readings at 9a9a049:
 3. Rename the Decisions ids. Not possible: §9 is append-only.
 
 unruled: W4-Q1 — default (1)
+
+## Ruled 2026-11-01 · W4-Q1 → W4-R1 (owner: "Go with 2 and fold it in")
+
+`check_pr.py` `ID_RE` now reads wave-prefixed ids. Branch commits:
+- de882a7: the ruling.
+- c3d8df9: 2 tests, red on the old pattern.
+- 46f2262: the fix. `test_checks` gives 38 OK.
+
+A fresh lane found that the new pattern only ever adds ids (200,000 random strings, 0 dropped). Its 2 weak spots were already there before the fix:
+- a range after a wave id: TICKET skills-tx1x;
+- P4 passes when any one id in a row is recorded: DECLINE.
+
+## Ask 2026-11-01 · pr-open
+
+PR: https://github.com/strandic/skills/pull/4 (head 46f2262). The PR body has the Decisions and Findings tables.
+
+> **What this is about:** The PR is open and every check passes on its final commit. Merging is yours. After the shawarma skill's round 8 (skills-hekn, which writes the marker this mod reads) merges, a real plan run gives the screenshots this ticket's "Done when" asks for. Then this ticket closes.
+
+Gate at 46f2262:
+- G1: 71 pass, 0 fail.
+- G2: validation passed.
+- G3: tsc exit 0.
+- G4: 2 pass, 0 fail, validation passed.
+- Repo suite: 563 pass, 0 fail, 2 skipped. The base had 2 flaky named-pipe failures; they also failed at 9a9a049.
+- `test_checks`: 38 OK.
+- PR check: PASS.
+- Stand-in on CLI 2.1.316: the row and the pane are drawn.
+
+Unreviewed since the last lane: `git log 46f2262..HEAD -- mods/ .claude-plugin/ scripts/ skills/` is empty.
+
+Defaults in this run (all in the PR's Decisions table): W0, W0-D1, W3-n1, W3-D1 to W3-D12. Each was listed in a stop message and none was struck.
+
+Tickets from this run:
+- skills-1tr4: the row width counts characters, not screen cells.
+- skills-qvnv: the test fake keys files by raw path.
+- skills-cm2l: one failed check empties the row until the next tool call.
+- skills-p81u: a named marker that never stats blanks the row.
+- skills-bgg4: a plan dir removed while idle keeps its old row.
+- skills-lhwh: the pane draws the decisions.md heading and blank lines as bullets.
+- skills-tx1x: in the PR check, a range after a wave id leaves a stray bare id.
