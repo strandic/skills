@@ -308,3 +308,41 @@ Readings (lane, test kit, CLI 2.1.312; repros in the session scratchpad `lane-fi
 - Verification only: a check period that triggers a refresh costs 13 calls (6 for the check, 7 for the refresh). §3 3e bounds periods "with an unchanged marker", so this is within it.
 
 unruled: W3-Q5 — default (1)
+
+## Ruled 2026-11-01 · W3-Q5 → W3-R5 (owner: "Go with reco")
+
+Branch commits:
+- ae12cae: the ruling.
+- 81072cc: the tests. On the code before the fix: 66 pass, 5 fail.
+- 9a9a049: the fix. 71 pass, 0 fail.
+
+The fresh lane on 9a9a049 ran 192 shapes. The largest cost is 10 fs calls per tool call and 6 per check period, both within bounds. Its one finding (an Edit racing another writer inside the call) was already accepted by the brief: DECLINE, pre-existing.
+
+Tickets filed:
+- skills-p81u: a named marker that never stats blanks the row.
+- skills-bgg4: a plan dir removed while idle keeps its old row.
+- skills-lhwh: the pane draws the decisions.md heading and blank lines as bullets (seen in the stand-in).
+
+## Ask 2026-11-01 · gate
+
+Run stopped at Wave 4 (branch commit of brief §9 row W4-Q1, head 9a9a049 for all readings). The gate passed. The PR check, which must pass before the PR opens, fails, and the failure is in the check.
+
+### W4-Q1 · the PR check cannot read this run's decision ids
+
+> **What this is about:** All the tests and gate checks pass, and the live dry run drew the row and the pane. Before a PR opens, a script checks its description. One of its rules makes sure every decision listed points to a recorded decision. Its pattern for decision names accepts short names like "R5" or "D1", but not the names this run used, like "W3-R1" (the wave first). So it reports all 20 decisions as unnamed, although each one is recorded in the brief. Option 1 (recommended): open the PR, show the failed check and why in its description, and file a ticket to fix the script. Option 2: fix the script first in its own small change, then re-run the check and open the PR. Option 3: rename the decisions so the script reads them; not possible, because the brief's record cannot be rewritten.
+
+Reading: `python3 check_pr.py docs/plans/2026-10-17-skills-pi0y-shawarma-companion/plan.md <body> --repo . --tests-commit 1def4cd` gives `FAIL (20)`, every one `P4 … row names no id`. Checks P1, P2, P3 and P5 pass. `ID_RE` at check_pr.py:57 over `W0-R1`, `W3-D12`, `W3-n1` → `[]`; over `R5`, `D1`, `W0` → a match each. The skill's run step 5 asks that every ruling be recorded in §9, but no file says what form the id takes, and every run-time id here is wave-prefixed.
+
+Gate readings at 9a9a049:
+- G1: `71 pass`, `0 fail`.
+- G2: `✔ Validation passed`.
+- G3: tsc exit 0.
+- G4: `ℹ pass 2`, `ℹ fail 0`, and `✔ Validation passed`.
+- Suite: 565 tests, 561 pass, 2 fail, 2 skipped. The base has the same 2 failures (two plantime named-pipe tests).
+- Stand-in on CLI 2.1.316: row `earlier session: demo-1 — … · run W3 review · since 09:32 · 3 decisions`; the pane is drawn.
+
+1. **(reco)** Open the PR. Its Verification pastes the `FAIL (20)` and the regex reading. TICKET: `ID_RE` accepts `W<n>-<letters><n>[a-z]`, the skill names the id form, and a test covers both. `unexecuted` beyond the readings above.
+2. Fix `check_pr.py` first, as a trivial change with its own red test, then re-run and open this PR. `unexecuted`.
+3. Rename the Decisions ids. Not possible: §9 is append-only.
+
+unruled: W4-Q1 — default (1)
