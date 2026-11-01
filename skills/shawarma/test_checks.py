@@ -433,6 +433,19 @@ class CheckPr(unittest.TestCase):
                                  "| Review R1: drop the duplicate | RULING | dropped | one reason |")
         self.assertEqual(ids(run_cp(body), "P4"), [])
 
+    def test_ids_in_reads_wave_prefixed_ids(self):
+        self.assertEqual(cp.ids_in("W0-R1 the base, W3-D12 a test, W3-n1 a note"), {"W0-R1", "W3-D12", "W3-n1"})
+        self.assertEqual(cp.ids_in("R5, D1, W0 and Q2a"), {"R5", "D1", "W0", "Q2a"})
+        self.assertEqual(cp.ids_in("D1–D3"), {"D1", "D2", "D3"})
+
+    def test_p4_a_decision_named_by_a_wave_prefixed_id(self):
+        plan = GOOD_BRIEF.replace("| D1 | 2026-10-18 | default |", "| W3-D1 | 2026-10-18 | default |")
+        body = GOOD_BODY.replace("| D1: a glass lid | DEFAULT | shipped (§9 D1)", "| W3-D1: a glass lid | DEFAULT | shipped (§9 W3-D1)")
+        self.assertNotEqual(plan, GOOD_BRIEF)
+        self.assertNotEqual(body, GOOD_BODY)
+        self.assertEqual(ids(run_cp(body, plan), "P4"), [])
+        self.assertTrue(ids(run_cp(body.replace("W3-D1", "W3-D7"), plan), "P4"), "an unrecorded wave id is still red")
+
     def test_p5_missing_output_and_a_rerun_that_differs(self):
         self.assertRedGreen("P5", GOOD_BODY.replace("```\nempty\n", "```\n"))
         with tempfile.TemporaryDirectory() as d:
