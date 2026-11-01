@@ -54,7 +54,8 @@ SECTIONS = ["What", "Verification", "Unreviewed since the last lane", "Decisions
             "Follow-up"]
 OPTIONAL = {"Decisions", "Findings"}
 ASK_KINDS = ("interview", "plan-paused", "ruling", "pr-open", "gate")
-ID_RE = re.compile(r"(?<![\w-])([A-Z]{1,2}\d+[a-z]?|[A-Z]-[A-Z]+\d+[a-z]?)(?![\w-])")
+# An id: `D1`, `Q2a`, `A-B3`, or a wave-prefixed one from a run (`W0-R1`, `W3-D12`, `W3-n1`).
+ID_RE = re.compile(r"(?<![\w-])([A-Z]\d+-[A-Za-z]{1,2}\d+[a-z]?|[A-Z]{1,2}\d+[a-z]?|[A-Z]-[A-Z]+\d+[a-z]?)(?![\w-])")
 RANGE_RE = re.compile(r"(?<![\w-])([A-Z]{1,2})(\d+)\s*[–-]\s*(?:\1)?(\d+)(?![\w-])")
 
 SKELETON = f"""Plan ending: [brief commit <sha>](<link>) · ticket `<id>` · brief `<path>`
