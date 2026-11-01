@@ -30,7 +30,9 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
  * call throw: `cwd`, `usage`, `open`, `register`, or `read <path>`; `cwd after
  * call` makes `cwd` throw once a tool call has run; `stat once <path>` makes
  * the next stat of that path fail with EACCES. A Write whose content holds
- * `#fail` errors and changes nothing.
+ * `#fail` errors and changes nothing; an Edit whose `old_string` is
+ * `#appear` errors while another writer creates the file. Errors take core's
+ * shape: `{ isError: true, result, text }`.
  */
 function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set()) {
   let tick = STARTED + 60_000
@@ -57,13 +59,17 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
   on('session.start', () => ({ cwd }) as any)
   on('turn.complete', () => ({ text: '' }))
   on('command.register', (_$, e) => { failing('register'); log.push(`command ${e.name}`); return { value: undefined } as any })
-  on('ui.open', (_$, e) => { failing('open'); log.push(`open ${e.id}`); return { value: { isPlaced: true } } as any })
+  on('ui.open', (_$, e) => { log.push(`open ${e.id}`); failing('open'); return { value: { isPlaced: true } } as any })
   on('tool.call', (_$, e: any) => {
     if (fail.has('cwd after call')) fail.add('cwd')
     tick += 1000
     const at = (path: string) => (path.startsWith('/') ? path : `${cwd}/${path}`)
     if (e.tool === 'Write' && e.content.includes('#fail')) {
-      return { result: { type: 'text', text: 'Write failed', isError: true } } as any
+      return { isError: true, result: 'Write failed', text: 'Write failed' } as any
+    }
+    if (e.tool === 'Edit' && e.old_string === '#appear') {
+      files.set(at(e.file_path), { text: MARKER_TEXT('run OTHER'), mtimeMs: tick })
+      return { isError: true, result: 'String to replace not found', text: 'String to replace not found' } as any
     }
     if (e.tool === 'Write') files.set(at(e.file_path), { text: e.content, mtimeMs: tick })
     if (e.tool === 'Write' && e.content.includes('#race')) {
@@ -72,7 +78,7 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
     if (e.tool === 'Edit') {
       const old = files.get(at(e.file_path))?.text
       if (old === undefined || !old.includes(e.old_string)) {
-        return { result: { type: 'text', text: 'String to replace not found', isError: true } } as any
+        return { isError: true, result: 'String to replace not found', text: 'String to replace not found' } as any
       }
       files.set(at(e.file_path), { text: old.replace(e.old_string, e.new_string), mtimeMs: tick })
     }
@@ -657,7 +663,9 @@ describe('review round 3 (W3-R4)', () => {
     await write($, MARKER, MARKER_TEXT('run W1'))
     await bandText($)
     fail.add('open')
-    await $.ui.press({ plugin: 'shawarma-companion', key: 'row' })
+    const n0 = log.length
+    expect(await $.ui.press({ plugin: 'shawarma-companion', key: 'row' }).then(() => 'resolved', () => 'rejected')).toBe('resolved')
+    expect(log.slice(n0).filter(line => line.startsWith('open '))).toEqual(['open shawarma-companion'])
     expect(await bandText($)).toMatch(/run W1/)
   })
 
@@ -670,5 +678,54 @@ describe('review round 3 (W3-R4)', () => {
       await clock.advance(15_000)
       expect(fsCalls(log, n0).length <= 6).toBe(true)
     }
+  })
+})
+
+describe('review round 4 (W3-R5)', () => {
+  const TREE = `${ROOT}/.worktrees/w`
+  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read) /.test(line))
+
+  test('N1 a failed Edit of a missing marker, no brief yet: at most 10 fs calls', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }], decisions]), ROOT, log)
+    const n0 = log.length
+    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W0', new_string: 'run W1' } as any)
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  test('N1 a failed Write of a missing marker, no brief yet: at most 10 fs calls', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }], decisions]), ROOT, log)
+    const n0 = log.length
+    await write($, `${TREE}/.shawarma/active`, `${MARKER_TEXT('run W0')}#fail`)
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  test('N1 a failed Edit of a missing marker, plan dir with neither file: at most 10 fs calls', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }],
+      [`${DIR}/notes.txt`, { text: '', mtimeMs: 0 }]]), ROOT, log)
+    const n0 = log.length
+    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W0', new_string: 'run W1' } as any)
+    expect(fsCalls(log, n0).length <= 10).toBe(true)
+  })
+
+  test('N2 an Edit of a missing marker that another writer creates inside the call: unconfirmed', { options: ON }, async ($, on) => {
+    world(on, new Map([plan]))
+    await $.tool.call({ tool: 'Edit', file_path: MARKER, old_string: '#appear', new_string: 'x' } as any)
+    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run OTHER/)
+  })
+
+  test('N3 a failed Write, the file already holding its text: unconfirmed', { options: ON }, async ($, on) => {
+    const text = MARKER_TEXT('run W1 #fail')
+    world(on, new Map([plan, [MARKER, { text, mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${MARKER}`]))
+    await write($, MARKER, text)
+    expect(await bandText($)).toMatch(/^unconfirmed: /)
+  })
+
+  test('a successful Write whose before-call stat fails is still own', { options: ON }, async ($, on) => {
+    world(on, new Map([plan, [MARKER, { text: MARKER_TEXT('run OLD'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${MARKER}`]))
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toMatch(/^skills-x — the thing · run W1 · /)
   })
 })
