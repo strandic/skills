@@ -479,6 +479,14 @@ unruled: D9 an unreadable drawn row is dropped, not counted — default accept: 
 
 unruled: D10 test names that say W + 3M — default rename them to the Q6 bounds in the tests commit, assertions unchanged
 
+> **What this is about:** a marker can name a plan folder anywhere on disk, and the mod then reads its plan.md and decisions.md; a cloned repo could ship such a marker.
+
+unruled: D11 plan folders outside the marker's own tree — default refuse them: the plan dir, path-normalised, must sit under the marker's tree root, else a problem row `<ticket>: plan dir outside its tree` that reads no file (replaces pi0y L6's "a plan dir outside the repo shows its name; reads only")
+
+> **What this is about:** the pane follows a symlinked plan.md that the band skips.
+
+unruled: D12 pane and band read the same files — default the pane reads only entries its plan-dir listing shows as regular files that are not links, else treats them as missing
+
 ## 9. Amendments (append-only after `run`)
 
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
