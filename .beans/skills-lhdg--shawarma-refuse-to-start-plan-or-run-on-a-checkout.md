@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-10-17T07:55:59Z
-updated_at: 2026-10-19T19:25:52Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-sp16
 blocked_by:
     - skills-hekn
@@ -30,3 +30,7 @@ Sketch (to rule at the retro):
 
 The owner leans toward **one marker per session** instead of refusing to start: keep the markers in the main checkout during plan (no worktree exists yet), each with a unique name, e.g. `.shawarma/active-<ticket>`. Observed case: three parallel plan sessions (bigbrain 6nqy, end0, ydym) share the main checkout, and the second session to plan found the first one's marker. That session left the marker alone and wrote none of its own; its stopgap from now on is `.shawarma/active-end0`.
 If a retro adopts this, it changes the mod's contract in skills-pi0y (glob `.shawarma/active*` instead of reading one path) and turns this ticket's 'stop and ask' into 'ask only when the marker for the same ticket already exists'.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

@@ -1,12 +1,13 @@
 ---
 # skills-ain9
 title: 'shawarma: check_pr ID_RE rejects hyphenated §9 ids (RR1-a), next retro'
-status: todo
+status: completed
 type: bug
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-30T14:51:03Z
-updated_at: 2026-10-30T14:51:03Z
+updated_at: 2026-11-02T14:17:33Z
 ---
 
 Finding, 2026-10-30: `check_pr.py`'s `ID_RE` (line 57) does not accept the hyphenated §9 ids that runs write. A Decisions row naming `RR1-a`, `W1-b` or `RR3-d` fails `P4 … RULING row names no id`, even beside a link to its record.
@@ -34,3 +35,7 @@ With the patch, the PR body printed `PASS`. No test file covers `ID_RE`; these r
 - [ ] If kept: add cases to the checker's tests (or evals) for the four groups above, and commit the patch.
 - [ ] Decide whether `R-A`-style ids (letter, hyphen, capital) should match the first alternative; today only `Q-R1`-style (with digits) does.
 - [ ] A rule for agents: a change to the skill found during a run becomes a bean, never an in-place edit. Note where the symlink resolves.
+
+
+
+**Closed by the round-9 retro (v0.9.0, 2026-11-02).** See the round-9 rulings (R4, R8, R15).

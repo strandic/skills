@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-10-13T12:56:39Z
-updated_at: 2026-10-28T10:26:07Z
+updated_at: 2026-11-02T14:17:33Z
 ---
 
 Let shawarma use a per-project CODING_STANDARDS.md to review the code's shape. It complements, and does not replace, the behaviour checks the method already runs. Source: Matt Pocock's "fixing the PR bottleneck" talk (aihero.dev/skills). His points: the implementer agent is already overloaded, so standards go to a separate reviewer with its own context; checks can lie through tests that restate the implementation, tests tied to code structure, and mocks that cannot fail.
@@ -30,3 +30,7 @@ Keep in mind: the retro must cut at least as many words as it adds. Measure what
 ## Round 7
 
 Dropped this round (R7): adds lane text with no case in this window. Stays open for a round that has one.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).
