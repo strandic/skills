@@ -2011,3 +2011,110 @@ describe('review round 3 (R3)', () => {
     expect(await paneText($)).toBe('20 markers could not be read.')
   })
 })
+
+describe('review round 4 (R4, mutants)', () => {
+  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
+    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
+  const BIG = { ...BAND, maxRows: 40, scroll: { offset: 0, bodyRows: 40 } }
+  const band = async ($: any): Promise<string[]> =>
+    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
+      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
+  const paneText = async ($: any): Promise<string> => {
+    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
+  }
+  const LATER = `${ROOT}/docs/plans/later`
+  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+  const touched = (log: string[]) => log.filter(line => line === `list ${LATER}` || line.startsWith(`read ${LATER}/`))
+
+  test('R4 a missing plan folder made a link out: the pane reads nothing there before the next refresh', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const links: Record<string, string> = {}
+    const files: Files = new Map([markerAt(ROOT, 'a-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    world(on, files, ROOT, log, new Set(), { trees: [ROOT], links })
+    await bash($, 'true')
+    await band($)
+    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:a-1' })
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, { text: '# a-1 — FORGED\n\n## 1. What\n\nsecret\n', mtimeMs: 7 })
+    const n0 = log.length
+    expect(await paneText($)).toBe(`shawarma: a-1: plan dir outside its tree (${ROOT}/.shawarma/active-a-1)`)
+    expect(touched(log.slice(n0))).toEqual([])
+  })
+
+  test('R4 a missing plan folder made a link out: the 15 s check does not list it, and the row turns outside', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const links: Record<string, string> = {}
+    const files: Files = new Map([markerAt(ROOT, 'a-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    const clock = world(on, files, ROOT, log, new Set(), { trees: [ROOT], links })
+    await bash($, 'true')
+    await band($)
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, { text: '# a-1 — FORGED\n', mtimeMs: 7 })
+    const n0 = log.length
+    await clock.advance(15_000)
+    expect(await band($)).toEqual(['shawarma: a-1: plan dir outside its tree'])
+    expect(touched(log.slice(n0))).toEqual([])
+  })
+
+  test('R4 a missing plan folder created while idle (no link): the check still finds it within 15 s', { options: ON }, async ($, on) => {
+    const files: Files = new Map([markerAt(ROOT, 'a-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    const clock = world(on, files, ROOT, [], new Set(), { trees: [ROOT] })
+    await bash($, 'true')
+    await band($)
+    files.set(`${LATER}/plan.md`, { text: '# a-1 — made\n', mtimeMs: 7 })
+    await clock.advance(15_000)
+    expect(await band($)).toEqual(['a-1 — made · run W1 · since 14:00 · 0 decisions'])
+  })
+
+  test('R4 a plan stat that never answers: 2 s once per turn, kept as outside until the turn ends (mutant M3a)', { options: ON }, async ($, on) => {
+    const P2 = `${ROOT}/docs/plans/p`
+    const log: string[] = []
+    const clock = world(on, new Map([markerAt(ROOT, 'h-1', 'docs/plans/p\nrun W1\n', STARTED + 5), [`${P2}/plan.md`, { text: '# h-1 — slow\n', mtimeMs: 1 }]]),
+      ROOT, log, new Set(), { trees: [ROOT], hangStat: P2 })
+    const asks = () => log.filter(line => line === `stat ${P2} resolve`).length
+    let out: any = 'pending'
+    void bash($, 'true').then((r: unknown) => { out = r })
+    await clock.advance(2_000)
+    expect(out?.result?.text).toBe('ok')
+    expect(asks()).toBe(1)
+    let out2: any = 'pending'
+    void bash($, 'true').then((r: unknown) => { out2 = r })
+    await clock.advance(1)
+    expect([out2?.result?.text, asks()]).toEqual(['ok', 1])
+    await clock.advance(2_000)
+    expect(await band($)).toEqual(['shawarma: h-1: plan dir outside its tree'])
+    void turnEnd($)
+    await clock.advance(2_000)
+    expect(asks()).toBe(2)
+  })
+
+  test('R4 an answer with no real path is not kept: asked again on the next call (mutant M3b)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([markerAt(ROOT, 'n-1', 'docs/plans/p\nplan 1\n', STARTED + 5), [`${ROOT}/docs/plans/p/plan.md`, { text: '# n-1\n', mtimeMs: 1 }]]),
+      ROOT, log, new Set(), { trees: [ROOT], noReal: true })
+    await bash($, 'true')
+    await bash($, 'true')
+    expect(log.filter(line => line === `stat ${ROOT}/docs/plans/p resolve`).length).toBe(2)
+  })
+
+  test('R4 a tree-root stat that never answers: the tool call answers by 2 s, the root used as given (mutant M31)', { options: ON }, async ($, on) => {
+    const clock = world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, [], new Set(), { trees: [ROOT], hangStat: ROOT })
+    let out: any = 'pending'
+    void bash($, 'true').then((r: unknown) => { out = r })
+    await clock.advance(1_999)
+    expect(out).toBe('pending')
+    await clock.advance(1)
+    expect(out?.result?.text).toBe('ok')
+    expect(await band($)).toEqual(['m · trivial · since 14:00'])
+  })
+
+  test('R4 only the scanned roots are resolved: 51 trees, 50 root stats (mutant M16)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const many = Array.from({ length: 51 }, (_, i) => (i === 0 ? ROOT : `/t/w${String(i).padStart(3, '0')}`))
+    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, log, new Set(), { trees: many })
+    await bash($, 'true')
+    expect(log.filter(line => many.some(root => line === `stat ${root} resolve`)).length).toBe(50)
+  })
+})
