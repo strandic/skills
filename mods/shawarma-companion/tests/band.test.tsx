@@ -45,7 +45,7 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
  */
 type Answer = 'reject' | 'hang' | { exitCode: number; stdout: string | ((z: boolean) => string); truncated?: boolean }
 type Git = { trees?: string[]; extra?: Record<string, string>; records?: string[][]; worktree?: Answer; revparse?: Answer;
-  noRepo?: boolean; inits?: unknown[]; now?: number; links?: Record<string, string>; noReal?: boolean }
+  noRepo?: boolean; inits?: unknown[]; now?: number; links?: Record<string, string>; noReal?: boolean; hangStat?: string }
 /** Porcelain as git prints it: `-z` ends each attribute with NUL and each record with one more; else newlines. */
 const render = (records: string[][], z: boolean) => z
   ? records.map(r => `${r.map(a => `${a}\0`).join('')}\0`).join('')
@@ -67,6 +67,7 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
   }
   on('fs.stat', (_$, e) => {
     log.push(e.resolve === true ? `stat ${e.path} resolve` : `stat ${e.path}`)
+    if (e.path === git.hangStat) return new Promise<never>(() => undefined)
     if (fail.delete(`stat once ${e.path}`)) throw new Error(`EACCES: permission denied, stat '${e.path}'`)
     const file = files.get(e.path)
     const real = e.resolve === true && git.noReal !== true ? { realPath: realOf(e.path) } : {}
@@ -702,20 +703,20 @@ describe('review round 3 (W3-R4)', () => {
     expect(await bandText($)).toBe(`skills-x · 2026-10-16-skills-x-thing · run W1 · ${SINCE(1)} · 0 decisions`)
   })
 
-  test('F1 a failed Edit of a missing marker, cwd marker, plan dir missing: a new marker, at most W + 5M fs calls (R1)', { options: ON }, async ($, on) => {
+  test('F1 a failed Edit of a missing marker, cwd marker, plan dir missing: a new marker, first call of the turn, at most 2W + 5M fs calls (R1, R3)', { options: ON }, async ($, on) => {
     const log: string[] = []
     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }]]), ROOT, log)
     const n0 = log.length
     await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-other`, old_string: 'run W0', new_string: 'run W1' } as any)
-    expect(fsCalls(log, n0).length <= 2 + 5 * 1).toBe(true)
+    expect(fsCalls(log, n0).length <= 2 * 2 + 5 * 1).toBe(true)
   })
 
-  test('F1 a failed Write of a new marker, cwd marker, plan dir missing: a new marker, at most W + 5M fs calls (R1)', { options: ON }, async ($, on) => {
+  test('F1 a failed Write of a new marker, cwd marker, plan dir missing: a new marker, first call of the turn, at most 2W + 5M fs calls (R1, R3)', { options: ON }, async ($, on) => {
     const log: string[] = []
     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }]]), ROOT, log)
     const n0 = log.length
     await write($, `${TREE}/.shawarma/active-other`, `${MARKER_TEXT('run W0')}#fail`)
-    expect(fsCalls(log, n0).length <= 2 + 5 * 1).toBe(true)
+    expect(fsCalls(log, n0).length <= 2 * 2 + 5 * 1).toBe(true)
   })
 
   test('F3 a press on the row when the pane cannot open: nothing escapes', { options: ON }, async ($, on) => {
@@ -747,20 +748,20 @@ describe('review round 4 (W3-R5)', () => {
   const TREE = `${ROOT}/.worktrees/w`
   const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
 
-  test('N1 a failed Edit of a missing marker, no brief yet: a new marker, at most W + 5M fs calls (R1)', { options: ON }, async ($, on) => {
+  test('N1 a failed Edit of a missing marker, no brief yet: a new marker, first call of the turn, at most 2W + 5M fs calls (R1, R3)', { options: ON }, async ($, on) => {
     const log: string[] = []
     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }], decisions]), ROOT, log)
     const n0 = log.length
     await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-other`, old_string: 'run W0', new_string: 'run W1' } as any)
-    expect(fsCalls(log, n0).length <= 2 + 5 * 1).toBe(true)
+    expect(fsCalls(log, n0).length <= 2 * 2 + 5 * 1).toBe(true)
   })
 
-  test('N1 a failed Write of a missing marker, no brief yet: a new marker, at most W + 5M fs calls (R1)', { options: ON }, async ($, on) => {
+  test('N1 a failed Write of a missing marker, no brief yet: a new marker, first call of the turn, at most 2W + 5M fs calls (R1, R3)', { options: ON }, async ($, on) => {
     const log: string[] = []
     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }], decisions]), ROOT, log)
     const n0 = log.length
     await write($, `${TREE}/.shawarma/active-other`, `${MARKER_TEXT('run W0')}#fail`)
-    expect(fsCalls(log, n0).length <= 2 + 5 * 1).toBe(true)
+    expect(fsCalls(log, n0).length <= 2 * 2 + 5 * 1).toBe(true)
   })
 
   test('N1 a failed Edit of a missing marker, plan dir with neither file: at most W + 3M fs calls, inside the Q6 bound W + 4M', { options: ON }, async ($, on) => {
@@ -1329,13 +1330,13 @@ describe('Q6 cost bounds and caps', () => {
       .findAll({ type: 'Text' })).map((one: any) => ({ text: one.text as string, dim: one.props.dimColor as boolean }))
 
   for (const [W, Mk] of [[3, 2], [6, 4]] as const) {
-    test(`Q6 W=${W}, M=${Mk}: new markers (session start) <= W + 5M (R1), every plan file changed <= W + 4M, steady <= W + 2M, check <= W + M`, { options: ON }, async ($, on) => {
+    test(`Q6 W=${W}, M=${Mk}: new markers (session start) <= 2W + 5M (R1, R3), every plan file changed <= W + 4M, steady <= W + 2M, check <= W + M`, { options: ON }, async ($, on) => {
       const log: string[] = []
       const { trees, files } = setup(W, Mk)
       const clock = world(on, files, ROOT, log, new Set(), { trees })
       let n0 = log.length
       await $.session.start({ source: 'startup', cwd: ROOT } as any)
-      expect(fsCalls(log, n0).length <= W + 5 * Mk).toBe(true)
+      expect(fsCalls(log, n0).length <= 2 * W + 5 * Mk).toBe(true)
       expect((await texts($)).length).toBe(Mk)
       for (const [path, file] of [...files]) if (/(plan|decisions)\.md$/.test(path)) files.set(path, { ...file, mtimeMs: STARTED + 5_000 })
       n0 = log.length
@@ -1650,8 +1651,7 @@ describe('v2tm amendments (D11, D12)', () => {
     return (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
   }
   const outside = (log: string[], prefix: string) =>
-    // R1: the plan dir's one real-path stat (`stat <dir> resolve`) is allowed; nothing else there is touched.
-    log.filter(line => /^(exists|stat|read|list) /.test(line) && !line.endsWith(' resolve') && line.slice(line.indexOf(' ') + 1).startsWith(prefix))
+    log.filter(line => /^(exists|stat|read|list) /.test(line) && line.slice(line.indexOf(' ') + 1).startsWith(prefix))
   const EVIL: [string, File][] = [['/etc/p/plan.md', { text: '# o-1 — forged\n\n## 1. What\n\nsecret\n', mtimeMs: 1 }],
     ['/etc/p/decisions.md', { text: '2026-10-16 | Q1 RULING | a | b\n', mtimeMs: 1 }]]
 
@@ -1669,7 +1669,7 @@ describe('v2tm amendments (D11, D12)', () => {
       ['/outside/p/plan.md', { text: '# o-2 — forged\n', mtimeMs: 1 }]]), ROOT, log)
     await bash($, 'true')
     expect(await band($)).toEqual(['shawarma: o-2: plan dir outside its tree'])
-    expect(log.filter(line => /^(exists|stat|read|list) .*outside/.test(line) && !line.endsWith(' resolve'))).toEqual([])
+    expect(log.filter(line => /^(exists|stat|read|list) .*outside/.test(line))).toEqual([])
   })
 
   test('D11 a plan dir whose name shares the tree\'s prefix (/repo-evil): outside', { options: ON }, async ($, on) => {
@@ -1804,12 +1804,14 @@ describe('review round 2 (R1, R2, mutants)', () => {
     expect(under(log, LINKED)).toEqual([])
   })
 
-  test('R1 an absolute plan dir spelled through a link to the tree (/tmp for /private/tmp): drawn', { options: ON }, async ($, on) => {
+  test('R3 an absolute plan dir spelled through a link to the tree (/tmp for /private/tmp): outside as written, no call there', { options: ON }, async ($, on) => {
     const TREE2 = '/private/tmp/r'
+    const log: string[] = []
     world(on, new Map([markerAt(TREE2, 't-1', '/tmp/r/docs/p\nplan 1\n', STARTED + 5), ['/tmp/r/docs/p/plan.md', { text: '# t-1 — tmp\n', mtimeMs: 1 }],
-      [`${TREE2}/docs/p/plan.md`, { text: '# t-1 — tmp\n', mtimeMs: 1 }]]), TREE2, [], new Set(), { trees: [TREE2], links: { '/tmp': '/private/tmp' } })
+      [`${TREE2}/docs/p/plan.md`, { text: '# t-1 — tmp\n', mtimeMs: 1 }]]), TREE2, log, new Set(), { trees: [TREE2], links: { '/tmp': '/private/tmp' } })
     await bash($, 'true')
-    expect(await band($)).toEqual(['t-1 — tmp · plan 1 · since 14:00 · 0 decisions'])
+    expect(await band($)).toEqual(['shawarma: t-1: plan dir outside its tree'])
+    expect(log.filter(line => /^(exists|stat|read|list) \/tmp\//.test(line))).toEqual([])
   })
 
   test('R1 a link inside the tree to a folder inside it: drawn', { options: ON }, async ($, on) => {
@@ -1820,11 +1822,11 @@ describe('review round 2 (R1, R2, mutants)', () => {
     expect(await band($)).toEqual(['a-1 — aliased · plan 1 · since 14:00 · 0 decisions'])
   })
 
-  test('R1 no real path given: the text check stands', { options: ON }, async ($, on) => {
+  test('R3 the real path withheld (inside as written): outside', { options: ON }, async ($, on) => {
     world(on, new Map([markerAt(ROOT, 'n-1', 'docs/plans/p\nplan 1\n', STARTED + 5),
       [`${ROOT}/docs/plans/p/plan.md`, { text: '# n-1 — plain\n', mtimeMs: 1 }]]), ROOT, [], new Set(), { trees: [ROOT], noReal: true })
     await bash($, 'true')
-    expect(await band($)).toEqual(['n-1 — plain · plan 1 · since 14:00 · 0 decisions'])
+    expect(await band($)).toEqual(['shawarma: n-1: plan dir outside its tree'])
   })
 
   test('R1 the real path is asked once per marker time: not again on a steady call, again once the marker is rewritten', { options: ON }, async ($, on) => {
@@ -1890,5 +1892,112 @@ describe('review round 2 (R1, R2, mutants)', () => {
     await bash($, 'true')
     expect(await band($)).toEqual(['skills-x · 2026-10-16-skills-x-thing · run W1 · since 14:00 · 0 decisions'])
     expect(log.filter(line => line === `read ${DIR}/plan.md`)).toEqual([])
+  })
+})
+
+describe('review round 3 (R3)', () => {
+  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
+    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
+  const BIG = { ...BAND, maxRows: 40, scroll: { offset: 0, bodyRows: 40 } }
+  const band = async ($: any): Promise<string[]> =>
+    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
+      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
+  const paneText = async ($: any): Promise<string> => {
+    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
+  }
+  const LATER = `${ROOT}/docs/plans/later`
+  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+
+  test('R3 a plan dir absent at the first check, later made a link outside (marker unchanged): outside (lane r2 L1)', { options: ON }, async ($, on) => {
+    const links: Record<string, string> = {}
+    const files: Files = new Map([markerAt(ROOT, 'a-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    world(on, files, ROOT, [], new Set(), { trees: [ROOT], links })
+    await bash($, 'true')
+    expect(await band($)).toEqual([`a-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not found: ${LATER}`])
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, { text: '# a-1 — FORGED\n', mtimeMs: 7 })
+    files.set('/outside/p/plan.md', { text: '# a-1 — FORGED\n', mtimeMs: 7 })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['shawarma: a-1: plan dir outside its tree'])
+  })
+
+  test('R3 the first real-path stat fails once (EACCES), the plan dir links outside: outside on the next call (lane r2 L6)', { options: ON }, async ($, on) => {
+    world(on, new Map([markerAt(ROOT, 'e-1', 'docs/plans/later\nrun W1\n', STARTED + 5), [`${LATER}/plan.md`, { text: '# e-1 — FORGED\n', mtimeMs: 7 }]]),
+      ROOT, [], new Set([`stat once ${LATER}`]), { trees: [ROOT], links: { [LATER]: '/outside/p' } })
+    await bash($, 'true')
+    await bash($, 'true')
+    expect(await band($)).toEqual(['shawarma: e-1: plan dir outside its tree'])
+  })
+
+  test('R3 a tree root spelled through a link by git (case or /tmp): an inside plan dir is drawn (lane r2 B)', { options: ON }, async ($, on) => {
+    const W2 = '/t/WTS/w'
+    world(on, new Map([markerAt(W2, 'k-1', 'docs/plans/w\nrun W1\n', STARTED + 5), [`${W2}/docs/plans/w/plan.md`, { text: '# k-1 — inside\n', mtimeMs: 1 }]]),
+      W2, [], new Set(), { trees: [W2], links: { '/t/WTS': '/t/wts' } })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['k-1 — inside · run W1 · since 14:00 · 0 decisions'])
+  })
+
+  test('R3 the real-path stat never answers: outside by 2 s, the tool call answers', { options: ON }, async ($, on) => {
+    const P2 = `${ROOT}/docs/plans/p`
+    const clock = world(on, new Map([markerAt(ROOT, 'h-1', 'docs/plans/p\nrun W1\n', STARTED + 5), [`${P2}/plan.md`, { text: '# h-1 — slow\n', mtimeMs: 1 }]]),
+      ROOT, [], new Set(), { trees: [ROOT], hangStat: P2 })
+    let out: any = 'pending'
+    void bash($, 'true').then((r: unknown) => { out = r })
+    await clock.advance(1_999)
+    expect(out).toBe('pending')
+    await clock.advance(1)
+    expect(out?.result?.text).toBe('ok')
+    expect(await band($)).toEqual(['shawarma: h-1: plan dir outside its tree'])
+  })
+
+  test('R3 each tree root is resolved once per turn: not again on a second call, again after the turn end', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([markerAt(ROOT, 'c-1', 'c-1\ntrivial\n', STARTED + 5)]), ROOT, log, new Set(), { trees: [ROOT] })
+    const roots = (from: number) => log.slice(from).filter(line => line === `stat ${ROOT} resolve`)
+    let n0 = log.length
+    await bash($, 'true')
+    expect(roots(n0).length).toBe(1)
+    n0 = log.length
+    await bash($, 'true')
+    expect(roots(n0)).toEqual([])
+    n0 = log.length
+    await turnEnd($)
+    expect(roots(n0).length).toBe(1)
+  })
+
+  test('R3 an outside-spelled plan dir: no file call of any kind there', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map([markerAt(ROOT, 'o-1', '/net/host/p\nrun W1\n', STARTED + 5), ['/net/host/p/plan.md', { text: '# o-1 — x\n', mtimeMs: 1 }]]),
+      ROOT, log, new Set(), { trees: [ROOT] })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['shawarma: o-1: plan dir outside its tree'])
+    expect(log.filter(line => line.includes(' /net'))).toEqual([])
+  })
+
+  test('a marker rewritten to a new plan dir with the same time: the new dir is checked (lane r2 L2, mutant m2)', { options: ON }, async ($, on) => {
+    const files: Files = new Map([markerAt(ROOT, 's-1', 'docs/plans/ok\nrun W1\n', STARTED + 5),
+      [`${ROOT}/docs/plans/ok/plan.md`, { text: '# s-1 — ok\n', mtimeMs: 1 }], [`${LATER}/plan.md`, { text: '# s-1 — FORGED\n', mtimeMs: 1 }]])
+    world(on, files, ROOT, [], new Set(), { trees: [ROOT], links: { [LATER]: '/outside/p' } })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['s-1 — ok · run W1 · since 14:00 · 0 decisions'])
+    files.set(`${ROOT}/.shawarma/active-s-1`, { text: 'docs/plans/later\nrun W1\n', mtimeMs: STARTED + 5 })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['shawarma: s-1: plan dir outside its tree'])
+  })
+
+  test('21 markers, the 20 picked unreadable, one hidden: the unread sentence comes first (lane r2 L3, mutant m10)', { options: ON }, async ($, on) => {
+    const files: Files = new Map()
+    const fail = new Set<string>()
+    for (let i = 0; i < 21; i += 1) {
+      const t = `u-${String(i).padStart(2, '0')}`
+      files.set(`${ROOT}/.shawarma/active-${t}`, { text: `${t}\ntrivial\n`, mtimeMs: STARTED + 100 + i })
+      fail.add(`read ${ROOT}/.shawarma/active-${t}`)
+    }
+    world(on, files, ROOT, [], fail, { trees: [ROOT] })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['+1 more not shown'])
+    expect(await paneText($)).toBe('20 markers could not be read.')
   })
 })
