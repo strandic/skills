@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-02T08:38:09Z
-updated_at: 2026-11-02T18:47:50Z
+updated_at: 2026-11-02T21:29:31Z
 ---
 
 Filed by the round-9 retro (D6), 2026-11-02. Evidence: the round-9 record (private). (R8.)
@@ -65,3 +65,21 @@ unruled: D11 plan folders outside the marker's own tree — default refuse them:
 > **What this is about:** the pane follows a symlinked plan.md that the band skips.
 
 unruled: D12 pane and band read the same files — default the pane reads only regular, non-link files from its listing
+
+
+
+## Run paused (2026-11-02): 2 rulings, Wave 3 round 1
+
+Branch feat/v2tm-per-ticket-markers at 3ce8d6b. Suite 162 pass / 0 fail. Rulings asked: (1) the symlinked plan dir that gets around D11 — the real-path check costs W + 5M on a cold call (Q6 says W + 4M); (2) the pane sentence when a listed marker could not be read (§3 2i). Labels: docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/reports/run/w3-round1.md.
+
+
+
+## Run paused again (2026-11-02): third review round is a ruling
+
+At f87cb20, 175 pass. Round 2 fixed the symlink, /tmp and pane findings, but its real-path check stats marker-spelled paths before containment (automated security review), caches a missing folder forever (a link made later leads outside), and compares with unresolved tree roots (inside folders refused). Labels: reports/run/w3-round2.md.
+
+
+
+## Run paused (2026-11-02): fourth-round ruling
+
+At 03e0607, 184 pass. Round 3 fixed its targets; new: the pane and the 15 s check can still read or list a missing plan folder that became a link out, until the next refresh (medium); a hanging stat costs 2 s on every refresh (low). Labels: reports/run/w3-round3.md.
