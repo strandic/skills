@@ -1,0 +1,8 @@
+READING W=3 M=2 check 5 bound 5
+READING W=3 M=2 cold-or-changed 11 bound 11
+READING W=3 M=2 cold-or-changed 13 bound 11
+READING W=3 M=2 steady 7 bound 7
+READING W=6 M=4 check 10 bound 10
+READING W=6 M=4 cold-or-changed 22 bound 22
+READING W=6 M=4 cold-or-changed 26 bound 22
+READING W=6 M=4 steady 14 bound 14
