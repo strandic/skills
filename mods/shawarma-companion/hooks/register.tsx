@@ -38,9 +38,13 @@ function reasonFor(want: string): string {
   return lastScan.trees.has(tree) ? 'no longer active' : 'not shown (not in the last scan)'
 }
 
-/** The trees to scan, and the one holding the session's cwd. */
-type Trees = { own: string | null; roots: string[] }
-/** Per cwd, from `git worktree list` (or the fallback): cleared at each turn end (Q2). */
+/**
+ * The trees to scan, and the one holding the session's cwd. `reals` maps each
+ * scanned root to its real path, links followed (R3); a root missing from it
+ * is used as given.
+ */
+type Trees = { own: string | null; roots: string[]; reals: ReadonlyMap<string, string> }
+/** Per cwd, from `git worktree list` (or the fallback) and the roots' real paths: cleared at each turn end (Q2, R3). */
 const worktrees = new Map<string, Trees>()
 /** Fallback only: the file-API walk per cwd, kept for the session when it found a repo. */
 const walks = new Map<string, { own: string; main: string | null }>()
@@ -51,27 +55,43 @@ type Cached<T> = Map<string, { at: number; value: T }>
 const titles: Cached<string | null> = new Map()
 const counts: Cached<number> = new Map()
 /**
- * R1: per marker path, the real path of its plan dir, asked with one
+ * R1, R3: per marker path, the real path of its plan dir, asked with one
  * `$.fs.stat(dir, { resolve: true })` for the marker's time and plan dir.
- * Null when the stat rejected or gave no real path. One entry per marker
- * path, and each refresh drops the markers it no longer lists.
+ * Only a real path is kept: a stat that rejects, answers none or runs past
+ * RUN_MS is asked again next time. One entry per marker path, and each
+ * refresh drops the markers it no longer lists.
  */
-const realDirs = new Map<string, { at: number; dir: string; real: string | null }>()
+const realDirs = new Map<string, { at: number; dir: string; real: string }>()
 
 const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
 /** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
 export const RUN_MS = 2_000
 
-/** `argv` in `cwd`, or null when it rejects, runs past RUN_MS, or its stdout was cut. */
-async function run($: EngineInterface, argv: readonly string[], cwd: string): Promise<{ exitCode: number; stdout: string } | null> {
+/** How a call raced against RUN_MS ended: its value, a rejection, or no answer in time. */
+type Raced<T> = { kind: 'ok'; value: T } | { kind: 'failed' } | { kind: 'late' }
+
+/** `work` raced against RUN_MS on the engine clock. */
+async function within<T>($: EngineInterface, work: Promise<T>): Promise<Raced<T>> {
   let timer: Timer | null = null
-  const late = new Promise<null>(resolve => { timer = $.clock.after(RUN_MS, () => resolve(null)) })
+  const late = new Promise<Raced<T>>(resolve => { timer = $.clock.after(RUN_MS, () => resolve({ kind: 'late' })) })
   const out = await Promise.race([
-    $.process.run(argv, { cwd, timeoutMs: RUN_MS }).then(git => (git.isStdoutTruncated ? null : git), () => null),
+    work.then((value): Raced<T> => ({ kind: 'ok', value }), (): Raced<T> => ({ kind: 'failed' })),
     late,
-  ]).catch(() => null)
+  ]).catch((): Raced<T> => ({ kind: 'failed' }))
   ;(timer as Timer | null)?.cancel()
   return out
+}
+
+/** `argv` in `cwd`, or null when it rejects, runs past RUN_MS, or its stdout was cut. */
+async function run($: EngineInterface, argv: readonly string[], cwd: string): Promise<{ exitCode: number; stdout: string } | null> {
+  const out = await within($, $.process.run(argv, { cwd, timeoutMs: RUN_MS }))
+  return out.kind === 'ok' && !out.value.isStdoutTruncated ? out.value : null
+}
+
+/** The real path of `path`, links followed, or null when the stat rejects, answers none, or runs past RUN_MS. */
+async function realOf($: EngineInterface, path: string): Promise<string | null> {
+  const out = await within($, $.fs.stat(path, { resolve: true }))
+  return out.kind === 'ok' ? (out.value?.realPath ?? null) : null
 }
 /** While a row is drawn, the trees and drawn plan dirs are listed this often (R5). */
 export const CHECK_MS = 15_000
@@ -129,7 +149,8 @@ async function planFiles($: EngineInterface, dir: string): Promise<[string | nul
  * ones kept (D3). When it cannot run, runs past RUN_MS, exits non-zero, is cut
  * or prints no record: the file-API
  * walk (no process), then the main checkout, `<main>/.worktrees/*` and the
- * cwd's own tree (Q2). A sibling-folder worktree is then missed.
+ * cwd's own tree (Q2). A sibling-folder worktree is then missed. Each scanned
+ * root's real path is then asked with one stat, raced against RUN_MS (R3).
  */
 async function discover($: EngineInterface): Promise<Trees> {
   const cwd = await $.session.cwd()
@@ -137,13 +158,19 @@ async function discover($: EngineInterface): Promise<Trees> {
   if (hit !== undefined) return hit
   const git = await run($, ['git', 'worktree', 'list', '--porcelain', '-z'], cwd)
   const listed = git !== null && git.exitCode === 0 ? parseWorktrees(git.stdout) : null
-  let trees: Trees
+  let found: Omit<Trees, 'reals'>
   if (listed !== null) {
     const roots = [...new Set(listed.filter(tree => !tree.isPrunable && !tree.isBare).map(tree => tree.path))]
-    trees = { own: ownTree(cwd, roots), roots }
+    found = { own: ownTree(cwd, roots), roots }
   } else {
-    trees = await fallback($, cwd)
+    found = await fallback($, cwd)
   }
+  const reals = new Map<string, string>()
+  for (const root of scanned({ ...found, reals }).roots) {
+    const real = await realOf($, root)
+    if (real !== null) reals.set(root, real)
+  }
+  const trees: Trees = { ...found, reals }
   worktrees.set(cwd, trees)
   return trees
 }
@@ -173,7 +200,7 @@ async function walk($: EngineInterface, cwd: string): Promise<{ own: string; mai
   }
 }
 
-async function fallback($: EngineInterface, cwd: string): Promise<Trees> {
+async function fallback($: EngineInterface, cwd: string): Promise<Omit<Trees, 'reals'>> {
   const at = walks.get(cwd) ?? (await walk($, cwd).catch(() => null))
   if (at === null) return { own: null, roots: [] }
   walks.set(cwd, at)
@@ -199,27 +226,35 @@ async function markersOf(list: Lister, roots: readonly string[], answered: Set<s
 }
 
 /**
- * Whether the plan dir `dir` of the marker at `marker` (time `at`) lies in `root` (D11, R1). Its real path, links
- * followed, is asked once per marker time and compared; with no real path the folded text of `dir` is compared.
+ * Whether the plan dir `dir` of the marker at `marker` (time `at`) lies in its tree (D11, R1, R3). First the folded
+ * text of `dir` against `root`: outside as written is outside, with no file call. Then its real path, links followed,
+ * against `realRoot`: one stat raced against RUN_MS, its real path kept per marker path, time and plan dir. No real
+ * path, or no answer in time, is outside and not kept. A stat that rejects is `unknown`, not kept: the caller lists and
+ * reads nothing there that call (R3a).
  */
-async function isPlanInside($: EngineInterface, marker: string, at: number, root: string, dir: string): Promise<boolean> {
-  let hit = realDirs.get(marker)
-  if (hit === undefined || hit.at !== at || hit.dir !== dir) {
-    const real = await $.fs.stat(dir, { resolve: true }).then(stat => stat?.realPath ?? null, () => null)
-    hit = { at, dir, real }
-    realDirs.set(marker, hit)
-  }
-  return isInside(root, hit.real ?? dir)
+async function isPlanInside($: EngineInterface, marker: string, at: number, root: string, realRoot: string,
+  dir: string): Promise<'inside' | 'outside' | 'unknown'> {
+  const verdict = (real: string) => (isInside(realRoot, real) ? 'inside' : 'outside')
+  if (!isInside(root, dir)) return 'outside'
+  const hit = realDirs.get(marker)
+  if (hit !== undefined && hit.at === at && hit.dir === dir) return verdict(hit.real)
+  const out = await within($, $.fs.stat(dir, { resolve: true }))
+  if (out.kind === 'failed') return 'unknown'
+  const real = out.kind === 'ok' ? (out.value?.realPath ?? null) : null
+  if (real === null) return 'outside'
+  realDirs.set(marker, { at, dir, real })
+  return verdict(real)
 }
 
 /**
  * One row. The marker is read once; the plan dir is listed once (both files' times, and whether it is there); plan.md and
  * decisions.md are read only when their times changed (Q3), and only when listed as regular files, not links (D12). A plan
- * dir outside the marker's own tree, links followed (R1), is a problem row with no plan dir: nothing there is listed or
- * read (D11).
+ * dir outside the marker's own tree, as written or links followed (R1, R3; `realRoot` is the tree's real path), is a
+ * problem row with no plan dir: nothing there is listed or read (D11). When its real-path stat rejects, nothing there is
+ * listed or read either: the row says the plan dir is not readable when it exists, not found when not (R3a).
  */
 async function rowOf($: EngineInterface, list: Lister, found: { root: string; ticket: string; at: number },
-  startedAt: number, now: number): Promise<Snapshot> {
+  startedAt: number, now: number, realRoot: string): Promise<Snapshot> {
   const { root, ticket, at } = found
   const marker = under(root, `.shawarma/${MARKER_PREFIX}${ticket}`)
   // The marker is read each pass: a rewrite keeping its time still shows (pi0y L13).
@@ -232,10 +267,11 @@ async function rowOf($: EngineInterface, list: Lister, found: { root: string; ti
     planDir: '', planAt: null, decisionsAt: null }
   if (parsed === null) return { ...base, title: '', step: '', problem: 'malformed marker' }
   if (parsed.kind === 'trivial') return { ...base, title: ticket, step: 'trivial' }
-  if (!(await isPlanInside($, marker, at, root, parsed.planDir))) return { ...base, title: '', step: '', problem: 'plan dir outside its tree' }
+  const where = await isPlanInside($, marker, at, root, realRoot, parsed.planDir)
+  if (where === 'outside') return { ...base, title: '', step: '', problem: 'plan dir outside its tree' }
   const dir = parsed.planDir
   const dirName = dir.split('/').pop() ?? dir
-  const entries = await list(dir)
+  const entries = where === 'unknown' ? null : await list(dir)
   if (entries === null) {
     const problem = (await $.fs.exists(dir)) ? `plan dir not readable: ${dir}` : `plan dir not found: ${dir}`
     return { ...base, title: dirName, step: parsed.step, planDir: dir, problem }
@@ -283,7 +319,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise
   const now = await $.clock.now()
   const rows: Snapshot[] = []
   for (const one of picked) {
-    const row = await rowOf($, list, one, startedAt, now).catch((err: unknown) => {
+    const row = await rowOf($, list, one, startedAt, now, trees.reals.get(one.root) ?? one.root).catch((err: unknown) => {
       $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
       return null
     })
