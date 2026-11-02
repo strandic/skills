@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-02T08:38:09Z
-updated_at: 2026-11-02T21:29:31Z
+updated_at: 2026-11-02T22:28:54Z
 ---
 
 Filed by the round-9 retro (D6), 2026-11-02. Evidence: the round-9 record (private). (R8.)
@@ -83,3 +83,9 @@ At f87cb20, 175 pass. Round 2 fixed the symlink, /tmp and pane findings, but its
 ## Run paused (2026-11-02): fourth-round ruling
 
 At 03e0607, 184 pass. Round 3 fixed its targets; new: the pane and the 15 s check can still read or list a missing plan folder that became a link out, until the next refresh (medium); a hanging stat costs 2 s on every refresh (low). Labels: reports/run/w3-round3.md.
+
+
+
+## Run done (2026-11-02): PR https://github.com/strandic/skills/pull/5
+
+Head cf81e08 (code). G1 207 pass / 0 fail; G2 validate passed; G3 tsc exit 0; G4 stand-in rows=2; check_pr.py PASS. Rulings Q1–Q6, D11, R1, R1a, R2, R3, R3a, R4, R5; DEFAULTs D1–D10, D12, W0, R5b (the PR's Decisions table). Follow-up tickets: skills-2fzi, skills-warl, skills-rt36, skills-y1gt, skills-0wsk, skills-wimc.
