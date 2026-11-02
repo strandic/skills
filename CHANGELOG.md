@@ -9,6 +9,31 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-02
+
+shawarma round 9.
+
+### Added
+- `check_pr.py <ticket> <body>` reads a trivial run's ticket note: P4 takes ids from its `unruled:` lines; rules that need §9 read `not applicable (trivial)`.
+- One id grammar, written in `check_pr.py`'s docstring with a test per form; wave ranges such as `W9-R1–R6` expand fully.
+- A mirror check between `decisions.md` and §9 plus the `unruled:` ids; a base reading must name its SHA; a §5 gate id may not also be a §9 id.
+- `check_pr --asks`: the `plan-ending` kind, `**<id>**` question lines, `UNPARSED:` lines with a non-zero exit, and the blockquote check; `freeze_check.py` F10 checks `unruled:` lines.
+- The retro replays its checkers over the records since the last two markers before installing them (`retro-workflow.js`).
+- A list input grows its count, each item's size and the total (spike.md).
+
+### Changed
+- A checker FAIL the run judges false is disclosed with a ticket, the records unchanged; the skill's files are read-only to a run, and `git status` on the skill repo is checked at the gate.
+- run.md's PR-body section list moved into `check_pr.py --skeleton`.
+- A failure is named by a line quoted from its own output.
+- A pre-existing (c)/(d) finding with no fold is a TICKET row, not a stop.
+- The marker is `.shawarma/active-<ticket>`, also written on a trivial go, with any tool; `decisions.md` lines read `<date> | <id> RULING|DEFAULT | <decision> | <why>`.
+- Every ask opens with a plain `> **What this is about:**` blockquote.
+- A lane's report is its final message, saved by the orchestrator; variant liveness moved to lanes.md.
+- `plan.md`: `unruled: <id> <item> — default <x>`, one line per item.
+
+### Removed
+- The trivial note's input-alphabet clause.
+
 ## [0.8.0] - 2026-10-19
 
 shawarma round 8.

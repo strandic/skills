@@ -19,7 +19,7 @@ The shawarma skill writes two files. The mod reads them.
 - **The marker** is the file `.shawarma/active` at the root of the tree. Its first line names the plan folder. Its second line names the step: `plan <step>` or `run <wave>`.
 - **decisions.md** sits in the plan folder, next to `plan.md`. It holds one dated row per decision.
 
-The shawarma skill writes both files from its round-8 release (version 0.8.0). With an older skill, the mod finds no marker and draws nothing.
+The shawarma skill wrote `.shawarma/active` in versions 0.8.x. From 0.9.0 it writes one marker per ticket, `.shawarma/active-<ticket>`, which this mod reads only once skills-v2tm lands; until then it draws nothing with a 0.9 skill.
 
 The mod looks for the marker in two places, in this order. First, the marker path that a Write or Edit of this session named. Second, `.shawarma/active` at the git root of the session's working folder.
 

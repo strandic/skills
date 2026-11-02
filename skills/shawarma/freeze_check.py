@@ -2,10 +2,12 @@
 """freeze_check.py — plan step 5's mechanical freeze conditions (the rest stay in plan step 5).
 
     freeze_check.py <plan.md> [--listing FILE] [--repo DIR]
+    freeze_check.py <ticket.md>            (trivial: F10 on the latest `## Plan` note)
 
 Prints one line per failure, `FAIL <check-id> <where>: <what>`, then `PASS` or `FAIL (<n>)`.
 Exit 0 on PASS, 1 on FAIL, 2 on unusable input (unreadable file, not a brief, lanes.md missing).
-Stdlib only. lanes.md is read from this script's own folder. Notes go to stderr.
+Stdlib only. lanes.md and check_pr.py (the id grammar) are read from this script's own folder.
+Notes go to stderr.
 
 Checks (each is a reading, never a judgement):
   F1 the nine `## N.` sections exist, in order.
@@ -28,6 +30,10 @@ Checks (each is a reading, never a judgement):
   F9 with --listing: the header paragraph (title to `## 1.`) names each lesson tag at least as
      often as the listing holds lessons with that tag (`tag ×2` counts 2). The listing's lines read
      `<line>: - Lesson (<tag>): …` (a lessons file of `- Lesson (<tag>): …` lines, numbered by grep -n).
+  F10 every `unruled:` line reads `unruled: none` or `unruled: <id> <item> — default <x>`, one
+     id per line in check_pr.py's grammar, with a `> **What this is about:**` blockquote above it
+     in its `## ` section. On a ticket (no `## N.` section, a `## Plan` note) only F10 runs, on
+     the latest `## Plan` note; F1–F9 print `not applicable (trivial)`.
 """
 import ast
 import re
@@ -52,6 +58,10 @@ ONE_ID = r"[A-Z]{1,2}\d+[a-z]?"
 ID_RE = re.compile(r"(?<![\w-])([A-Z]{1,2}\d+[a-z]?)(?![\w-])")
 SOURCE_STATES = ("verified", "paraphrased", "not found", "not run")
 LANES = Path(__file__).resolve().parent / "lanes.md"
+# §7 attack ids (ID_RE above) are a subset of the grammar check_pr.py's docstring writes once;
+# F10 reads `unruled:` ids with that grammar itself.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import check_pr  # noqa: E402
 
 
 class Unusable(Exception):
@@ -482,6 +492,37 @@ def patch_units(b, repo):
 
 # ---- the checks ----------------------------------------------------------------------------
 
+def unruled_fails(lines):
+    """F10 over a list of lines (a brief, or one plan note with its heading)."""
+    fails = []
+    for k, line, i in check_pr.unruled_ids("\n".join(lines))[1]:
+        word = (re.split(r"unruled:(?:\*\*)?", line, maxsplit=1)[1].split() or [""])[0]
+        if word.lower().strip(".") == "none":
+            continue
+        if not i:
+            fails.append(f"FAIL F10 line {k + 1}: `unruled:` line carries no id (`unruled: <id> "
+                         f"<item> — default <x>`): {norm(line)[:70]!r}")
+            continue
+        if word.rstrip("*`").endswith(","):
+            fails.append(f"FAIL F10 line {k + 1}: one id per `unruled:` line: {norm(line)[:70]!r}")
+        a, _z = check_pr.section_of(lines, k)
+        if not any(check_pr.WHAT_ABOUT.match(x) for x in lines[a:k]):
+            fails.append(f"FAIL F10 line {k + 1}: unruled {i} has no `> **What this is about:**` "
+                         "blockquote above it in its section")
+    return fails
+
+
+def check_ticket(text):
+    """Trivial mode: F10 on the latest `## Plan` note of a ticket."""
+    lines = text.splitlines()
+    plans = [k for k, line in enumerate(lines) if re.match(r"^##\s+Plan\b", line)]
+    if not plans:
+        raise Unusable("no `## N.` section and no `## Plan` note — neither a brief nor a ticket")
+    a, z = check_pr.section_of(lines, plans[-1])
+    fails = unruled_fails(lines[:z])
+    return [f for f in fails if int(re.search(r"line (\d+)", f).group(1)) > a]
+
+
 def check(b, listing=None, repo=None):
     fails = []
 
@@ -643,6 +684,9 @@ def check(b, listing=None, repo=None):
             if got < want:
                 fail("F9", "header", f"lesson tag {tag!r}: {want} in the listing, "
                      f"{got} in Lessons read")
+
+    # F10
+    fails += unruled_fails(b.lines)
     return fails
 
 
@@ -665,7 +709,18 @@ def main(argv):
         print(__doc__.split("\n\n")[1], file=sys.stderr)
         return 2
     try:
-        b = Brief(args[0])
+        try:
+            b = Brief(args[0])
+        except Unusable as e:
+            if str(e).startswith("cannot read"):
+                raise
+            text = Path(args[0]).read_text(encoding="utf-8")
+            fails = check_ticket(text)
+            print("F1–F9 not applicable (trivial)")
+            for f in fails:
+                print(f)
+            print("PASS" if not fails else f"FAIL ({len(fails)})")
+            return 1 if fails else 0
         listing = None
         if "--listing" in opts:
             try:

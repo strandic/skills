@@ -1,11 +1,13 @@
 // Retrospective on this method, run by `/shawarma retro` with the Workflow tool:
-//   Workflow({ scriptPath: "<this file>", args: { repo, skillDir, lessons, since, outDir, research? } })
+//   Workflow({ scriptPath: "<this file>", args: { repo, skillDir, lessons, since, outDir, research?, repos? } })
 //     repo      absolute path of the project
 //     skillDir  absolute path of this skill's folder
 //     lessons   absolute path of the project's lessons file (lessons since the last retro)
 //     since     ISO date of the last retro ("" for the first one)
 //     outDir    absolute path of the new retros folder, <repo>/docs/retros/<date>-<topic>/ (created by the orchestrator)
 //     research  optional array of extra research topics (strings)
+//     repos     optional array of absolute paths of other repos that ran the method (their checker
+//               records are replayed only where their house rules allow a retro to read them)
 // Everything here is READ-ONLY apart from reports written into outDir. It ends with propositions, not
 // edits: the human rules on them (grill, one question at a time), the orchestrator drafts the new
 // wording into <outDir>/draft/, and — before the human sees the drafts — replays `plan` with the draft
@@ -16,6 +18,9 @@
 // misread. Any new mechanism is tested as a second arm with its adoption rule written beforehand —
 // and a mechanism that itself spawns an agent (a lane the planner launches) must be played by the
 // replay script as its own stage: workflow subagents have no Agent tool (2026-09-22 round).
+// Beside the evidence, a replay lane runs the installed check_pr.py and freeze_check.py over every
+// brief, trivial note and PR body merged since the last two markers; each refusal of a record the
+// method allowed is a red-test candidate the draft must turn red, then green, before install.
 // The retro first diffs the skill against its last installed version; any other change is one of its
 // propositions, its tokens counted per load path. Before install, a grep for the project's ticket ids and
 // names finds nothing in the draft, and an agent holding only the draft flags every sentence it could not
@@ -25,7 +30,7 @@ export const meta = {
   name: 'shawarma-retro',
   description: 'Retrospective on the shawarma method: audit the run record against the artifacts, research with fetched quotes, propose from a lean and a rigor lens, consolidate, then replay, critique and verify. Read-only; ends in propositions for the human.',
   phases: [
-    { title: 'Evidence + Research', detail: 'artifact auditors and sourced researchers, concurrently' },
+    { title: 'Evidence + Research', detail: 'artifact auditors, the checker replay and sourced researchers, concurrently' },
     { title: 'Propose', detail: 'two proposers with opposing lenses (lean vs rigor)' },
     { title: 'Consolidate', detail: 'one numbered proposition list with exact proposed wording' },
     { title: 'Test, Argue, Verify', detail: 'replay against the recorded runs, two critics, a cold reader, citation re-fetch' },
@@ -57,6 +62,10 @@ const CONSOLIDATED = { type: 'object', required: ['propositions', 'report_path']
   report_path: { type: 'string' } } }
 const REPLAY = { type: 'object', required: ['results'], properties: { results: { type: 'array', items: { type: 'object', required: ['id', 'would_have_helped', 'would_have_hurt', 'net'], properties: { id: { type: 'string' }, would_have_helped: { type: 'array', items: { type: 'string' } }, would_have_hurt: { type: 'array', items: { type: 'string' } }, added_cost_per_run: { type: 'string' }, net: { type: 'string', description: 'strong_win | win | neutral | loss' } } } } } }
 const CRITIQUE = { type: 'object', required: ['critiques'], properties: { critiques: { type: 'array', items: { type: 'object', required: ['id', 'verdict', 'argument'], properties: { id: { type: 'string' }, verdict: { type: 'string', description: 'keep | modify | drop' }, argument: { type: 'string' }, modification: { type: 'string' } } } }, missing: { type: 'array', items: { type: 'string' } } } }
+const REPLAY_CHECKERS = { type: 'object', required: ['records', 'candidates', 'skipped_repos', 'report_path'], properties: {
+  records: { type: 'array', items: { type: 'object', required: ['repo', 'record', 'checker', 'command', 'verdict'], properties: { repo: { type: 'string' }, record: { type: 'string' }, checker: { type: 'string' }, command: { type: 'string' }, verdict: { type: 'string', description: 'the last line the checker printed' } } } },
+  candidates: { type: 'array', items: { type: 'object', required: ['repo', 'record', 'refusal', 'why_allowed', 'generic_fixture'], properties: { repo: { type: 'string' }, record: { type: 'string' }, refusal: { type: 'string', description: 'the FAIL/UNPARSED/UNUSABLE line, verbatim' }, why_allowed: { type: 'string', description: 'the method sentence (file:line) that allows the record' }, generic_fixture: { type: 'string', description: 'the shape as a red test input, with no project words' } } } },
+  skipped_repos: { type: 'array', items: { type: 'string' } }, report_path: { type: 'string' } } }
 const CITES = { type: 'object', required: ['checks'], properties: { checks: { type: 'array', items: { type: 'object', required: ['url', 'quote', 'status'], properties: { url: { type: 'string' }, quote: { type: 'string' }, status: { type: 'string', description: 'verified | paraphrased | not_found | unreachable' }, note: { type: 'string' } } } } } }
 
 const WEB = 'Load web tools with ToolSearch ("select:WebSearch,WebFetch"). Every finding comes from a page you fetched, with a VERBATIM quote and its URL; prefer primary sources; if you cannot fetch it, do not cite it. List what you searched for and did not find.'
@@ -73,16 +82,19 @@ const stage1 = await parallel([
 Audit the OLDER half of the runs in the record against the real artifacts (briefs under docs/plans/, PR bodies via \`gh pr view\`, tickets, \`git log\`). Confirm or correct every claim the record makes about them, counting findings from each PR's Findings table by label and (plan)/(review) tag; count the asks per ticket with \`check_pr.py --asks\` over the ticket files beside the §9 rows and diff them against \`git log\` over the plans folder and the merged PRs (paste the commands) — a stop with no \`## Ask\` heading is a correction; extract what it missed (brief-vs-shipped deviations, gate amendments and their wording, review findings and their disposition, which brief sections carried weight, sizes, and each run's plan window from git author dates — first plan note to brief commit, pasted with the command); read the last retro's pre-registered measures, if any, and give each its reading; list every bug ticket created since the last retro and trace each to the PR that introduced its cause (\`git log\`, \`git blame\`, commands pasted), whatever its age, counting those merged through the method — an escape count, reported beside the measures — and separately count TICKET rows each PR filed against lines it adds. Write the full report to ${A.outDir}/evidence-older-runs.md.`, { label: 'evidence:older runs', phase: 'Evidence + Research', schema: EVIDENCE }),
   () => agent(`You are an evidence auditor for a retrospective on a coding method.${RULES}
 Audit the NEWER half of the runs in the record against the real artifacts (briefs under docs/plans/, PR bodies via \`gh pr view\`, tickets, \`git log\`) — and look for runs of the method that the record omits entirely: count the asks per ticket with \`check_pr.py --asks\` over the ticket files beside the §9 rows and diff them against \`git log\` over the plans folder and the merged PRs (paste the commands). Confirm or correct every claim; extract what it missed (as above); give each pre-registered measure its reading, and the escape count as above. Write the full report to ${A.outDir}/evidence-newer-runs.md.`, { label: 'evidence:newer runs', phase: 'Evidence + Research', schema: EVIDENCE }),
+  () => agent(`You replay the method's own checkers over its real records.${RULES}
+Repos: ${A.repo}${(A.repos || []).map(r => `, ${r}`).join('')}. For each, read its house rules (docs/plans/README.md) first: a repo whose rules forbid a retro from reading its records is listed in skipped_repos with the sentence quoted, and nothing of it is read. Markers: the \`## RETRO\` lines of each lessons file; take the last two. Records: every brief (docs/plans/*/plan.md, read at its freeze commit for freeze_check and at the merge for check_pr), every trivial note (the ticket's latest \`## Plan\` note) and every PR body (\`gh pr view <n> --json body\`) merged since the older of the two markers. Run ${A.skillDir}/check_pr.py <brief or ticket> <body> (and --asks over each ticket), and ${A.skillDir}/freeze_check.py <brief or ticket>, each from a scratch copy of the record under ${A.outDir}/replays/checkers/, never with --repo on a working tree you do not own; paste each command and its last line. A refusal (FAIL, UNPARSED or UNUSABLE) of a record the method allowed when it was written — quote the method sentence that allows it — is a candidate: give its shape as a red-test fixture in words with no project, ticket or person names. A refusal of a record the method did not allow is not a candidate; say which rule it breaks. Write the table (repo · record · checker · verdict) and the candidates to ${A.outDir}/replay-checkers.md.`, { label: 'replay:checkers', phase: 'Evidence + Research', schema: REPLAY_CHECKERS }),
   ...TOPICS.map(tp => () => agent(`You are a researcher for a retrospective on a coding method (a written brief whose claims are executed before freezing; tests written blind by a different agent; one implementer; read-only review lanes with executed attacks; gates written before the run and amended only by a human).${RULES}
 ${WEB}
 TOPIC: ${tp.text}. Aim for 10–16 findings, each mapped to a rule of the method or to a friction item in the run record, saying whether it supports, contradicts or refines it. Write your notes to ${A.outDir}/research-${tp.key}.md.`, { label: `research:${tp.key}`, phase: 'Evidence + Research', schema: RESEARCH })),
 ])
 const evidence = stage1.slice(0, 2)
-const research = stage1.slice(2).filter(Boolean)
-log(`evidence: ${evidence.filter(Boolean).reduce((n, e) => n + e.corrections.length, 0)} corrections; research: ${research.reduce((n, r) => n + r.findings.length, 0)} sourced findings`)
+const checkerReplay = stage1[2]
+const research = stage1.slice(3).filter(Boolean)
+log(`evidence: ${evidence.filter(Boolean).reduce((n, e) => n + e.corrections.length, 0)} corrections; checker replay: ${checkerReplay ? checkerReplay.candidates.length : 'NOT RUN'} red-test candidates; research: ${research.reduce((n, r) => n + r.findings.length, 0)} sourced findings`)
 
 phase('Propose')
-const INPUTS = `\nAUDITED EVIDENCE: ${JSON.stringify(evidence)}\n\nSOURCED RESEARCH: ${JSON.stringify(research)}`
+const INPUTS = `\nAUDITED EVIDENCE: ${JSON.stringify(evidence)}\n\nCHECKER REPLAY (each candidate is a red test the draft must pass): ${JSON.stringify(checkerReplay)}\n\nSOURCED RESEARCH: ${JSON.stringify(research)}`
 const lens = {
   lean: 'LEAN. The best rule is the one deleted. Propose the smallest set of changes that would have prevented the most friction actually observed; prefer deleting or shortening text, replacing prose with a mechanical check, and moving repo mechanics into the house rules. List what the method should STOP saying. 6–12 propositions.',
   rigor: 'RIGOR. Every failure that reached a human round-trip, every silent deviation from a brief, every place the orchestrator graded its own homework is a hole. Propose changes that close the holes actually observed, with the concrete wording and the cost per run. 8–14 propositions.',
@@ -105,9 +117,9 @@ Which specific incident would it have prevented or shortened, in which run, and 
   () => agent(`You are the LEAN CRITIC. Refute.${RULES}
 For each proposition argue why NOT: ceremony, a rule that will be ignored, duplication, a cheaper mechanical alternative, evidence too thin. Default to "drop" when the benefit is speculative, "modify" with the smaller version when one exists. Total up what adopting every "keep" would add to each load path of the method's text, in tokens, and say whether it still reads in one pass. List rules in the CURRENT method that the runs suggest deleting.\nPROPOSITIONS: ${PROPS}`, { label: 'argue:lean critic', phase: 'Test, Argue, Verify', schema: CRITIQUE }),
   () => agent(`You are the RIGOR CRITIC. Find what is still broken.${RULES}
-For each proposition: does it close the hole it names, or restate the intent? Could an agent satisfy the wording while repeating the failure? What new failure mode does it create? Then list every friction item NO proposition addresses, and every place the orchestrator still grades its own homework.\nPROPOSITIONS: ${PROPS}\nEVIDENCE: ${JSON.stringify(evidence)}`, { label: 'argue:rigor critic', phase: 'Test, Argue, Verify', schema: CRITIQUE }),
+For each proposition: does it close the hole it names, or restate the intent? Could an agent satisfy the wording while repeating the failure? What new failure mode does it create? Then list every friction item NO proposition addresses, and every place the orchestrator still grades its own homework, and every checker-replay candidate no proposition turns into a red test.\nPROPOSITIONS: ${PROPS}\nEVIDENCE: ${JSON.stringify(evidence)}\nCHECKER REPLAY: ${JSON.stringify(checkerReplay)}`, { label: 'argue:rigor critic', phase: 'Test, Argue, Verify', schema: CRITIQUE }),
   () => agent(`You are the COLD READER. You know nothing of the project these propositions came from: read no file, run no command. For each proposition's wording below, flag every phrase you could not apply in an unrelated project (a ticket id, a name, a path, a domain's vocabulary, an example only that project would recognise) and give a generic rewording that keeps the class of failure. A wording with nothing to flag reads keep.\nPROPOSITIONS: ${PROPS}`, { label: 'argue:cold reader', phase: 'Test, Argue, Verify', schema: CRITIQUE, agentType: 'Explore' }),
   () => agent(`You are a citation verifier.${RULES}\n${WEB}\nRE-FETCH every URL below yourself and check the quote appears verbatim. Check every pair; if there are more than 45, check the first 45 and say how many you skipped.\nPAIRS: ${JSON.stringify(cites)}`, { label: 'verify:citations', phase: 'Test, Argue, Verify', schema: CITES }),
 ])
 
-return { evidence, research_counts: research.map(r => r.findings.length), research_not_found: research.flatMap(r => r.not_found || []), consolidated, replay, criticLean, criticRigor, coldReader, citeCheck, outDir: A.outDir }
+return { evidence, checkerReplay, research_counts: research.map(r => r.findings.length), research_not_found: research.flatMap(r => r.not_found || []), consolidated, replay, criticLean, criticRigor, coldReader, citeCheck, outDir: A.outDir }
