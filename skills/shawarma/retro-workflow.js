@@ -117,13 +117,16 @@ const checkReplay = r => {
   const CHECKERS = ['check_pr', 'check_pr --asks', 'freeze_check']
   const short = x => typeof x === 'string' && x.length <= 300 && !x.includes('<')
   const ok = (r.records || []).every(x => repoOk(x.repo) && recOk(x.repo, x.record) && CHECKERS.includes(x.checker) && RULE.test(x.verdict))
-    && (r.candidates || []).every(x => repoOk(x.repo) && recOk(x.repo, x.record) && (x.repo === 'host'
+    && (r.candidates || []).every(x => repoOk(x.repo) && recOk(x.repo, x.record) && (x.repo === 'host' && !(A.repos || []).length
       ? short(x.refusal) && short(x.why_allowed) && short(x.generic_fixture)
       : RULE.test(x.refusal) && /^(SKILL|brief-template|cost|interview|lanes|plan|retro|run|spike)\.md:\d{1,4}$/.test(x.why_allowed)))
     && (r.skipped_repos || []).every(x => /^repo-\d+: not allowed$/.test(x))
   if (!ok) return null
-  // The repo label is the agent's own claim: once any extra repo was read, no candidate keeps free text.
-  const readExtra = (A.repos || []).length > (r.skipped_repos || []).length
+  // The agent's labels and skip list are its own claims: with any extra repo given, no free text and no
+  // host path survives (host records become #<n> or are dropped); free text only in a host-only run.
+  const readExtra = (A.repos || []).length > 0
+  if (readExtra && [...(r.records || []), ...(r.candidates || [])].some(x => x.repo === 'host' && !/^#\d{1,6}$/.test(x.record))) return null
+  if (readExtra && (r.candidates || []).some(x => !RULE.test(x.refusal) || !/^(SKILL|brief-template|cost|interview|lanes|plan|retro|run|spike)\.md:\d{1,4}$/.test(x.why_allowed))) return null
   // Rebuilt from an allowlist: unknown keys and the agent's free-text command are dropped.
   const pick = (o, ks) => Object.fromEntries(ks.map(k => [k, o[k]]))
   return { records: (r.records || []).map(x => ({ ...pick(x, ['repo', 'record', 'checker', 'verdict']), command: `${x.checker} <${x.record}>` })),
