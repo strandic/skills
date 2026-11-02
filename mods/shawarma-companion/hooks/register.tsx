@@ -44,7 +44,7 @@ function reasonFor(want: string): string {
  * is used as given.
  */
 type Trees = { own: string | null; roots: string[]; reals: ReadonlyMap<string, string> }
-/** Per cwd, from `git worktree list` (or the fallback) and the roots' real paths: cleared at each turn end (Q2, R3). */
+/** Per cwd, from `git worktree list` (or the fallback) and the roots' real paths: cleared at each turn end and at session start (Q2, R3). */
 const worktrees = new Map<string, Trees>()
 /** Fallback only: the file-API walk per cwd, kept for the session when it found a repo. */
 const walks = new Map<string, { own: string; main: string | null }>()
@@ -62,6 +62,13 @@ const counts: Cached<number> = new Map()
  * refresh drops the markers it no longer lists.
  */
 const realDirs = new Map<string, { at: number; dir: string; real: string }>()
+/**
+ * R4 (b): per marker path, a plan dir whose real-path stat gave no answer in
+ * RUN_MS, for the marker's time: read as outside without asking again until
+ * the turn ends (cleared with `worktrees`), so a hanging stat costs 2 s once
+ * per turn. Pruned with `realDirs`.
+ */
+const lateDirs = new Map<string, { at: number; dir: string }>()
 
 const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
 /** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
@@ -229,8 +236,8 @@ async function markersOf(list: Lister, roots: readonly string[], answered: Set<s
  * Whether the plan dir `dir` of the marker at `marker` (time `at`) lies in its tree (D11, R1, R3). First the folded
  * text of `dir` against `root`: outside as written is outside, with no file call. Then its real path, links followed,
  * against `realRoot`: one stat raced against RUN_MS, its real path kept per marker path, time and plan dir. No real
- * path, or no answer in time, is outside and not kept. A stat that rejects is `unknown`, not kept: the caller lists and
- * reads nothing there that call (R3a).
+ * path is outside and not kept; no answer in time is outside and kept until the turn ends (R4). A stat that rejects is
+ * `unknown`, not kept: the caller lists and reads nothing there that call (R3a).
  */
 async function isPlanInside($: EngineInterface, marker: string, at: number, root: string, realRoot: string,
   dir: string): Promise<'inside' | 'outside' | 'unknown'> {
@@ -238,8 +245,14 @@ async function isPlanInside($: EngineInterface, marker: string, at: number, root
   if (!isInside(root, dir)) return 'outside'
   const hit = realDirs.get(marker)
   if (hit !== undefined && hit.at === at && hit.dir === dir) return verdict(hit.real)
+  const late = lateDirs.get(marker)
+  if (late !== undefined && late.at === at && late.dir === dir) return 'outside'
   const out = await within($, $.fs.stat(dir, { resolve: true }))
   if (out.kind === 'failed') return 'unknown'
+  if (out.kind === 'late') {
+    lateDirs.set(marker, { at, dir })
+    return 'outside'
+  }
   const real = out.kind === 'ok' ? (out.value?.realPath ?? null) : null
   if (real === null) return 'outside'
   realDirs.set(marker, { at, dir, real })
@@ -314,6 +327,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise
   const facts: Scan = { status: 'ok', trees: answered, unread: new Set(),
     paths: new Set(found.map(one => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))) }
   for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
+  for (const marker of lateDirs.keys()) if (!facts.paths.has(marker)) lateDirs.delete(marker)
   if (found.length === 0) return { rows: [], hidden: { markers: 0, trees: scan.left }, listed, scan: facts }
   const { startedAt } = await $.session.usage()
   const now = await $.clock.now()
@@ -362,9 +376,11 @@ function watch($: EngineInterface, isDrawn: boolean): void {
 
 /**
  * Lists only: each tree's `.shawarma` and each drawn plan dir, at most W + M
- * calls and no read (Q3). A refresh, reusing those listings, only when a
- * marker appeared, went or changed time, or a drawn plan dir's plan.md or
- * decisions.md did, or a plan dir the row says is missing now lists.
+ * calls, no read and no stat (Q3). A refresh, reusing those listings, only
+ * when a marker appeared, went or changed time, or a drawn plan dir's plan.md
+ * or decisions.md did. A plan dir the row says is not found or not readable
+ * was never confirmed inside its tree: it is not listed, only asked whether
+ * it exists, and a change in that (found now, or gone) starts the refresh (R4).
  */
 async function stale($: EngineInterface): Promise<void> {
   const rows = await read($, rowsAtom)
@@ -378,13 +394,12 @@ async function stale($: EngineInterface): Promise<void> {
   for (const row of rows) {
     if (isChanged) break
     if (row.planDir === '') continue
-    const entries = await list(row.planDir)
-    const wasMissing = row.problem?.startsWith('plan dir not') === true
-    if (entries === null) {
-      isChanged = !wasMissing
-    } else {
-      isChanged = wasMissing || timeIn(entries, 'plan.md') !== row.planAt || timeIn(entries, 'decisions.md') !== row.decisionsAt
+    if (row.problem?.startsWith('plan dir not') === true) {
+      isChanged = (await $.fs.exists(row.planDir)) !== row.problem.startsWith('plan dir not readable')
+      continue
     }
+    const entries = await list(row.planDir)
+    isChanged = entries === null || timeIn(entries, 'plan.md') !== row.planAt || timeIn(entries, 'decisions.md') !== row.decisionsAt
   }
   if (isChanged) return refresh($, trees, list)
   // Q5: a row crosses 12 h (or out of the future window) with no file change: flip it on the clock, no file call.
@@ -409,6 +424,7 @@ export const register: Register = (on, options) => {
   isBandOn = options.band === true
   on('session.start', async ($, e, next) => {
     worktrees.clear()
+    lateDirs.clear()
     if (options.pane === true) {
       await $.command
         .register({
@@ -430,6 +446,7 @@ export const register: Register = (on, options) => {
 
   on('turn.complete', async ($, e, next) => {
     worktrees.clear()
+    lateDirs.clear()
     await refresh($)
     return next(e)
   })
@@ -504,15 +521,24 @@ export const register: Register = (on, options) => {
       .map(one => `${one.ticket}${one.isStale ? ' (stale)' : one.isEarlier ? ' (earlier session)' : ''}`)
     const header = others.length === 0 ? null : clean(`Other tickets: ${others.join(', ')}`)
     const label = labelOf(row)
-    if (row.planDir === '' && row.step !== 'trivial') {
-      const line = <Text dimColor>{clean(`${label}shawarma: ${row.ticket}: ${row.problem ?? 'malformed marker'} (${row.marker})`)}</Text>
+    const problemLine = (problem: string) => {
+      const line = <Text dimColor>{clean(`${label}shawarma: ${row.ticket}: ${problem} (${row.marker})`)}</Text>
       return header === null ? line : <Box flexDirection="column">{line}<Text dimColor>{header}</Text></Box>
     }
+    if (row.planDir === '' && row.step !== 'trivial') return problemLine(row.problem ?? 'malformed marker')
     if (row.step === 'trivial') {
       const parts = [`${label}**${row.ticket}** · trivial`, ...(header === null ? [] : [header]), 'Trivial run: no brief.']
       return <Box flexDirection="column"><Markdown text={clean(parts.join('\n\n'), true)} /></Box>
     }
-    const files = await planFiles($, row.planDir).catch((err: unknown) => String(err))
+    // R4: a plan dir the refresh found missing or unreadable was never confirmed inside: its real path first.
+    let isMissing = false
+    if (row.problem?.startsWith('plan dir not') === true) {
+      const out = await within($, $.fs.stat(row.planDir, { resolve: true }))
+      const real = out.kind === 'ok' ? (out.value?.realPath ?? null) : null
+      if (real !== null && !isInside(lastTrees?.reals.get(row.tree) ?? row.tree, real)) return problemLine('plan dir outside its tree')
+      isMissing = real === null
+    }
+    const files = isMissing ? [null, null] as [null, null] : await planFiles($, row.planDir).catch((err: unknown) => String(err))
     if (typeof files === 'string') {
       return <Text dimColor>{clean(`The plan files could not be read: ${files}`)}</Text>
     }
