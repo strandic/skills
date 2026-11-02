@@ -11,19 +11,22 @@ export type Snapshot = {
   step: string
   /** The marker's mtime, ms since the epoch. */
   since: number
-  /** True unless the marker's modification time is after this session's start (D5: a row reads current only then). */
+  /** True unless the marker's modification time is more than 1 ms past this session's start (D5: a row reads current only then). */
   isEarlier: boolean
   /** Q5: true when the marker was not rewritten for 12 h or is dated more than 1 min ahead; the check re-tests it on the clock. */
   isStale: boolean
   /** Lines of decisions.md that start with a date and `|`: the row's count. */
   decisions: number
-  /** Absolute plan dir; empty when the marker is malformed or trivial. */
+  /** Absolute plan dir; empty when the marker is malformed or trivial, or its plan dir is outside its tree. */
   planDir: string
   /** plan.md's `mtimeMs` when listed, null when missing: the check compares it. */
   planAt: number | null
   /** decisions.md's `mtimeMs` when listed, null when missing: the check compares it. */
   decisionsAt: number | null
-  /** A short line naming the file that could not be read, when one could not. */
+  /**
+   * What is wrong with the row, when something is: `malformed marker`, `plan dir outside its tree`,
+   * `plan dir not found: <dir>` or `plan dir not readable: <dir>`.
+   */
   problem?: string
 }
 
