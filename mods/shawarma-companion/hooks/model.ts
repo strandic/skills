@@ -3,7 +3,6 @@
 /** A marker's file name under `<tree root>/.shawarma/`: `active-<ticket>`. */
 export const MARKER_PREFIX = 'active-'
 
-/** The ticket a `.shawarma/` entry name carries, or null when it is not a marker. */
 /** Q5: a marker not rewritten for this long reads `stale:`. */
 export const STALE_MS = 12 * 3600 * 1000
 /** Q5: a marker dated more than this past now reads `stale:`. */
@@ -40,6 +39,7 @@ export function under(root: string, name: string): string {
   return root === '/' ? `/${name}` : `${root}/${name}`
 }
 
+/** The ticket a `.shawarma/` entry name carries, or null when it is not a marker. */
 export function ticketOf(name: string): string | null {
   return name.startsWith(MARKER_PREFIX) && name.length > MARKER_PREFIX.length ? name.slice(MARKER_PREFIX.length) : null
 }
