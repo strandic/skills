@@ -119,14 +119,16 @@ const checkReplay = r => {
   const ok = (r.records || []).every(x => repoOk(x.repo) && recOk(x.repo, x.record) && CHECKERS.includes(x.checker) && RULE.test(x.verdict))
     && (r.candidates || []).every(x => repoOk(x.repo) && recOk(x.repo, x.record) && (x.repo === 'host'
       ? short(x.refusal) && short(x.why_allowed) && short(x.generic_fixture)
-      : RULE.test(x.refusal) && /^[a-z-]+\.md:\d{1,4}$/.test(x.why_allowed)))
+      : RULE.test(x.refusal) && /^(SKILL|brief-template|cost|interview|lanes|plan|retro|run|spike)\.md:\d{1,4}$/.test(x.why_allowed)))
     && (r.skipped_repos || []).every(x => /^repo-\d+: not allowed$/.test(x))
   if (!ok) return null
+  // The repo label is the agent's own claim: once any extra repo was read, no candidate keeps free text.
+  const readExtra = (A.repos || []).length > (r.skipped_repos || []).length
   // Rebuilt from an allowlist: unknown keys and the agent's free-text command are dropped.
   const pick = (o, ks) => Object.fromEntries(ks.map(k => [k, o[k]]))
   return { records: (r.records || []).map(x => ({ ...pick(x, ['repo', 'record', 'checker', 'verdict']), command: `${x.checker} <${x.record}>` })),
     // Only the host's candidates carry free text; an extra repo's carry rule ids and a method line only.
-    candidates: (r.candidates || []).map(x => pick(x, x.repo === 'host' ? ['repo', 'record', 'refusal', 'why_allowed', 'generic_fixture'] : ['repo', 'record', 'refusal', 'why_allowed'])),
+    candidates: (r.candidates || []).map(x => pick(x, x.repo === 'host' && !readExtra ? ['repo', 'record', 'refusal', 'why_allowed', 'generic_fixture'] : ['repo', 'record', 'refusal', 'why_allowed'])),
     skipped_repos: (r.skipped_repos || []).slice(), report_path: `${A.outDir}/replay-checkers.md (written by the orchestrator from this result)` }
 }
 const checkerReplay = checkReplay(stage1[2])
