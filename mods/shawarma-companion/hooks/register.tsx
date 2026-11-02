@@ -50,6 +50,13 @@ let lastTrees: Trees | null = null
 type Cached<T> = Map<string, { at: number; value: T }>
 const titles: Cached<string | null> = new Map()
 const counts: Cached<number> = new Map()
+/**
+ * R1: per marker path, the real path of its plan dir, asked with one
+ * `$.fs.stat(dir, { resolve: true })` for the marker's time and plan dir.
+ * Null when the stat rejected or gave no real path. One entry per marker
+ * path, and each refresh drops the markers it no longer lists.
+ */
+const realDirs = new Map<string, { at: number; dir: string; real: string | null }>()
 
 const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
 /** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
@@ -192,9 +199,24 @@ async function markersOf(list: Lister, roots: readonly string[], answered: Set<s
 }
 
 /**
+ * Whether the plan dir `dir` of the marker at `marker` (time `at`) lies in `root` (D11, R1). Its real path, links
+ * followed, is asked once per marker time and compared; with no real path the folded text of `dir` is compared.
+ */
+async function isPlanInside($: EngineInterface, marker: string, at: number, root: string, dir: string): Promise<boolean> {
+  let hit = realDirs.get(marker)
+  if (hit === undefined || hit.at !== at || hit.dir !== dir) {
+    const real = await $.fs.stat(dir, { resolve: true }).then(stat => stat?.realPath ?? null, () => null)
+    hit = { at, dir, real }
+    realDirs.set(marker, hit)
+  }
+  return isInside(root, hit.real ?? dir)
+}
+
+/**
  * One row. The marker is read once; the plan dir is listed once (both files' times, and whether it is there); plan.md and
  * decisions.md are read only when their times changed (Q3), and only when listed as regular files, not links (D12). A plan
- * dir outside the marker's own tree is a problem row with no plan dir: nothing there is listed or read (D11).
+ * dir outside the marker's own tree, links followed (R1), is a problem row with no plan dir: nothing there is listed or
+ * read (D11).
  */
 async function rowOf($: EngineInterface, list: Lister, found: { root: string; ticket: string; at: number },
   startedAt: number, now: number): Promise<Snapshot> {
@@ -210,7 +232,7 @@ async function rowOf($: EngineInterface, list: Lister, found: { root: string; ti
     planDir: '', planAt: null, decisionsAt: null }
   if (parsed === null) return { ...base, title: '', step: '', problem: 'malformed marker' }
   if (parsed.kind === 'trivial') return { ...base, title: ticket, step: 'trivial' }
-  if (!isInside(root, parsed.planDir)) return { ...base, title: '', step: '', problem: 'plan dir outside its tree' }
+  if (!(await isPlanInside($, marker, at, root, parsed.planDir))) return { ...base, title: '', step: '', problem: 'plan dir outside its tree' }
   const dir = parsed.planDir
   const dirName = dir.split('/').pop() ?? dir
   const entries = await list(dir)
@@ -234,11 +256,7 @@ function scanned(trees: Trees): { roots: string[]; left: number } {
 
 const keyOf = (one: { root: string; ticket: string; at: number }) => `${under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)}@${one.at}`
 
-/**
- * Every row, in drawing order: the listings are ordered first (own tree,
- * newest, ticket), then at most MAX_ROWS markers are read; the rest only
- * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
- */
+/** A listed marker: its tree root, its ticket and its time. */
 type Found = { root: string; ticket: string; at: number }
 /** The markers to draw, in order, and the signature the check compares (N4). */
 function pick(found: Found[], trees: Trees, left: number): { picked: Found[]; signature: string } {
@@ -246,6 +264,11 @@ function pick(found: Found[], trees: Trees, left: number): { picked: Found[]; si
   return { picked, signature: `${picked.map(keyOf).join('\n')}\n#${found.length - picked.length}\n#${left}` }
 }
 
+/**
+ * Every row, in drawing order: the listings are ordered first (own tree,
+ * newest, ticket), then at most MAX_ROWS markers are read; the rest only
+ * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
+ */
 async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise<{ rows: Snapshot[]; hidden: { markers: number; trees: number };
   listed: string; scan: Scan }> {
   const scan = scanned(trees)
@@ -254,6 +277,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise
   const { picked, signature: listed } = pick(found, trees, scan.left)
   const facts: Scan = { status: 'ok', trees: answered, unread: new Set(),
     paths: new Set(found.map(one => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))) }
+  for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
   if (found.length === 0) return { rows: [], hidden: { markers: 0, trees: scan.left }, listed, scan: facts }
   const { startedAt } = await $.session.usage()
   const now = await $.clock.now()
@@ -432,7 +456,9 @@ export const register: Register = (on, options) => {
     if (rows.length === 0) {
       const hidden = await read($, hiddenAtom)
       const more = moreText(hidden.markers, hidden.trees)
+      const unread = lastScan.unread.size
       const line = lastScan.status === 'none' ? 'No scan has run since the mod loaded.'
+        : unread > 0 ? `${unread} ${unread === 1 ? 'marker' : 'markers'} could not be read.`
         : more !== null ? `No row drawn: ${more}` : 'No shawarma marker in the last scan.'
       return <Text dimColor>{line}</Text>
     }
