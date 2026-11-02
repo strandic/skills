@@ -1,0 +1,44 @@
+# lane 3a (run, Wave 3) at 8bb457d — saved from the lane's final message
+
+`$L` = `/private/tmp/claude-502/-Users-jonathan-Documents-strandic-skills/a1fe7339-7fa8-440d-973c-d1d5d4792ad5/scratchpad/run-v2tm/lane-3a`. Read-only; nothing edited or committed in the repo or its worktrees.
+
+Copies: clone `$L/repo` (baseline `$L/baseline.out`: 162 pass / 0 fail); kit copies `$L/kit/head` (8bb457d) and `$L/kit/sketch` (98a8002) with `tests/attack.test.tsx` = `$L/kit/header.tsx` + `$L/kit/body.tsx`, outputs `$L/kit/head.out` (48 pass, 2 fail), `$L/kit/sketch.out`; A8 `$L/kit/a8/tests/a8.test.tsx` → `$L/kit/a8.out` (6 pass); E18 `$L/e18` → `$L/e18.out`; real-engine probe mod `$L/real/mod` (8bb457d + `/v2tmdump`, `/v2tmmark`, `/v2tmbig`); fixtures `$L/real/grepo/{main,sib}`, `$L/real/outside/p`, `$L/real/hostile-src` → `$L/real/clone`; outputs `$L/real/dump1.out`, `$L/real/reload.out`, `$L/real/cmd.out`, `$L/real/big.out` (every real call `num_turns` 0).
+
+Oracles: hand-written folded paths or forbidden-prefix lists over the fs-call log; no line calls `resolvePath`, `isInside` or `parseMarker` for its expected value; cost lines use hand bounds and a diff against the sketch.
+
+| id | command | raw reading | verdict | listed/own |
+|---|---|---|---|---|
+| D11 paths c01–c32 (29 cases) | kit head: `/etc/p`, `/repo`, `/repo/`, `/repo//docs///p`, `//etc`, `/repo/../etc`, `.`, `./`, `..`, `docs/../..`, `../repo/docs/p`, `../repo-evil/p`, `/repo-evil`, `/rep`, `/`, `///`, `/..`, spaces/tabs around `/etc`, `/repo\0/../etc`, `/etc‮/p`, `/REPO/docs/p`, `/repo/.`, `/repo/..`, deep `..` | outside → `shawarma: cNN: plan dir outside its tree`, 0 fs calls to `/etc`, `/repo-evil`, `/rep`, `/REPO`; inside → `cNN — in · run W1 · since 14:00 · 0 decisions` at the folded path; `/`, `///` → `malformed marker` | holds | own |
+| c25 / c26 / c28 | NUL in relative line 1; U+202E then `/etc/p`; U+2215 slashes | `…plan dir not found: /repo/docs/p ` (NUL as space); `/repo/ /etc/p` (inside, not found, 0 calls under `/etc`); `docs∕..∕..∕etc` one name, inside | holds | own |
+| r1 | tree at `/` naming `/etc/p` | `r1 — forged · run W1`; `list /etc/p`, `read /etc/p/plan.md` | as D11 says | listed |
+| r2a / r2b | main's marker naming `.worktrees/w/docs/p`; nested worktree's naming `../../docs/p` | r2a drawn, reads the worktree's files; r2b `plan dir outside its tree` | holds to the letter | own |
+| r3 | `/sib` marker naming `../repo/docs/p` or `/sib/../repo/docs/p` | both outside, 0 calls | holds | listed |
+| r4 | git root `//repo` | rows `[]` | not meaningful (kit fs) | own |
+| d1 | plan dir lists EACCES, exists | band `… · plan dir not readable: <dir>`; pane `The plan files could not be read: HooksError: no implementation for fs.list`; calls `list`, `exists` | as D12 | listed |
+| d2 / d6 | plan dir missing / deleted after draw | pane `_No brief yet…_`, `_None recorded._`; calls `list`, `exists` | holds | own |
+| d3 | `plan.md` a folder, `decisions.md` a link | band `skills-x · 2026-10-16-skills-x-thing · run W1 · … · 0 decisions`; 0 reads (sketch read both) | holds | own |
+| d4 | listed regular `plan.md` whose read rejects | `The plan files could not be read: HooksError: no implementation for fs.read` | holds | own |
+| d5 | pane calls, plain dir | head `list`, 2 `read` (3); sketch 2 `stat` + 2 `read` (4) | fewer | own |
+| cost k-* | W×M plain/mixed/links, head vs sketch | start/changed/steady/check: 3,2 plain 11/11/7/5; 6,4 plain 22/22/14/10; 3,2 mixed 7/7/6/4 (sketch 10/10/7/5, 9 calls under `/etc`); 6,4 mixed 14/14/12/8 (sketch 17/17/13/9); 3,2 links 9/9/7/5 (= sketch); 2,20 links 62/62/42/22 (= sketch); 2,20 mixed 42/42/32/12 (sketch 45/45/33/13); bounds 11/7/5, 22/14/10, 82/42/22 | holds | listed |
+| cost real | `/v2tmdump` in `$L/real/grepo/main` (W=2, 14 rows, 11 with plan dir) | refresh 30, steady 30, check 13 (bounds 58/30/16); hostile clone (W=1, M=2) 5/5/3 (bounds 9/5/3) | holds | own |
+| A2 symlinked plan dir (was NOT RUN) | real engine `$L/real/dump1.out` | `sym1` (`docs/plans/linked` → outside/p): `earlier session: sym1 · sym — OUTSIDE TITLE · run W1 · since 21:01 · 1 decision`, pane reads `OUTSIDE SECRET`; `sym2` (`via` → outside, line 1 `via/p`) same; `sib2` (sibling's `back` → `../main/docs/plans/realp`) reads main's `tmp1 — in tree`; `$.fs.list(linked)` gives target entries `kind:"file", isLink:false`; `stat {resolve:true}` `realPath` = outside/p | **FAIL: D11 bypassed** (F1) | own |
+| A2 hostile clone | `$L/real/repro-f1.sh $L/f1w $L/real/mod`; `$L/real/reload.out` msg 1 | committed links `docs/plans/h` (absolute), `docs/plans/h2` (`../../../outside/p`) → `earlier session: h1 · sym — OUTSIDE TITLE · run W1 · since 21:09 · 1 decision`; pane `["# sym — OUTSIDE TITLE…OUTSIDE SECRET…","2026-10-16 \| Q1 RULING \| outside \| x…"]` | **FAIL** (F1) | own |
+| D12 real: FIFO, link, dir, x-only, NUL, bidi | `$L/real/dump1.out` | FIFO `plan.md` → `other`, skipped; link → `other`, `isLink:true`, skipped; folder skipped; mode 311 dir: band `plan dir not readable`, pane throws `EACCES` (while `read xonly/plan.md` succeeds); NUL: list `ERR_INVALID_ARG_VALUE`, exists false → `plan dir not found: …realp x`; bidi as space | holds | listed / own |
+| tmp1 / case1 / casein1 | absolute `/tmp/…` (git `/private/tmp/…`), `/PRIVATE/…`; relative `DOCS/PLANS/REALP` | tmp1, case1 → `plan dir outside its tree` though `$.fs.list` of the `/tmp` form works; casein1 drawn (APFS ignores case) | false refusal, safe direction (F2) | own |
+| A8 `$.command.run` (was NOT RUN) | `$L/kit/a8` with open, register, open+register, cwd, usage failing; real `-p "/shawarma-companion"` | kit `Shawarma pane opened.` except open failing → `Shawarma pane could not open: HooksError: no implementation for ui.open`; session start ok every case; real `Shawarma pane opened.` | holds | listed |
+| B5 / E6 real reload (was NOT RUN) | `$L/real/reload.sh` | stream-json, `CLAUDE_CODE_PLUGIN_DIR_WATCH=1`, save of register.tsx between messages 2 and 3 | `reloaded (9 hooks: …)`; `loadedAt` 1793649830176 → 1793649840695; `probeMark` → `null`; `startCount` 1 (session.start re-ran); `lastScan` `ok`; `check` true; `rows` kept 2; `chosen` kept `…/active-h2-gone`; `reasonFor` `no longer active` | holds | listed |
+| Sources: real 4 MiB (was NOT RUN) | `/v2tmbig`, `$L/real/fakebin-big/bigout` (4,860,187 B) | `{"exit":0,"len":4194304,"truncated":true}`; `run()` → null (fallback) | holds | listed |
+| git < 2.36 | `which -a git` | 2.48.1, 2.54.0 only | NOT RUN (no old git on this host) | listed |
+| real band of 21 rows | — | — | NOT RUN (needs an interactive terminal; headless `-p` draws no band) | listed |
+| planner re-run | baseline | 162 pass / 0 fail incl. S9 tests 126, 127 | holds | listed |
+| E18 | `claude plugin test $L/e18` (1500 tests, 235 s) | 1500 pass; `R-A5 violations` 85 (round 3: 85); relative in-tree plan dirs, unaffected by D11/D12 | no regression | listed |
+
+## Findings
+
+**F1 (own): a symlink defeats D11.** `rowOf` tests `isInside(root, resolvePath(root, line1))` on path text; `$.fs.list`/`$.fs.read` follow links in any component. A repo can commit `.shawarma/active-<t>` plus a link `docs/plans/<x>` pointing anywhere; in a clone the band shows the outside `plan.md` title and decision count and the pane its §1, §9 and decisions lines — what D11's why sets out to stop; the README's "the mod reads nothing in that folder" is false for it. A sibling worktree can read the main checkout's plan dir the same way (sib2). D12 stops only a link at `plan.md`/`decisions.md`. Repro `$L/real/repro-f1.sh <empty dir> $L/real/mod` → row `earlier session: h1 · sym — OUTSIDE TITLE · run W1 · since 21:09 · 1 decision`, pane `["# sym — OUTSIDE TITLE\n\n## 1. What\n\nOUTSIDE SECRET\n","2026-10-16 | Q1 RULING | outside | x\n"]`. A clone's marker is old (`earlier session:`); one arriving during the session (`git pull` via Bash) reads current. Fix: `$.fs.stat(dir, { resolve: true }).realPath` against the tree root — one more call per plan row; Q6's cold bound has no margin (11 of 11): caching or a ruling.
+
+**F2 (own, low): false refusal of an absolute path spelled another way.** `/tmp/…` where git gives `/private/tmp/…`, or `/PRIVATE/…`, reads `plan dir outside its tree`; relative `DOCS/PLANS/REALP` is accepted (APFS ignores case). Safe direction; the skill writes a relative line 1. Repro: markers `active-tmp1`, `active-case1`, `active-casein1` in `$L/real/grepo/main/.shawarma`, `cd $L/real/grepo/main && env CLAUDE_CONFIG_DIR=$HOME/.claude-personal $HOME/.local/bin/claude -p "/v2tmdump" --plugin-dir $L/real/mod` → `earlier session: shawarma: tmp1: plan dir outside its tree` while `list /tmp form ok`.
+
+Not findings: d1, d4 failed only on the lane's guessed error wording; r4 unusable.
+
+Repo status: `git -C …/.worktrees/v2tm status --porcelain` empty before and after (`$L/status-before.txt`, `$L/status-after.txt`).
