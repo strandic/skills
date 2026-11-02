@@ -2,6 +2,8 @@
 
 Written into a brief's §7 at plan step 2.
 
+A lane's report is its final message; before grading, the orchestrator saves it verbatim as `reports/<lane>/report.md`, and a lane without one is NOT RUN. Every variant reading follows the unpatched control and one probe only that variant can pass; a reading equal to the control's or another variant's is a liveness failure, never a kill or a pass.
+
 | lane | files | done when |
 |---|---|---|
 | 3a adversarial | read-only, scratch dir | *(template text)* §6's worst impact and §3's error surface, by attacks of the lane's own design · the `NOT RUN` lines <ids>, a planner re-run included · the hostile corpus · the `enumerate:` rows not pinned as §4 tests <ids>, only where the implementation differs from §2's executed sketch (the orchestrator pastes the diff); executed, each finding with a reproduction and marked `listed` or `own` |

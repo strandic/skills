@@ -4,7 +4,7 @@ The spike tries to break each brief claim before freezing: five questions, each 
 
 ## Mechanics
 
-- **Patch, never edit.** Load the sketch from the scratch directory through an explicit opt-in (house rules name it), never a file the tooling discovers itself. Run the unpatched control first; then prove every variant (patch, copy, mutant) was live: its reading carries a token only its own patch or mutant emits; a reading equal to the control's or to another variant's is a liveness failure until shown otherwise. Afterwards the tree is unchanged.
+- **Patch, never edit.** Load the sketch from the scratch directory through an explicit opt-in (house rules name it), never a file the tooling discovers itself. Prove every variant live ([lanes.md](lanes.md)). Afterwards the tree is unchanged.
 - **A stand-in is marked and seeded.** When a rule's dataset is unreachable now, dry-run on a stand-in and mark the rule `DRY-RUN ON STAND-IN — real run pending, orchestrator only`. Seed it with every Partition kind (q2) before trusting a PASS.
 - **Bound every probe that can amplify:** [cost.md](cost.md), whenever the diff adds or changes a repeat over input.
 - **Write what cannot be seen.** Non-printing characters and non-ASCII whitespace are `U+XXXX` in prose and escapes in code, enforced by the house rules' file check.
@@ -16,7 +16,7 @@ The spike tries to break each brief claim before freezing: five questions, each 
 
    Name the factors the line depends on — input kind, each setting the code reads, the environment property a setting describes (including a value carried from another host), the caller, the next read — and cover every pair of their values with hostile inputs, contradictory pairs included; a pruned pair goes to the attack lane, never only a reason.
 
-   A container kind needs a one-item and a many-item row; a path argument, a row per way it fails: missing, a directory, unreadable, undecodable.
+   A container kind needs a one-item and a many-item row, and a list input grows its count, each item's size and the total, each alone, through every stage the items reach; a path argument, a row per way it fails: missing, a directory, unreadable, undecodable.
 
    A predicate that classifies its input (accepted / refused, healthy / unhealthy) runs over the healthy population on the base — every fixture, every stand-in, the sweep — counting its false positives before the freeze.
 
