@@ -35,7 +35,7 @@ A row reads:
 [stale: |earlier session: ]<ticket>[ · <title>] · <step> · since <HH:MM> · <n> decisions
 ```
 
-The row starts with a label when one applies, then the ticket. When the title starts with the ticket, the row shows the title in the ticket's place, for example `skills-x — thing`. Otherwise the title follows the ticket after ` · `.
+The row starts with a label when one applies, then the ticket. When the title is the ticket, or starts with the ticket followed by a space, the row shows the title in the ticket's place, for example `skills-x — thing`. Otherwise the title follows the ticket after ` · `.
 
 - **stale:** is shown, and the row dimmed, when the marker was not rewritten for 12 hours, or its time is more than 1 minute in the future. A live run rewrites its marker at each step or wave, so a stale marker was most likely left behind by a run that stopped. The row turns stale on its own when it reaches 12 hours. When a marker is both stale and from an earlier session, the row says `stale:`.
 - **earlier session:** is shown, and the row dimmed, when the marker was last written before this session started, or within the first millisecond of it. Claude Code gives the session start in whole milliseconds, so a marker written in that millisecond may be older than the session. Such a marker may be left over from a session that stopped without cleaning up. The mod still shows it.
@@ -46,7 +46,7 @@ The row starts with a label when one applies, then the ticket. When the title st
 
 A `trivial` marker reads `<ticket> · trivial · since <HH:MM>`.
 
-Two parts are added at the end when they apply:
+Three parts can be added at the end when they apply:
 
 - `· plan dir not found: <folder>`: the plan folder named in the marker does not exist.
 - `· plan dir not readable: <folder>`: the plan folder exists, but the mod could not list it.
@@ -54,11 +54,11 @@ Two parts are added at the end when they apply:
 
 If a marker is malformed, its row reads only `shawarma: <ticket>: malformed marker`, with its label in front when it has one. The pane adds the marker's path.
 
-The plan folder must be inside the marker's own tree: the tree root or a folder under it, after `.` and `..` are resolved. The check follows links: a folder in the tree that links to a folder outside it counts as outside. The mod asks where the folder really is once each time the marker changes. A link changed later is seen only when the marker is rewritten. If the mod cannot find out where the folder really is, it checks the path as written. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
+The plan folder must be inside the marker's own tree: the tree root or a folder under it. The mod checks this in two steps. First it checks the path as written, after `.` and `..` are resolved. A path outside the tree as written counts as outside, and the mod makes no file call at it. Then it asks where the folder really is, with links followed, and checks that real path against the tree's real path. So a folder in the tree that links to a folder outside it counts as outside. The mod finds each tree's real path once per turn. It asks for the folder's real path once each time the marker changes, and keeps the answer. If no real path comes back, or no answer comes within 2 seconds, the folder counts as outside, and the mod asks again at the next update. If the mod cannot ask, for example because the folder does not exist, it lists and reads nothing in that folder for that update, and asks again at the next one. The row then says `plan dir not readable` when the folder exists, and `plan dir not found` when it does not. Two limits follow. An absolute path in the marker spelled through a link, such as `/tmp/…` on macOS where the tree is under `/private/tmp/…`, counts as outside. The skill writes relative paths, so this does not happen in normal use. A link changed later, while the marker stays the same, is seen only when the marker is rewritten. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
 
 No row runs wider than the window. The ticket stays at the start of the row. The title is cut first, then the problem text, then the end of the line. Characters that could reorder the text on screen are drawn as spaces.
 
-The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds, in the trees found at the last update. Two changes wait for this session's next tool call or turn end: a worktree added since the last update, and a file rewritten with the same file time. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
+The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds, in the trees found at the last update. Two changes wait for this session's next tool call or turn end: a worktree added since the last update, and a marker rewritten with the same file time. The mod keeps what it read from `plan.md` and `decisions.md` with each file's time. So a rewrite of either file that keeps the same file time is not seen until that time changes. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
 
 The mod does not say which session wrote a marker. A row with no label means the marker was written after this session started and less than 12 hours ago.
 

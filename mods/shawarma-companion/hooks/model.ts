@@ -51,7 +51,8 @@ export type Marker = { kind: 'plan'; planDir: string; step: string } | { kind: '
  * `trivial`, the ticket id. Line 2: `plan <step>`, `run <wave>` or `trivial`.
  * Exactly two lines after trimming. Anything else is malformed: null. The plan
  * dir is `resolvePath(treeRoot, line 1)`, `.` and `..` folded; it may lie
- * outside the tree: the caller checks it with `isInside` (D11).
+ * outside the tree: the caller (`isPlanInside` in register.tsx) checks the
+ * text with `isInside`, then the real path (D11, R1, R3).
  */
 export function parseMarker(text: string, treeRoot: string): Marker | null {
   const lines = text.split('\n').map(line => line.trim())
