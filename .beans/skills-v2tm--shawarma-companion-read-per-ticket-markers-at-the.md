@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-02T08:38:09Z
-updated_at: 2026-11-02T16:58:22Z
+updated_at: 2026-11-02T18:34:40Z
 ---
 
 Filed by the round-9 retro (D6), 2026-11-02. Evidence: the round-9 record (private). (R8.)
@@ -24,3 +24,32 @@ Research: `docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/reports/research
 - **Q3** "Scale with W and M" (RULING, replaces pi0y 3e): per tool call ≤ W + 3M file operations plus 1 cached worktree list per turn; per 15 s check ≤ W + 2M, no reads unless changed.
 - **Q4** "Own tree first, pane per row": own tree's marker first, then newest first; a row press opens the pane on that ticket; the pane header lists the others.
 - **D1–D6** ("Go"): trivial rows; leftover markers dimmed, no cutoff; prunable skipped, locked read; old `.shawarma/active` dropped; error directions (a row never reads current unless newer than the session start); `fs.list` on a missing folder settled by a probe.
+
+
+
+## Plan (2026-11-02) — brief, awaiting go
+
+Brief: `docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/plan.md` (sketch `docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/sketch.patch`, research and lane 3a reports in `docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/reports/`, rulings in `docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/decisions.md`).
+
+```
+$ python3 -I <skill>/freeze_check.py docs/plans/2026-11-02-skills-v2tm-per-ticket-markers/plan.md --repo .
+PASS
+```
+
+Executed at plan time: sketch on base f1fc87e → `claude plugin test` 151 pass / 0 fail; `claude plugin validate` passes; tsc exit 0; predicted red set on the base modules 26 pass / 125 fail; six mutants killed; lane 3a three rounds (1000-sequence oracle: 0 label or order errors; F4 left). Rulings this plan added: Q5 (stale after 12 h), Q6 (bounds W+4M / W+2M / W+M, caps 50 worktrees and 20 markers).
+
+> **What this is about:** a sibling session's marker rewritten with the same time stamp is caught at the next tool call or turn end, not by the 15 s check.
+
+unruled: D7 same-mtime rewrite missed by the 15 s check — default accept: the check stays listing-only; sub-millisecond file times here, reached only by a forced `touch -m`
+
+> **What this is about:** at a width below the label plus the ticket, the ticket is cut before the label.
+
+unruled: D8 very narrow rows cut the ticket before `stale:` — default accept
+
+> **What this is about:** a drawn marker whose plan files cannot be read is dropped from the band, not replaced or counted; the pane says it could not be read.
+
+unruled: D9 an unreadable drawn row is dropped, not counted — default accept
+
+> **What this is about:** eight carried-over tests still say "W + 3M" in their names while asserting a stricter count.
+
+unruled: D10 test names that say W + 3M — default rename them to the Q6 bounds in the tests commit

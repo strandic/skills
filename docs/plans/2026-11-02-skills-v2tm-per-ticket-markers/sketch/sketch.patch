@@ -1,0 +1,2454 @@
+diff --git a/mods/shawarma-companion/README.md b/mods/shawarma-companion/README.md
+index e380cfa..33a68f7 100644
+--- a/mods/shawarma-companion/README.md
++++ b/mods/shawarma-companion/README.md
+@@ -1,6 +1,6 @@
+ # shawarma-companion
+ 
+-A Claude Code mod. It shows the shawarma plan or run that is active in your tree. It draws one row above the prompt and offers a pane with more detail.
++A Claude Code mod. It shows the shawarma plans and runs that are active in your repository, one row per ticket above the prompt, and offers a pane with more detail.
+ 
+ A mod is a plugin that changes Claude Code's own interface. This one only reads files. It writes nothing.
+ 
+@@ -14,62 +14,68 @@ It works in the terminal and in the desktop app. VS Code draws no mod surface to
+ 
+ ## Where it reads from
+ 
+-The shawarma skill writes two files. The mod reads them.
++The shawarma skill writes two kinds of file. The mod reads them.
+ 
+-- **The marker** is the file `.shawarma/active` at the root of the tree. Its first line names the plan folder. Its second line names the step: `plan <step>` or `run <wave>`.
++- **A marker** is the file `.shawarma/active-<ticket>` at the root of a tree. There is one per ticket in progress. The ticket is the part of the file name after `active-`. The first line names the plan folder, relative to the tree root or absolute. The second line names the step: `plan <step>`, `run <wave>` or `trivial`. For a `trivial` marker the first line is the ticket.
+ - **decisions.md** sits in the plan folder, next to `plan.md`. It holds one dated row per decision.
+ 
+-The shawarma skill wrote `.shawarma/active` in versions 0.8.x. From 0.9.0 it writes one marker per ticket, `.shawarma/active-<ticket>`, which this mod reads only once skills-v2tm lands; until then it draws nothing with a 0.9 skill.
++The old marker `.shawarma/active` (skill 0.8.x) is not read.
+ 
+-The mod looks for the marker in two places, in this order. First, the marker path that a Write or Edit of this session named. Second, `.shawarma/active` at the git root of the session's working folder.
++The mod looks in every tree of the repository the session runs in. It finds the trees with `git worktree list`, once per turn. If git takes longer than 2 seconds, or its answer is cut short, the mod treats that as no answer. The main checkout is one tree; each linked worktree is another, wherever its folder is. A worktree git marks `prunable` is skipped. A `locked` one is read. When git cannot run or gives no answer, the mod finds the repository by reading files only. It looks for `.git` in the session's folder, then in each folder above it. A `.git` folder marks the main checkout. A `.git` file marks a linked worktree, and its `gitdir:` line leads to the main checkout. The mod then reads the main checkout, every folder under `<main checkout>/.worktrees/`, and the session's own tree. This fallback misses linked worktrees kept anywhere else, for example in a sibling folder. The mod asks git for its `-z` output, which git added in version 2.36. With an older git the command fails, so the mod always uses this fallback and never shows markers in sibling-folder worktrees.
+ 
+-## The row
++## The rows
+ 
+-The row sits above the prompt. It reads:
++The band above the prompt shows one row per marker. The marker in the session's own tree comes first. The others follow, newest first. If the rows do not fit, the band scrolls.
++
++The mod looks in at most 50 trees, the session's own tree first. It reads and shows at most 20 markers. When there are more, a last dimmed row says so. `+<n> more not shown` counts the markers it found but did not read. `<k> worktrees not scanned` counts the trees it did not look in. The row shows even when no other row does.
++
++A row reads:
+ 
+ ```
+-[label]<title> · <step> · since <HH:MM> · <n> decisions
++[earlier session: ]<title> · <step> · since <HH:MM> · <n> decisions
+ ```
+ 
+-- **label** is empty, `earlier session: ` or `unconfirmed: `. See "The labels" below.
+-- **title** is the first line of `plan.md`, without the `# `. If there is no `plan.md` yet, it is the plan folder's name.
++- **stale:** is shown, and the row dimmed, when the marker was not rewritten for 12 hours, or its time is more than 1 minute in the future. A live run rewrites its marker at each step or wave, so a stale marker was most likely left behind by a run that stopped. The row turns stale on its own when it reaches 12 hours. When a marker is both stale and from an earlier session, the row says `stale:`.
++- **earlier session:** is shown, and the row dimmed, when the marker was last written before this session started, or within the first millisecond of it. Claude Code gives the session start in whole milliseconds, so a marker written in that millisecond may be older than the session. Such a marker may be left over from a session that stopped without cleaning up. The mod still shows it.
++- **title** is the first line of `plan.md`, without the `# `. If there is no `plan.md` yet, it is the plan folder's name. If the title does not start with the ticket, the ticket is put in front.
+ - **step** is the marker's second line, for example `plan 2 spike` or `run W3`.
+ - **since** is the time the marker was last written. It gets a `MM-DD ` date in front when that was not today.
+-- **decisions** is the number of dated rows in `decisions.md`. A dated row is a line that starts with a date (`YYYY-MM-DD`) followed by `|`. A Markdown table row counts too. The row reads `1 decision` when there is one. The count does not split rulings from defaults. A hand-written `decisions.md` can make the count wrong with no label: a dated row inside a code block or an HTML comment counts too.
++- **decisions** is the number of dated rows in `decisions.md`. A dated row is a line that starts with a date (`YYYY-MM-DD`) followed by `|`. A Markdown table row counts too. The row reads `1 decision` when there is one. A hand-written `decisions.md` can make the count wrong: a dated row inside a code block or an HTML comment counts too.
+ 
+-Two parts are added at the end when they apply:
++A `trivial` marker reads `<ticket> · trivial · since <HH:MM>`.
+ 
+-- `· <problem>`: the plan folder named in the marker does not exist (`plan dir not found: <folder>`).
+-- `· ctx <p>%`: how much of the context window is used. This shows only when the `context` setting is on.
++Two parts are added at the end when they apply:
+ 
+-If the marker is malformed, the row reads only `shawarma: <marker path> is malformed`.
++- `· plan dir not found: <folder>`: the plan folder named in the marker does not exist.
++- `· ctx <p>%`: how much of the context window is used, on the first row only. This shows only when the `context` setting is on.
+ 
+-The row never runs wider than the window. The title is cut first, then the end of the line.
++If a marker is malformed, its row reads only `shawarma: <ticket>: malformed marker`, with its label in front when it has one. The pane adds the marker's path.
+ 
+-The row updates after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While the row is shown, the mod also checks the marker, `plan.md` and `decisions.md` every 15 seconds. So a change another session makes to one of those three files shows within 15 seconds. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
++No row runs wider than the window. The ticket stays at the start of the row. The title is cut first, then the problem text, then the end of the line. Characters that could reorder the text on screen are drawn as spaces.
+ 
+-## The labels
++The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
+ 
+-The label tells you whether this session was seen writing the marker. Both labels are dimmed.
++The mod does not say which session wrote a marker. A row with no label means the marker was written after this session started and less than 12 hours ago.
+ 
+-- **`earlier session:`** The marker's modification time is before this session started. Usually it was written by an earlier session. A copy that keeps old file times reads the same.
+-- **`unconfirmed:`** The marker changed after this session started, but this session was not seen writing it. "Writing it" means a Write or Edit tool call on the marker's path that changed the file. The label does not tell you who wrote it: another session, or this session another way, for example through Bash.
++## The pane
+ 
+-No label means this session wrote the marker with a Write or Edit of its path.
++Press a row to open the pane on that ticket. If that ticket's row is no longer shown, the pane says why, using only what the last scan found:
+ 
+-## The pane
++- `<ticket>: no longer active`: its tree was scanned and the marker was not there.
++- `<ticket>: not shown (past the 20-row limit)`: the marker is there, but it is not among the 20 rows shown.
++- `<ticket>: could not be read`: the marker is there, but its files could not be read.
++- `<ticket>: not shown (not in the last scan)`: its tree was not scanned, or no scan has run since the mod loaded.
+ 
+-The pane shows:
++When no row is shown, the pane says `No shawarma marker in the last scan.`, or `No row drawn:` followed by the more-row's text. After a failed scan it says `Shawarma state could not be read.` The command `/shawarma-companion` opens it on the first row. The pane shows:
+ 
+-- the title and the step;
++- the title and the step, with the row's label (`stale:` or `earlier session:`) in front when it has one;
++- the other tickets shown in the band, each with `(stale)` or `(earlier session)` when that applies;
+ - the recap: section 1 of `plan.md`;
+ - the decisions: the lines of `decisions.md`;
+ - the amendments: section 9 of `plan.md`;
+ - the predicted red set: the `Predicted red set` line of section 4 of `plan.md`.
+ 
+-If `plan.md` does not exist yet, the pane says there is no brief yet and shows only the title, the step and the decisions.
+-
+-Open it with the command `/shawarma-companion`, or press the row.
++If `plan.md` does not exist yet, the pane says there is no brief yet and shows only the title, the step and the decisions. For a `trivial` marker it reads "Trivial run: no brief" with the ticket.
+ 
+ ## Settings
+ 
+diff --git a/mods/shawarma-companion/hooks/model.ts b/mods/shawarma-companion/hooks/model.ts
+index 28b36bf..7603fb2 100644
+--- a/mods/shawarma-companion/hooks/model.ts
++++ b/mods/shawarma-companion/hooks/model.ts
+@@ -1,28 +1,148 @@
+ // Pure parsing and layout: no `$`, so tests call these directly.
+ 
+-/** The marker's file name, under the tree root: `<root>/.shawarma/active`. */
+-export const MARKER_TAIL = '/.shawarma/active'
++/** A marker's file name under `<tree root>/.shawarma/`: `active-<ticket>`. */
++export const MARKER_PREFIX = 'active-'
+ 
+-export type Marker = { planDir: string; step: string }
++/** The ticket a `.shawarma/` entry name carries, or null when it is not a marker. */
++/** Q5: a marker not rewritten for this long reads `stale:`. */
++export const STALE_MS = 12 * 3600 * 1000
++/** Q5: a marker dated more than this past now reads `stale:`. */
++export const FUTURE_MS = 60_000
++/** Q6: at most this many worktrees are scanned, the own tree first. */
++export const MAX_TREES = 50
++/** Q6: at most this many markers are read and drawn, in drawing order. */
++export const MAX_ROWS = 20
++
++/** Q5: stale when not rewritten for STALE_MS, or dated more than FUTURE_MS ahead of `now`. */
++export function isStaleAt(at: number, now: number): boolean {
++  return now - at > STALE_MS || at > now + FUTURE_MS
++}
+ 
+ /**
+- * Line 1: the plan dir, relative to the tree root or absolute. Line 2: the
+- * step, `plan <step>` or `run <wave>`. Anything else is malformed: null.
++ * The more-row (Q6, round 2 N3): `+<n> more not shown` for listed markers not
++ * read, `<k> worktree(s) not scanned` for trees past MAX_TREES; null when both are 0.
+  */
+-export function parseMarker(text: string, markerPath: string): Marker | null {
++export function moreText(markers: number, trees: number): string | null {
++  const parts = [
++    ...(markers > 0 ? [`+${markers} more not shown`] : []),
++    ...(trees > 0 ? [`${trees} ${trees === 1 ? 'worktree' : 'worktrees'} not scanned`] : []),
++  ]
++  return parts.length === 0 ? null : parts.join(' · ')
++}
++
++/** The label a row's title carries: `stale: `, `earlier session: ` or nothing (Q5 order). */
++export function labelOf(row: { isStale?: boolean; isEarlier: boolean }): string {
++  return row.isStale === true ? 'stale: ' : row.isEarlier ? 'earlier session: ' : ''
++}
++
++/** `name` under the folder `root`; a root of `/` gives `/<name>`. */
++export function under(root: string, name: string): string {
++  return root === '/' ? `/${name}` : `${root}/${name}`
++}
++
++export function ticketOf(name: string): string | null {
++  return name.startsWith(MARKER_PREFIX) && name.length > MARKER_PREFIX.length ? name.slice(MARKER_PREFIX.length) : null
++}
++
++export type Marker = { kind: 'plan'; planDir: string; step: string } | { kind: 'trivial'; step: 'trivial' }
++
++/**
++ * Line 1: the plan dir, relative to the tree root or absolute; when line 2 is
++ * `trivial`, the ticket id. Line 2: `plan <step>`, `run <wave>` or `trivial`.
++ * Exactly two lines after trimming. Anything else is malformed: null.
++ */
++export function parseMarker(text: string, treeRoot: string): Marker | null {
+   const lines = text.split('\n').map(line => line.trim())
+   while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop()
+   if (lines.length !== 2) return null
+-  const dir = (lines[0] ?? '').replace(/\/+$/, '')
++  const first = (lines[0] ?? '').replace(/\/+$/, '')
+   const step = lines[1] ?? ''
+-  if (dir === '' || !/^(plan|run) \S/.test(step)) return null
+-  const root = markerPath.slice(0, markerPath.length - MARKER_TAIL.length)
+-  return { planDir: dir.startsWith('/') ? dir : `${root}/${dir}`, step }
++  if (first === '') return null
++  if (step === 'trivial') return { kind: 'trivial', step }
++  if (!/^(plan|run) \S/.test(step)) return null
++  return { kind: 'plan', planDir: first.startsWith('/') ? first : under(treeRoot, first), step }
++}
++
++/** One record of `git worktree list --porcelain`. */
++export type Worktree = { path: string; isBare: boolean; isPrunable: boolean; isLocked: boolean; isDetached: boolean }
++
++/**
++ * The records of `git worktree list --porcelain -z`, the main checkout first:
++ * each attribute ends in NUL, each record in one more NUL, so a path holding a
++ * newline stays one path (lane 3a F1). Null when the output holds no NUL or no
++ * `worktree /<abs>` record (garbage, empty, or the newline form).
++ */
++export function parseWorktrees(stdout: string): Worktree[] | null {
++  if (!stdout.includes('\0')) return null
++  const records: Worktree[] = []
++  let fields: string[] = []
++  const flush = () => {
++    const head = fields[0] ?? ''
++    if (head.startsWith('worktree /')) {
++      const has = (word: string) => fields.some(field => field === word || field.startsWith(`${word} `))
++      records.push({ path: head.slice('worktree '.length).replace(/\/+$/, '') || '/', isBare: has('bare'),
++        isPrunable: has('prunable'), isLocked: has('locked'), isDetached: has('detached') })
++    }
++    fields = []
++  }
++  for (const field of stdout.split('\0')) {
++    if (field === '') flush()
++    else fields.push(field)
++  }
++  flush()
++  return records.length === 0 ? null : records
++}
++
++/** The folder above `path` (`/` above itself). */
++export function parentOf(path: string): string {
++  const cut = path.replace(/\/+$/, '').lastIndexOf('/')
++  return cut <= 0 ? '/' : path.slice(0, cut)
++}
++
++/** `rel` against the folder `base`, `.` and `..` folded; an absolute `rel` as it is. */
++export function resolvePath(base: string, rel: string): string {
++  const parts: string[] = []
++  for (const part of `${rel.startsWith('/') ? '' : `${base}/`}${rel}`.split('/')) {
++    if (part === '' || part === '.') continue
++    if (part === '..') parts.pop()
++    else parts.push(part)
++  }
++  return `/${parts.join('/')}`
++}
++
++/** The folder a `.git` file's `gitdir: <path>` line names, resolved against `dir`; null without one. */
++export function parseGitdir(text: string, dir: string): string | null {
++  const line = lines(text).find(one => one.startsWith('gitdir:'))
++  const path = line?.slice('gitdir:'.length).trim() ?? ''
++  return path === '' ? null : resolvePath(dir, path)
+ }
+ 
+-/** Control characters (C0, DEL, C1), which a surface refuses to draw, as spaces; `\n` kept only when asked. */
++/** The tree holding `cwd`: the longest root that is `cwd` or one of its parents, else null. */
++export function ownTree(cwd: string, roots: readonly string[]): string | null {
++  let best: string | null = null
++  for (const root of roots) {
++    const isUnder = root === '/' || cwd === root || cwd.startsWith(`${root}/`)
++    if (isUnder && (best === null || root.length > best.length)) best = root
++  }
++  return best
++}
++
++/** Rows in drawing order: the own tree's first, then newest first, the ticket breaking a tie. */
++export function order<R extends { tree: string; since: number; ticket: string }>(rows: readonly R[], own: string | null): R[] {
++  return [...rows].sort((a, b) =>
++    Number(b.tree === own) - Number(a.tree === own) || b.since - a.since || (a.ticket < b.ticket ? -1 : a.ticket > b.ticket ? 1 : 0))
++}
++
++/**
++ * Control characters (C0, DEL, C1), which a surface refuses to draw, and bidi
++ * controls (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069), which can
++ * reorder a row (lane 3a F5), and the line and paragraph separators U+2028,
++ * U+2029 (round 2 N6), as spaces; `\n` kept only when asked.
++ */
+ export function clean(text: string, keepNewlines = false): string {
+-  return text.replace(keepNewlines ? /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g : /[\u0000-\u001F\u007F-\u009F]/g, ' ')
++  return text
++    .replace(keepNewlines ? /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g : /[\u0000-\u001F\u007F-\u009F]/g, ' ')
++    .replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/g, ' ')
+ }
+ 
+ /** Lines ending in `\r\n`, `\r` or `\n`. */
+@@ -79,38 +199,57 @@ export function clockTime(ms: number, now: number = ms): string {
+ }
+ 
+ export type RowInput = {
++  ticket?: string
+   title: string
+   step: string
+   since: number
+   isEarlier: boolean
+-  isUnconfirmed?: boolean
++  isStale?: boolean
+   decisions: number
+   context?: number
+   problem?: string
+ }
+ 
++/** Whether `title` starts with exactly `ticket`, then the end, a space or ` —`. */
++export function namesTicket(title: string, ticket: string): boolean {
++  return title === ticket || title.startsWith(`${ticket} `)
++}
++
++/** `text` in at most `room` characters, `…` last when cut; empty below 2. */
++function cut(text: string, room: number): string {
++  return room >= text.length ? text : room >= 2 ? `${text.slice(0, room - 1)}…` : ''
++}
++
+ /**
+- * One line, at most `columns` wide: the title is cut first, then the whole
+- * line. Every part is true when drawn: the time is when the marker was
+- * written, never an age that goes stale on screen.
++ * One line, at most `columns` wide. The ticket leads and is kept (Q1, lane 3a
++ * F10): the title is cut first, then the problem text, then the line's end.
++ * Every part is true when drawn: the time is when the marker was written,
++ * never an age that goes stale on screen.
+  */
+ export function rowText(row: RowInput, columns: number, now: number = row.since): string {
+   if (columns < 1) return ''
++  const fit = (line: string) => (line.length <= columns ? line : `${line.slice(0, Math.max(0, columns - 1))}…`)
+   if (row.problem !== undefined && row.step === '') {
+-    const only = clean(`shawarma: ${row.problem}`)
+-    return only.length <= columns ? only : `${only.slice(0, columns - 1)}…`
++    // round 3 R3-4: the label, as the pane draws it.
++    return fit(clean(`${labelOf(row)}shawarma: ${row.ticket !== undefined ? `${row.ticket}: ` : ''}${row.problem}`))
+   }
+-  const tail = [
++  const isTrivial = row.step === 'trivial'
++  const ticket = row.ticket
++  // Q5: `stale:` wins over `earlier session:` when both apply (an old marker that is also stale says the stronger thing).
++  const head = `${labelOf(row)}${ticket ?? ''}`
++  const rest = ticket === undefined ? row.title
++    : isTrivial ? '' : namesTicket(row.title, ticket) ? row.title.slice(ticket.length) : ` · ${row.title}`
++  const body = [
+     row.step,
+     `since ${clockTime(row.since, now)}`,
+-    `${row.decisions} ${row.decisions === 1 ? 'decision' : 'decisions'}`,
+-    ...(row.problem !== undefined ? [row.problem] : []),
+-    ...(row.context !== undefined ? [`ctx ${row.context}%`] : []),
++    ...(isTrivial ? [] : [`${row.decisions} ${row.decisions === 1 ? 'decision' : 'decisions'}`]),
+   ].join(' · ')
+-  const head = row.isEarlier ? 'earlier session: ' : row.isUnconfirmed === true ? 'unconfirmed: ' : ''
+-  const room = columns - head.length - tail.length - 3
+-  const title =
+-    room >= row.title.length ? row.title : room >= 2 ? `${row.title.slice(0, room - 1)}…` : ''
+-  const line = clean(title === '' ? `${head}${tail}` : `${head}${title} · ${tail}`)
+-  return line.length <= columns ? line : `${line.slice(0, Math.max(0, columns - 1))}…`
++  const problem = row.problem !== undefined ? ` · ${row.problem}` : ''
++  const ctx = row.context !== undefined ? ` · ctx ${row.context}%` : ''
++  const avail = columns - head.length - 3 - body.length - ctx.length
++  const title = cut(rest, avail - problem.length)
++  const shown = cut(problem, avail - title.length)
++  const name = `${head}${title}`
++  const sep = ticket === undefined && title === '' ? '' : ' · '
++  return fit(clean(`${name}${sep}${body}${shown}${ctx}`))
+ }
+diff --git a/mods/shawarma-companion/hooks/register.tsx b/mods/shawarma-companion/hooks/register.tsx
+index 7ec3bed..9bc5b6b 100644
+--- a/mods/shawarma-companion/hooks/register.tsx
++++ b/mods/shawarma-companion/hooks/register.tsx
+@@ -1,167 +1,348 @@
+ import { atom, read, update } from 'claude-code'
+-import type { EngineInterface, Register, Timer } from 'claude-code'
++import type { EngineInterface, FsEntry, Register, Timer } from 'claude-code'
+ 
+ import type { Snapshot } from '../types'
+-import { MARKER_TAIL, clean, lines, parseDecisions, parseMarker, parseTitle, redSet, rowText, section } from './model'
++import {
++  MARKER_PREFIX, clean, lines, order, ownTree, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
++  MAX_ROWS, MAX_TREES, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
++} from './model'
+ 
+ const PANE = 'shawarma-companion'
+-const snap = atom({ plugin: 'shawarma-companion', key: 'snap' } as const, null)
+-/** The marker a Write or Edit of this session named; it wins over the cwd's. */
+-const known = atom({ plugin: 'shawarma-companion', key: 'marker' } as const, null)
+-/** `<path>@<mtimeMs>@<text>` of each own write: a later write with the same mtime but other text is not own. */
+-const own = atom({ plugin: 'shawarma-companion', key: 'own' } as const, [])
+-/** git toplevel per cwd: git is spawned once per directory, not per tool call. */
+-const toplevels = new Map<string, string | null>()
++/** One row per live marker, in drawing order (Q4). */
++const rowsAtom = atom({ plugin: 'shawarma-companion', key: 'rows' } as const, [])
++/** The marker path the pane shows: set by a row press or the command. */
++const chosen = atom({ plugin: 'shawarma-companion', key: 'chosen' } as const, null)
++/** Q6, round 2 N3: markers listed but not read, and worktrees not scanned: one dimmed more-row. */
++const hiddenAtom = atom({ plugin: 'shawarma-companion', key: 'hidden' } as const, { markers: 0, trees: 0 })
++/**
++ * The check's signature (round 2 N4): the markers that would be drawn, from
++ * the listings, plus the hidden counts. A hidden marker rewritten while it
++ * stays hidden changes nothing; one that rises into the top MAX_ROWS does.
++ */
++let lastListed: string | null = null
++/**
++ * What the last scan found, for the pane's reasons (round 2 N1, round 3):
++ * `none` until a refresh ran since load, `failed` when the last one threw.
++ * `trees` are the trees whose `.shawarma` listing answered; `paths` every
++ * listed marker; `unread` the picked markers whose files failed to read.
++ */
++type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string>; unread: Set<string> }
++let lastScan: Scan = { status: 'none', trees: new Set(), paths: new Set(), unread: new Set() }
++
++/** Why the chosen marker is not drawn, from facts the last scan holds only. */
++function reasonFor(want: string): string {
++  if (lastScan.status !== 'ok') return 'not shown (not in the last scan)'
++  if (lastScan.unread.has(want)) return 'could not be read'
++  if (lastScan.paths.has(want)) return `not shown (past the ${MAX_ROWS}-row limit)`
++  const tree = want.slice(0, want.lastIndexOf('/.shawarma/')) || '/'
++  return lastScan.trees.has(tree) ? 'no longer active' : 'not shown (not in the last scan)'
++}
++
++/** The trees to scan, and the one holding the session's cwd. */
++type Trees = { own: string | null; roots: string[] }
++/** Per cwd, from `git worktree list` (or the fallback): cleared at each turn end (Q2). */
++const worktrees = new Map<string, Trees>()
++/** Fallback only: the file-API walk per cwd, kept for the session when it found a repo. */
++const walks = new Map<string, { own: string; main: string | null }>()
++/** The trees of the last refresh: the check scans these and runs no process. */
++let lastTrees: Trees | null = null
++/** Derived values per path and `mtimeMs`: a file is read again only when its time changed (Q3). */
++type Cached<T> = Map<string, { at: number; value: T }>
++const titles: Cached<string | null> = new Map()
++const counts: Cached<number> = new Map()
+ 
+ const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
+-/** While a row is drawn, the drawn marker is stat'ed this often (R5). */
++/** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
++export const RUN_MS = 2_000
++
++/** `argv` in `cwd`, or null when it rejects, runs past RUN_MS, or its stdout was cut. */
++async function run($: EngineInterface, argv: readonly string[], cwd: string): Promise<{ exitCode: number; stdout: string } | null> {
++  let timer: Timer | null = null
++  const late = new Promise<null>(resolve => { timer = $.clock.after(RUN_MS, () => resolve(null)) })
++  const out = await Promise.race([
++    $.process.run(argv, { cwd, timeoutMs: RUN_MS }).then(git => (git.isStdoutTruncated ? null : git), () => null),
++    late,
++  ]).catch(() => null)
++  ;(timer as Timer | null)?.cancel()
++  return out
++}
++/** While a row is drawn, the trees and drawn plan dirs are listed this often (R5). */
+ export const CHECK_MS = 15_000
+ /** The running check, or null; a reload cancels it with the old module. */
+ let check: Timer | null = null
+ /** Set from `options.band` at register: the check runs only while a row can be drawn. */
+ let isBandOn = false
+ 
+-/**
+- * `mtimeMs` of `path`, or null when it is missing. A failed stat is taken for
+- * "missing" only when `fs.exists` agrees; any other failure throws.
+- */
+-async function mtimeOr($: EngineInterface, path: string): Promise<number | null> {
+-  return $.fs.stat(path).then(
+-    stat => stat.mtimeMs,
+-    async (err: unknown) => {
+-      if (await $.fs.exists(path)) throw err
+-      return null
+-    },
+-  )
++/** One pass's listings, each path listed at most once; a failed listing is null (D6: it rejects on a missing folder). */
++type Lister = (path: string) => Promise<FsEntry[] | null>
++function lister($: EngineInterface): Lister {
++  const memo = new Map<string, Promise<FsEntry[] | null>>()
++  return path => {
++    let hit = memo.get(path)
++    if (hit === undefined) {
++      hit = $.fs.list(path).then(entries => entries, () => null)
++      memo.set(path, hit)
++    }
++    return hit
++  }
+ }
+ 
+-/** The file's text and `mtimeMs`, or nulls when it is missing: one stat, one read. */
+-async function readOr($: EngineInterface, path: string): Promise<{ text: string | null; at: number | null }> {
+-  const at = await mtimeOr($, path)
+-  return { text: at === null ? null : String(await $.fs.read(path)), at }
++/** `fn(text)` of the file at `path`, read only when `at` differs from the cached time. */
++async function derived<T>($: EngineInterface, cache: Cached<T>, path: string, at: number, fn: (text: string) => T): Promise<T> {
++  const hit = cache.get(path)
++  if (hit !== undefined && hit.at === at) return hit.value
++  const value = fn(String(await $.fs.read(path)))
++  cache.set(path, { at, value })
++  return value
+ }
+ 
+-/** The marker at the cwd's git root, or null outside a repo. */
+-async function cwdMarker($: EngineInterface): Promise<string | null> {
++/** The file's text, or null when it is missing: one stat, one read (the pane only). */
++async function readOr($: EngineInterface, path: string): Promise<string | null> {
++  const isThere = await $.fs.stat(path).then(() => true, async (err: unknown) => {
++    if (await $.fs.exists(path)) throw err
++    return false
++  })
++  return isThere ? String(await $.fs.read(path)) : null
++}
++
++/**
++ * The trees of the session's cwd: `git worktree list --porcelain` once per cwd
++ * per turn, NUL-framed, prunable and bare records skipped, locked and detached
++ * ones kept (D3). When it cannot run, runs past RUN_MS, exits non-zero, is cut
++ * or prints no record: the file-API
++ * walk (no process), then the main checkout, `<main>/.worktrees/*` and the
++ * cwd's own tree (Q2). A sibling-folder worktree is then missed.
++ */
++async function discover($: EngineInterface): Promise<Trees> {
+   const cwd = await $.session.cwd()
+-  if (!toplevels.has(cwd)) {
+-    const git = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd })
+-    toplevels.set(cwd, git.exitCode === 0 ? git.stdout.trim() : null)
++  const hit = worktrees.get(cwd)
++  if (hit !== undefined) return hit
++  const git = await run($, ['git', 'worktree', 'list', '--porcelain', '-z'], cwd)
++  const listed = git !== null && git.exitCode === 0 ? parseWorktrees(git.stdout) : null
++  let trees: Trees
++  if (listed !== null) {
++    const roots = [...new Set(listed.filter(tree => !tree.isPrunable && !tree.isBare).map(tree => tree.path))]
++    trees = { own: ownTree(cwd, roots), roots }
++  } else {
++    trees = await fallback($, cwd)
+   }
+-  const top = toplevels.get(cwd)
+-  return top == null ? null : `${top}${MARKER_TAIL}`
++  worktrees.set(cwd, trees)
++  return trees
+ }
+ 
+ /**
+- * A Write or Edit that named a marker path: the path, its `mtimeMs` before the
+- * call (null: no time, missing or the stat failed), whether the call answered
+- * with no error, and for a Write the text it sent.
++ * Q2 fallback, the file API only: walk up from the cwd to the first folder
++ * holding `.git` (one stat per level). A `.git` folder: that folder is the
++ * main checkout. A `.git` file: its `gitdir:` line names `<common>/worktrees/<name>`,
++ * whose `commondir` file (else `../..`) names the common `.git`; the main
++ * checkout is the folder above it. A found repo is kept per cwd for the
++ * session; a failed walk is not, so the next turn end or session start tries
++ * again (lane 3a F8).
+  */
+-type Claim = { path: string; before: number | null; isDone: boolean; expected: string | null }
++async function walk($: EngineInterface, cwd: string): Promise<{ own: string; main: string | null } | null> {
++  for (let dir = cwd; ; dir = parentOf(dir)) {
++    const git = `${dir === '/' ? '' : dir}/.git`
++    const stat = await $.fs.stat(git).then(one => one, () => null)
++    if (stat?.kind === 'dir') return { own: dir, main: dir }
++    if (stat?.kind === 'file') {
++      const gitdir = parseGitdir(String(await $.fs.read(git)), dir)
++      if (gitdir === null) return { own: dir, main: null }
++      const common = (await $.fs.read(`${gitdir}/commondir`).then(text => String(text).trim(), () => '')) || '../..'
++      const commonDir = resolvePath(gitdir, common)
++      return { own: dir, main: commonDir.endsWith('/.git') ? parentOf(commonDir) : null }
++    }
++    if (dir === '/') return null
++  }
++}
++
++async function fallback($: EngineInterface, cwd: string): Promise<Trees> {
++  const at = walks.get(cwd) ?? (await walk($, cwd).catch(() => null))
++  if (at === null) return { own: null, roots: [] }
++  walks.set(cwd, at)
++  const main = at.main
++  const linked = main === null ? [] : ((await $.fs.list(under(main, '.worktrees')).then(entries => entries, () => null)) ?? [])
++    .filter(entry => entry.kind === 'dir')
++    .map(entry => under(main, `.worktrees/${entry.name}`))
++  return { own: at.own, roots: [...new Set([...(main === null ? [] : [main]), ...linked, at.own])] }
++}
++
++/** Every live marker of `roots`: one listing per tree's `.shawarma` (a missing or unreadable one has none). */
++async function markersOf(list: Lister, roots: readonly string[], answered: Set<string> = new Set()): Promise<{ root: string; ticket: string; at: number }[]> {
++  const found: { root: string; ticket: string; at: number }[] = []
++  for (const root of roots) {
++    const entries = await list(under(root, '.shawarma'))
++    if (entries !== null) answered.add(root)
++    for (const entry of entries ?? []) {
++      const ticket = ticketOf(entry.name)
++      if (entry.kind === 'file' && ticket !== null) found.push({ root, ticket, at: entry.mtimeMs })
++    }
++  }
++  return found
++}
+ 
+ /**
+- * Own when the call answered with no error and the marker's `mtimeMs` changed
+- * across it. A Write also needs the file to hold its text; an Edit needs a time
+- * from before the call, since an Edit cannot create the file (W3-R5).
++ * One row. The marker is read once; the plan dir is listed once (both files' times, and whether it is there); plan.md and
++ * decisions.md are read only when their times changed (Q3).
+  */
+-function isOwn(claim: Claim, at: number, text: string): boolean {
+-  if (!claim.isDone || claim.before === at) return false
+-  return claim.expected !== null ? text === claim.expected : claim.before !== null
++async function rowOf($: EngineInterface, list: Lister, found: { root: string; ticket: string; at: number },
++  startedAt: number, now: number): Promise<Snapshot> {
++  const { root, ticket, at } = found
++  const marker = under(root, `.shawarma/${MARKER_PREFIX}${ticket}`)
++  // The marker is read each pass: a rewrite keeping its time still shows (pi0y L13).
++  const parsed = parseMarker(String(await $.fs.read(marker)), root)
++  // D5: a row reads current only when its marker is newer than the session
++  // start. startedAt is whole ms (the true start lies in [startedAt,
++  // startedAt + 1)), mtimes are fractional: current only past startedAt + 1
++  // (lane 3a F3), so a marker written in the start's own ms reads earlier.
++  const base = { ticket, marker, tree: root, since: at, isEarlier: !(at > startedAt + 1), isStale: isStaleAt(at, now), decisions: 0,
++    planDir: '', planAt: null, decisionsAt: null }
++  if (parsed === null) return { ...base, title: '', step: '', problem: 'malformed marker' }
++  if (parsed.kind === 'trivial') return { ...base, title: ticket, step: 'trivial' }
++  const dir = parsed.planDir
++  const dirName = dir.split('/').pop() ?? dir
++  const entries = await list(dir)
++  if (entries === null) {
++    const problem = (await $.fs.exists(dir)) ? `plan dir not readable: ${dir}` : `plan dir not found: ${dir}`
++    return { ...base, title: dirName, step: parsed.step, planDir: dir, problem }
++  }
++  const timeOf = (name: string) => entries.find(entry => entry.name === name && entry.kind === 'file')?.mtimeMs ?? null
++  const planAt = timeOf('plan.md')
++  const decisionsAt = timeOf('decisions.md')
++  const title = planAt === null ? null : await derived($, titles, `${dir}/plan.md`, planAt, parseTitle)
++  const decisions = decisionsAt === null ? 0
++    : await derived($, counts, `${dir}/decisions.md`, decisionsAt, text => parseDecisions(text).decisions)
++  return { ...base, title: title ?? dirName, step: parsed.step, planDir: dir, planAt, decisionsAt, decisions }
++}
++
++/** The trees scanned: the own tree first, at most MAX_TREES (Q6); how many were left out. */
++function scanned(trees: Trees): { roots: string[]; left: number } {
++  const all = trees.own === null ? trees.roots : [trees.own, ...trees.roots.filter(root => root !== trees.own)]
++  return { roots: all.slice(0, MAX_TREES), left: Math.max(0, all.length - MAX_TREES) }
+ }
+ 
++const keyOf = (one: { root: string; ticket: string; at: number }) => `${under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)}@${one.at}`
++
+ /**
+- * The first candidate marker that exists, each candidate stat'ed once. A
+- * `claim` whose path is that marker and whose `mtimeMs` changed across the
+- * call, holding the Write's text if any, is recorded as own before labelling.
++ * Every row, in drawing order: the listings are ordered first (own tree,
++ * newest, ticket), then at most MAX_ROWS markers are read; the rest only
++ * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
+  */
+-async function snapshot($: EngineInterface, claim: Claim | null = null): Promise<Snapshot | null> {
+-  const candidates = new Set([await read($, known), await cwdMarker($)])
+-  for (const marker of candidates) {
+-    if (marker === null) continue
+-    const at = await mtimeOr($, marker)
+-    if (at === null) continue
+-    const text = String(await $.fs.read(marker))
+-    if (claim !== null && claim.path === marker && isOwn(claim, at, text)) {
+-      await update($, own, list => [...list, `${marker}@${at}@${text}`].slice(-50))
+-    }
+-    const parsed = parseMarker(text, marker)
+-    const { startedAt } = await $.session.usage()
+-    const isEarlier = at < startedAt
+-    const isUnconfirmed = !isEarlier && !(await read($, own)).includes(`${marker}@${at}@${text}`)
+-    const base = { marker, since: at, isEarlier, isUnconfirmed }
+-    if (parsed === null) {
+-      return { ...base, title: '', step: '', decisions: 0,
+-        planDir: '', planAt: null, decisionsAt: null, problem: `${marker} is malformed` }
+-    }
+-    // The dir is tested only when plan.md is missing, and decisions.md is
+-    // skipped when the dir is missing too (3e, W3-R4).
+-    const plan = await readOr($, `${parsed.planDir}/plan.md`)
+-    const hasDir = plan.at !== null || (await $.fs.exists(parsed.planDir))
+-    const decisions = hasDir ? await readOr($, `${parsed.planDir}/decisions.md`) : { text: null, at: null }
+-    const dirName = parsed.planDir.split('/').pop() ?? parsed.planDir
+-    return {
+-      ...base,
+-      ...parseDecisions(decisions.text ?? ''),
+-      title: (plan.text !== null ? parseTitle(plan.text) : null) ?? dirName,
+-      step: parsed.step,
+-      planDir: parsed.planDir,
+-      planAt: plan.at,
+-      decisionsAt: decisions.at,
+-      ...(hasDir ? {} : { problem: `plan dir not found: ${parsed.planDir}` }),
+-    }
++type Found = { root: string; ticket: string; at: number }
++/** The markers to draw, in order, and the signature the check compares (N4). */
++function pick(found: Found[], trees: Trees, left: number): { picked: Found[]; signature: string } {
++  const picked = order(found.map(one => ({ ...one, tree: one.root, since: one.at })), trees.own).slice(0, MAX_ROWS)
++  return { picked, signature: `${picked.map(keyOf).join('\n')}\n#${found.length - picked.length}\n#${left}` }
++}
++
++async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise<{ rows: Snapshot[]; hidden: { markers: number; trees: number };
++  listed: string; scan: Scan }> {
++  const scan = scanned(trees)
++  const answered = new Set<string>()
++  const found = await markersOf(list, scan.roots, answered)
++  const { picked, signature: listed } = pick(found, trees, scan.left)
++  const facts: Scan = { status: 'ok', trees: answered, unread: new Set(),
++    paths: new Set(found.map(one => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))) }
++  if (found.length === 0) return { rows: [], hidden: { markers: 0, trees: scan.left }, listed, scan: facts }
++  const { startedAt } = await $.session.usage()
++  const now = await $.clock.now()
++  const rows: Snapshot[] = []
++  for (const one of picked) {
++    const row = await rowOf($, list, one, startedAt, now).catch((err: unknown) => {
++      $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
++      return null
++    })
++    if (row !== null) rows.push(row)
++    else facts.unread.add(under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))
+   }
+-  return null
++  return { rows, hidden: { markers: found.length - picked.length, trees: scan.left }, listed, scan: facts }
+ }
+ 
+-/** Never throws: a failed read draws nothing rather than a stale row. */
+-async function refresh($: EngineInterface, claim: Claim | null = null): Promise<void> {
+-  const next = await snapshot($, claim).catch((err: unknown) => {
++/** Never throws: a failed discovery or read draws nothing rather than a stale row. */
++async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($)): Promise<void> {
++  const next = await (async () => {
++    const at = trees ?? (await discover($))
++    lastTrees = at
++    return snapshot($, at, list)
++  })().catch((err: unknown) => {
+     $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
+-    return null
++    return { rows: [] as Snapshot[], hidden: { markers: 0, trees: 0 }, listed: null,
++      scan: { status: 'failed', trees: new Set(), paths: new Set(), unread: new Set() } as Scan }
+   })
+-  await update($, snap, () => next)
+-  watch($, next)
++  lastListed = next.listed
++  lastScan = next.scan
++  await update($, rowsAtom, () => next.rows)
++  await update($, hiddenAtom, () => next.hidden)
++  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees) !== null)
+ }
+ 
+-/** Starts the check when a row is drawn, stops it when none is. */
+-function watch($: EngineInterface, row: Snapshot | null): void {
+-  if (row === null || !isBandOn) {
++/** Starts the check when a row or the more-row is drawn (round 3 R3-3), stops it when neither is. */
++function watch($: EngineInterface, isDrawn: boolean): void {
++  if (!isDrawn || !isBandOn) {
+     check?.cancel()
+     check = null
+   } else if (check === null) {
+-    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => update($, snap, () => null)))
++    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => {
++      lastScan = { status: 'failed', trees: new Set(), paths: new Set(), unread: new Set() }
++      return update($, rowsAtom, () => [])
++    }))
+   }
+ }
+ 
+ /**
+- * Stat-only: a full re-read only when the drawn marker, plan.md or
+- * decisions.md appeared, went or changed (W3-R1), or a plan dir the row says
+- * is missing now exists (W3-R4): a stat each, an exists for each one missing,
+- * at most 6 calls.
++ * Lists only: each tree's `.shawarma` and each drawn plan dir, at most W + M
++ * calls and no read (Q3). A refresh, reusing those listings, only when a
++ * marker appeared, went or changed time, or a drawn plan dir's plan.md or
++ * decisions.md did, or a plan dir the row says is missing now lists.
+  */
+ async function stale($: EngineInterface): Promise<void> {
+-  const row = await read($, snap)
+-  if (row === null) return watch($, null)
+-  const isDirMissing = row.problem?.startsWith('plan dir not found') === true
+-  if (
+-    (await mtimeOr($, row.marker)) !== row.since ||
+-    (row.planDir !== '' &&
+-      ((await mtimeOr($, `${row.planDir}/plan.md`)) !== row.planAt ||
+-        (await mtimeOr($, `${row.planDir}/decisions.md`)) !== row.decisionsAt ||
+-        (isDirMissing && (await $.fs.exists(row.planDir)))))
+-  ) {
+-    await refresh($)
++  const rows = await read($, rowsAtom)
++  const hidden = await read($, hiddenAtom)
++  if (rows.length === 0 && moreText(hidden.markers, hidden.trees) === null) return watch($, false)
++  if (lastTrees === null) return refresh($)
++  const trees = lastTrees
++  const list = lister($)
++  const scan = scanned(trees)
++  let isChanged = lastListed === null || pick(await markersOf(list, scan.roots), trees, scan.left).signature !== lastListed
++  for (const row of rows) {
++    if (isChanged) break
++    if (row.planDir === '') continue
++    const entries = await list(row.planDir)
++    const wasMissing = row.problem?.startsWith('plan dir not') === true
++    if (entries === null) {
++      isChanged = !wasMissing
++    } else {
++      const timeOf = (name: string) => entries.find(entry => entry.name === name && entry.kind === 'file')?.mtimeMs ?? null
++      isChanged = wasMissing || timeOf('plan.md') !== row.planAt || timeOf('decisions.md') !== row.decisionsAt
++    }
++  }
++  if (isChanged) return refresh($, trees, list)
++  // Q5: a row crosses 12 h (or out of the future window) with no file change: flip it on the clock, no file call.
++  const now = await $.clock.now()
++  if (rows.some(row => isStaleAt(row.since, now) !== row.isStale)) {
++    await update($, rowsAtom, all => all.map(row => ({ ...row, isStale: isStaleAt(row.since, now) })))
+   }
+ }
+ 
++/** Opens the pane on `marker`; never throws. */
++async function openOn($: EngineInterface, marker: string | null): Promise<{ isOpen: boolean; err?: unknown }> {
++  await update($, chosen, () => marker).catch(() => undefined)
++  return $.ui.open({ id: PANE, title: 'Shawarma' }).then(() => ({ isOpen: true }), (err: unknown) => ({ isOpen: false, err }))
++}
++
++/** Button keys, one per ticket; a ticket live in two trees gets its index too. */
++function keysOf(rows: readonly Snapshot[]): string[] {
++  return rows.map((row, i) => (rows.filter(other => other.ticket === row.ticket).length > 1 ? `row:${row.ticket}:${i}` : `row:${row.ticket}`))
++}
++
+ export const register: Register = (on, options) => {
+   isBandOn = options.band === true
+   on('session.start', async ($, e, next) => {
++    worktrees.clear()
+     if (options.pane === true) {
+       await $.command
+         .register({
+           name: 'shawarma-companion',
+-          description: 'Show the active shawarma plan or run: recap, decisions, amendments',
++          description: 'Show the active shawarma plans or runs: recap, decisions, amendments',
+         })
+         .catch((err: unknown) => $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
+     }
+@@ -171,78 +352,102 @@ export const register: Register = (on, options) => {
+ 
+   on('tool.call', async ($, e, next) => {
+     if (!WRITERS.has(e.tool)) return next(e)
+-    // A marker write counts as this session's only when a Write/Edit named the
+-    // marker's path (R6) and its mtime changed across the call: the path is
+-    // stat'ed before it, one call, any failure giving no time (W3-D1, W3-R5).
+-    // A failed stat keeps the path (W3-R4). Any other change seen across the
+-    // call is unconfirmed.
+-    const claim = await (async (): Promise<Claim | null> => {
+-      const named = 'file_path' in e && typeof e.file_path === 'string' ? e.file_path : null
+-      if (named === null) return null
+-      const path = named.startsWith('/') ? named : `${await $.session.cwd()}/${named}`
+-      if (!path.endsWith(MARKER_TAIL)) return null
+-      const expected = e.tool === 'Write' && typeof e.content === 'string' ? e.content : null
+-      const before = await $.fs.stat(path).then(stat => stat.mtimeMs, () => null)
+-      return { path, before, isDone: false, expected }
+-    })().catch(() => null)
+     const result = await next(e)
+-    if (claim !== null) claim.isDone = result.isError !== true && result.deny === undefined
+-    // Bookkeeping after the call never fails the call: a miss draws nothing.
+-    if (claim !== null) await update($, known, () => claim.path).catch(() => undefined)
+-    await refresh($, claim)
++    await refresh($)
+     return result
+   })
+ 
+   on('turn.complete', async ($, e, next) => {
++    worktrees.clear()
+     await refresh($)
+     return next(e)
+   })
+ 
+   on('command.run', { command: 'shawarma-companion' }, async $ => {
+-    return $.ui.open({ id: PANE, title: 'Shawarma' }).then(
+-      () => ({ text: 'Shawarma pane opened.' }),
+-      (err: unknown) => ({ text: `Shawarma pane could not open: ${String(err)}` }),
+-    )
++    const first = (await read($, rowsAtom))[0]?.marker ?? null
++    const out = await openOn($, first)
++    return out.isOpen ? { text: 'Shawarma pane opened.' } : { text: `Shawarma pane could not open: ${String(out.err)}` }
+   })
+ 
+   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+-    const row = await read($, snap)
+-    if (options.band !== true || row === null || e.props.hasSurvey) return next(e)
++    const rows = await read($, rowsAtom)
++    const hidden = await read($, hiddenAtom)
++    const more = moreText(hidden.markers, hidden.trees)
++    // N3: the more-row is drawn even when no other row is.
++    if (options.band !== true || (rows.length === 0 && more === null) || e.props.hasSurvey) return next(e)
+     // A settings change re-registers the module without a session.start: the
+     // first drawing after it restarts the check.
+-    watch($, row)
++    watch($, true)
+     const context =
+       options.context === true
+         ? await $.session.usage().then(usage => usage.context.percent, () => null)
+         : undefined
+     if (context === null) return next(e)
+-    const { Button, Text } = $.ui.resolve(e)
+-    const text = (
+-      <Text dimColor={row.isEarlier || row.isUnconfirmed}>
+-        {rowText({ ...row, context }, e.props.bodyColumns, await $.clock.now())}
+-      </Text>
+-    )
+-    if (options.pane !== true) return text
++    const { Box, Button, Text } = $.ui.resolve(e)
++    const now = await $.clock.now()
++    const keys = keysOf(rows)
+     return (
+-      <Button key="row" plain onPress={() => void $.ui.open({ id: PANE, title: 'Shawarma' }).catch(() => undefined)}>
+-        {text}
+-      </Button>
++      <Box flexDirection="column">
++        {rows.map((row, i) => {
++          const key = keys[i] ?? `row:${i}`
++          const text = (
++            <Text key={key} dimColor={row.isEarlier || row.isStale}>
++              {rowText({ ...row, context: i === 0 ? context : undefined }, e.props.bodyColumns, now)}
++            </Text>
++          )
++          if (options.pane !== true) return text
++          return (
++            <Button key={key} plain onPress={() => void openOn($, row.marker)}>
++              {text}
++            </Button>
++          )
++        })}
++        {more !== null ? <Text key="more" dimColor>{more.length <= e.props.bodyColumns ? more : `${more.slice(0, Math.max(0, e.props.bodyColumns - 1))}…`}</Text> : null}
++      </Box>
+     )
+   })
+ 
+   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+     const { Box, Markdown, Text } = $.ui.resolve(e)
+-    const row = await read($, snap)
+-    if (row === null) return <Text dimColor>No shawarma plan or run is active.</Text>
+-    if (row.planDir === '') return <Text dimColor>{clean(`shawarma: ${row.problem ?? 'malformed marker'}`)}</Text>
++    const rows = await read($, rowsAtom)
++    // Round 3: every sentence here comes from facts the last scan holds.
++    if (lastScan.status === 'failed') return <Text dimColor>Shawarma state could not be read.</Text>
++    const want = await read($, chosen)
++    const picked = rows.find(one => one.marker === want)
++    if (want !== null && picked === undefined) {
++      const ticket = ticketOf(want.split('/').pop() ?? '') ?? want
++      return <Text dimColor>{clean(`${ticket}: ${reasonFor(want)}`)}</Text>
++    }
++    if (rows.length === 0) {
++      const hidden = await read($, hiddenAtom)
++      const more = moreText(hidden.markers, hidden.trees)
++      const line = lastScan.status === 'none' ? 'No scan has run since the mod loaded.'
++        : more !== null ? `No row drawn: ${more}` : 'No shawarma marker in the last scan.'
++      return <Text dimColor>{line}</Text>
++    }
++    const row = picked ?? rows[0]!
++    // N2: the others with their labels, never called live.
++    const others = rows.filter(one => one !== row)
++      .map(one => `${one.ticket}${one.isStale ? ' (stale)' : one.isEarlier ? ' (earlier session)' : ''}`)
++    const header = others.length === 0 ? null : clean(`Other tickets: ${others.join(', ')}`)
++    const label = labelOf(row)
++    if (row.planDir === '' && row.step !== 'trivial') {
++      const line = <Text dimColor>{clean(`${label}shawarma: ${row.ticket}: ${row.problem ?? 'malformed marker'} (${row.marker})`)}</Text>
++      return header === null ? line : <Box flexDirection="column">{line}<Text dimColor>{header}</Text></Box>
++    }
++    if (row.step === 'trivial') {
++      const parts = [`${label}**${row.ticket}** · trivial`, ...(header === null ? [] : [header]), 'Trivial run: no brief.']
++      return <Box flexDirection="column"><Markdown text={clean(parts.join('\n\n'), true)} /></Box>
++    }
+     const files = await Promise.all([readOr($, `${row.planDir}/plan.md`), readOr($, `${row.planDir}/decisions.md`)])
+       .catch((err: unknown) => String(err))
+     if (typeof files === 'string') {
+       return <Text dimColor>{clean(`The plan files could not be read: ${files}`)}</Text>
+     }
+-    const [{ text: plan }, { text: decisions }] = files
++    const [plan, decisions] = files
+     const parts = [
+-      `**${row.title}** · ${row.step}`,
++      `${label}**${row.title}** · ${row.step}`,
++      ...(header === null ? [] : [header]),
+       plan === null ? '_No brief yet: the plan is in progress._' : `### Recap\n\n${section(plan, 1) ?? '_§1 not found._'}`,
+       `### Decisions\n\n${decisions === null ? '_None recorded._' : lines(decisions.trim()).map(line => `- ${line}`).join('\n')}`,
+       ...(plan === null ? [] : [
+diff --git a/mods/shawarma-companion/tests/band.test.tsx b/mods/shawarma-companion/tests/band.test.tsx
+index b0587ee..a4e0b3e 100644
+--- a/mods/shawarma-companion/tests/band.test.tsx
++++ b/mods/shawarma-companion/tests/band.test.tsx
+@@ -1,10 +1,12 @@
+ import { describe, expect, mock, test } from 'claude-code/testing'
+ import type { On } from 'claude-code'
+ 
+-import { clean, clockTime, parseDecisions, parseMarker, redSet, rowText } from '../hooks/model'
++import { clean, clockTime, isStaleAt, order, parentOf, parseDecisions, parseGitdir, parseMarker, parseWorktrees, redSet, resolvePath, rowText } from '../hooks/model'
+ 
+ const ROOT = '/repo'
+-const MARKER = `${ROOT}/.shawarma/active`
++const TICKET = 'skills-x'
++const MARKER = `${ROOT}/.shawarma/active-${TICKET}`
++const WT = `${ROOT}/.worktrees/w`
+ const DIR = `${ROOT}/docs/plans/2026-10-16-skills-x-thing`
+ // 2026-10-16 14:00 local: written times read as literal `14:01` (an oracle apart from clockTime).
+ const STARTED = new Date(2026, 9, 16, 14, 0).getTime()
+@@ -24,8 +26,15 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
+  * `#race` is then replaced inside the same call by another writer), Edit
+  * replaces `old_string` with `new_string` (not found: an error, nothing
+  * changed, as the real Edit), Bash `rm <path>`
+- * deletes one, Bash `echo <step> > .shawarma/active` or `sh mark.sh <step>`
+- * writes the cwd's marker, any other Bash changes nothing. `fs.stat` rejects
++ * deletes one, Bash `echo <step> > .shawarma/active-<ticket>` writes that
++ * marker of the cwd, `sh mark.sh <step>` writes MARKER, any other Bash changes
++ * nothing. `fs.list` lists a folder as the Map holds it (a file: ENOTDIR; no
++ * entry beneath: ENOENT, as the real engine, probe D6; `list <path>` in `fail`:
++ * EACCES). `process.run` answers `git worktree list --porcelain` from `git.trees`
++ * (default ROOT and WT) or `git.worktree` (`'reject'` or a raw answer), and
++ * `git rev-parse` from `git.revparse` (default: the cwd's tree, ROOT's .git).
++ * `fs.stat` of a path with entries beneath it answers a folder. ROOT holds
++ * `.git/HEAD` (a main checkout's `.git` folder) unless `git.noRepo`. `fs.stat` rejects
+  * `ENOENT` on a missing path, as the real one. Each name in `fail` makes that
+  * call throw: `cwd`, `usage`, `open`, `register`, or `read <path>`; `cwd after
+  * call` makes `cwd` throw once a tool call has run; `stat once <path>` makes
+@@ -34,9 +43,20 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
+  * `#appear` errors while another writer creates the file. Errors take core's
+  * shape: `{ isError: true, result, text }`.
+  */
+-function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set()) {
++type Answer = 'reject' | 'hang' | { exitCode: number; stdout: string | ((z: boolean) => string); truncated?: boolean }
++type Git = { trees?: string[]; extra?: Record<string, string>; records?: string[][]; worktree?: Answer; revparse?: Answer;
++  noRepo?: boolean; inits?: unknown[]; now?: number }
++/** Porcelain as git prints it: `-z` ends each attribute with NUL and each record with one more; else newlines. */
++const render = (records: string[][], z: boolean) => z
++  ? records.map(r => `${r.map(a => `${a}\0`).join('')}\0`).join('')
++  : records.map(r => `${r.join('\n')}\n`).join('\n')
++const recordsOf = (trees: string[], extra: Record<string, string> = {}) =>
++  trees.map(tree => [`worktree ${tree}`, 'HEAD 0123abcd', extra[tree] ?? 'branch refs/heads/x'])
++
++function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set(), git: Git = {}) {
+   let tick = STARTED + 60_000
+-  const clock = mock.clock(on, { now: STARTED + 120_000 })
++  if (git.noRepo !== true && !files.has(`${ROOT}/.git/HEAD`)) files.set(`${ROOT}/.git/HEAD`, { text: 'ref: refs/heads/main\n', mtimeMs: 1 })
++  const clock = mock.clock(on, { now: git.now ?? STARTED + 120_000 })
+   const failing = (name: string) => { if (fail.has(name)) throw new Error(`${name} failed`) }
+   on('fs.exists', (_$, e) => (log.push(`exists ${e.path}`), { value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(`${e.path}/`)) }))
+   on('fs.read', (_$, e) => (log.push(`read ${e.path}`), failing(`read ${e.path}`), { value: files.get(e.path)?.text ?? '' }))
+@@ -44,14 +64,42 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
+     log.push(`stat ${e.path}`)
+     if (fail.delete(`stat once ${e.path}`)) throw new Error(`EACCES: permission denied, stat '${e.path}'`)
+     const file = files.get(e.path)
++    if (file === undefined && [...files.keys()].some(k => k.startsWith(`${e.path}/`))) {
++      return { value: { kind: 'dir', size: 0, mtimeMs: 0, isLink: false } }
++    }
+     if (file === undefined) throw new Error(`ENOENT: no such file, stat '${e.path}'`)
+     return { value: { kind: 'file', size: 1, mtimeMs: file.mtimeMs, isLink: false } }
+   })
++  on('fs.list', (_$, e) => {
++    log.push(`list ${e.path}`)
++    if (fail.has(`list ${e.path}`)) throw new Error(`EACCES: permission denied, scandir '${e.path}'`)
++    if (files.has(e.path)) throw new Error(`ENOTDIR: not a directory, scandir '${e.path}'`)
++    const entries = new Map<string, any>()
++    for (const [key, file] of files) {
++      if (!key.startsWith(`${e.path}/`)) continue
++      const rest = key.slice(e.path.length + 1)
++      const name = rest.split('/')[0]!
++      entries.set(name, rest.includes('/') ? { name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false }
++        : { name, kind: 'file', size: 1, mtimeMs: file.mtimeMs, isLink: false })
++    }
++    if (entries.size === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
++    return { value: [...entries.values()] }
++  })
+   on('session.cwd', () => (failing('cwd'), { value: cwd }))
+-  on('process.run', (_$, e) => ({
+-    value: { exitCode: 0, stdout: `${e.init?.cwd ?? cwd}\n`, stderr: '',
+-      isStdoutTruncated: false, isStderrTruncated: false },
+-  }))
++  on('process.run', (_$, e) => {
++    log.push(`run ${e.argv.join(' ')}`)
++    git.inits?.push(e.init)
++    const trees = git.trees ?? [ROOT, WT]
++    const isList = e.argv[1] === 'worktree'
++    const z = e.argv.includes('-z')
++    const answer = (isList ? git.worktree : git.revparse) ?? (isList
++      ? { exitCode: 0, stdout: render(git.records ?? recordsOf(trees, git.extra), z) }
++      : { exitCode: 0, stdout: `${[...trees].sort((a, b) => b.length - a.length).find(t => cwd === t || cwd.startsWith(`${t}/`)) ?? cwd}\n${e.argv.includes('--git-common-dir') ? `${ROOT}/.git\n` : ''}` })
++    if (answer === 'reject') throw new Error('process.run denied')
++    if (answer === 'hang') return new Promise<never>(() => undefined)
++    const stdout = typeof answer.stdout === 'function' ? answer.stdout(z) : answer.stdout
++    return { value: { exitCode: answer.exitCode, stdout, stderr: '', isStdoutTruncated: answer.truncated === true, isStderrTruncated: false } }
++  })
+   on('session.usage', () => (failing('usage'), {
+     value: { startedAt: STARTED, context: { tokens: 1, window: 100, percent: 42 } } as any,
+   }))
+@@ -83,10 +131,12 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
+       files.set(at(e.file_path), { text: old.replace(e.old_string, e.new_string), mtimeMs: tick })
+     }
+     if (e.tool === 'Bash' && e.command.startsWith('rm ')) files.delete(e.command.slice(3))
+-    const step = /^(?:echo (.*) > \.shawarma\/active|sh mark\.sh (.*))$/.exec(e.command ?? '')
+-    if (e.tool === 'Bash' && step !== null) {
+-      files.set(`${cwd}/.shawarma/active`, { text: MARKER_TEXT(step[1] ?? step[2] ?? ''), mtimeMs: tick })
++    const echo = /^echo (.*) > \.shawarma\/active-(\S+)$/.exec(e.command ?? '')
++    if (e.tool === 'Bash' && echo !== null) {
++      files.set(`${cwd}/.shawarma/active-${echo[2]}`, { text: MARKER_TEXT(echo[1] ?? ''), mtimeMs: tick })
+     }
++    const mark = /^sh mark\.sh (.*)$/.exec(e.command ?? '')
++    if (e.tool === 'Bash' && mark !== null) files.set(MARKER, { text: MARKER_TEXT(mark[1] ?? ''), mtimeMs: tick })
+     return { result: { type: 'text', text: 'ok' } } as any
+   })
+   return clock
+@@ -121,16 +171,16 @@ describe('band', () => {
+     expect(await bandText($)).toBe(`skills-x — the thing · run W3 review · ${SINCE(1)} · 2 decisions`)
+   })
+ 
+-  test('marker written through Bash, even naming the path: unconfirmed label', { options: ON }, async ($, on) => {
++  test('marker written through Bash: no label (Q1)', { options: ON }, async ($, on) => {
+     world(on, new Map([plan]))
+-    await bash($, 'echo plan 2 spike > .shawarma/active')
+-    expect(await bandText($)).toBe(`unconfirmed: skills-x — the thing · plan 2 spike · ${SINCE(1)} · 0 decisions`)
++    await bash($, `echo plan 2 spike > .shawarma/active-${TICKET}`)
++    expect(await bandText($)).toBe(`skills-x — the thing · plan 2 spike · ${SINCE(1)} · 0 decisions`)
+   })
+ 
+-  test('marker changed by a call that did not name it: unconfirmed label', { options: ON }, async ($, on) => {
++  test('marker changed by a call that did not name it: no label (Q1)', { options: ON }, async ($, on) => {
+     world(on, new Map([plan]))
+     await bash($, 'sh mark.sh plan 2 spike')
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · plan 2 spike/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · plan 2 spike/)
+   })
+ 
+   test('marker older than the session: earlier-session label', { options: ON }, async ($, on) => {
+@@ -139,16 +189,16 @@ describe('band', () => {
+     expect(await bandText($)).toMatch(/^earlier session: skills-x — the thing · plan 2 spike/)
+   })
+ 
+-  test('marker another session wrote after this one started: unconfirmed label', { options: ON }, async ($, on) => {
++  test('marker another session wrote after this one started: no label (Q1)', { options: ON }, async ($, on) => {
+     world(on, new Map([[MARKER, { text: MARKER_TEXT('plan 3'), mtimeMs: STARTED + 5 }], plan]))
+     await bash($, 'true')
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · plan 3/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · plan 3/)
+   })
+ 
+-  test('worktree marker written by path wins over the cwd', { options: ON }, async ($, on) => {
+-    const tree = `${ROOT}/.worktrees/w`
++  test('a worktree\'s marker is drawn (git worktree list)', { options: ON }, async ($, on) => {
++    const tree = WT
+     world(on, new Map([[`${tree}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]]]))
+-    await write($, `${tree}/.shawarma/active`, MARKER_TEXT('run W0'))
++    await write($, `${tree}/.shawarma/active-${TICKET}`, MARKER_TEXT('run W0'))
+     expect(await bandText($)).toMatch(/^skills-x — the thing · run W0 · /)
+   })
+ 
+@@ -175,7 +225,7 @@ describe('band', () => {
+   test('malformed marker: a problem line', { options: ON }, async ($, on) => {
+     world(on, new Map())
+     await write($, MARKER, 'just one line\n')
+-    expect(await bandText($)).toBe(`shawarma: ${MARKER} is malformed`)
++    expect(await bandText($)).toBe(`shawarma: ${TICKET}: malformed marker`)
+   })
+ })
+ 
+@@ -194,9 +244,9 @@ describe('band, more', () => {
+     expect(await bandText($)).toMatch(/ · plan dir not found: \/repo\/docs\/plans\/2026-10-16-skills-x-thing$/)
+   })
+ 
+-  test('a Write of a relative marker path is this session\'s', { options: ON }, async ($, on) => {
++  test('a Write of a relative marker path is drawn', { options: ON }, async ($, on) => {
+     world(on, new Map([plan]))
+-    await write($, '.shawarma/active', MARKER_TEXT('run W1'))
++    await write($, `.shawarma/active-${TICKET}`, MARKER_TEXT('run W1'))
+     expect(await bandText($)).toMatch(/^skills-x — the thing · run W1/)
+   })
+ 
+@@ -215,7 +265,7 @@ describe('band, more', () => {
+     expect((await ui.find({ type: 'Text' }))?.text).toBe(undefined)
+   })
+ 
+-  test('earlier-session and unconfirmed rows are dimmed, own row is not', { options: ON }, async ($, on) => {
++  test('earlier-session rows are dimmed, current rows are not (Q1)', { options: ON }, async ($, on) => {
+     const files = new Map([[MARKER, { text: MARKER_TEXT('plan 2'), mtimeMs: STARTED - 1 }], plan])
+     world(on, files)
+     await bash($, 'true')
+@@ -224,7 +274,7 @@ describe('band, more', () => {
+     await write($, MARKER, MARKER_TEXT('plan 3'))
+     expect((await (await mount()).find({ type: 'Text' }))?.props.dimColor).toBe(false)
+     await bash($, 'sh mark.sh plan 4')
+-    expect((await (await mount()).find({ type: 'Text' }))?.props.dimColor).toBe(true)
++    expect((await (await mount()).find({ type: 'Text' }))?.props.dimColor).toBe(false)
+   })
+ 
+   test('desktop surface draws the row', { options: ON }, async ($, on) => {
+@@ -243,36 +293,36 @@ describe('band, more', () => {
+   })
+ })
+ 
+-describe('own writes (R6)', () => {
+-  test('an Edit of the marker path is this session\'s', { options: ON }, async ($, on) => {
++describe('writes of the marker (was: own writes, R6)', () => {
++  test('an Edit of the marker path is drawn', { options: ON }, async ($, on) => {
+     world(on, new Map([plan]))
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     await $.tool.call({ tool: 'Edit', file_path: MARKER, old_string: 'run W1', new_string: 'run W2' } as any)
+     expect(await bandText($)).toMatch(/^skills-x — the thing · run W2 · /)
+   })
+ 
+-  test('another writer landing inside this session\'s Write: unconfirmed', { options: ON }, async ($, on) => {
++  test('another writer landing inside this session\'s Write: its text, no label', { options: ON }, async ($, on) => {
+     world(on, new Map([plan]))
+     await write($, MARKER, `${MARKER_TEXT('run W1')}#race\n`)
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run OTHER · /)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run OTHER · /)
+   })
+ 
+-  test('replaced after the call with the same mtime: unconfirmed', { options: ON }, async ($, on) => {
++  test('replaced after the call with the same mtime: the new text, no label', { options: ON }, async ($, on) => {
+     const files = new Map([plan])
+     world(on, files)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     files.set(MARKER, { text: MARKER_TEXT('run OTHER'), mtimeMs: files.get(MARKER)!.mtimeMs })
+     await bash($, 'true')
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run OTHER · /)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run OTHER · /)
+   })
+ 
+   test('turn end re-reads the marker', { options: ON }, async ($, on) => {
+     const files = new Map([plan])
+     world(on, files)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+-    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 999_000 })
++    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 130_000 })
+     await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+-    expect(await bandText($)).toMatch(/^unconfirmed: .* run W2/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run W2/)
+   })
+ })
+ 
+@@ -289,11 +339,11 @@ describe('check every 15 s (R5)', () => {
+     const files = new Map([plan])
+     const clock = world(on, files)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+-    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 999_000 })
++    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 130_000 })
+     await clock.advance(14_000)
+     expect(await bandText($)).toMatch(/run W1/)
+     await clock.advance(1_000)
+-    expect(await bandText($)).toMatch(/^unconfirmed: .* run W2/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run W2/)
+   })
+ 
+   test('marker deleted while idle: the row goes within 15 s', { options: ON }, async ($, on) => {
+@@ -306,7 +356,7 @@ describe('check every 15 s (R5)', () => {
+     expect(await bandText($)).toBe(undefined)
+   })
+ 
+-  test('unchanged files: at most 6 fs calls a period, no re-read (3e)', { options: ON }, async ($, on) => {
++  test('unchanged files: at most W + 2M fs calls a period, no re-read (Q3)', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     const clock = world(on, new Map([plan]), ROOT, log)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+@@ -314,26 +364,26 @@ describe('check every 15 s (R5)', () => {
+     await clock.advance(60_000)
+     const calls = log.slice(n0)
+     expect(calls.filter(line => line.startsWith('read ')).length).toBe(0)
+-    expect(calls.filter(line => line === `stat ${MARKER}`).length).toBe(4)
+-    expect(calls.length <= 4 * 6).toBe(true)
++    expect(calls.filter(line => line === `list ${ROOT}/.shawarma`).length).toBe(4)
++    expect(calls.length <= 4 * (2 + 2 * 1)).toBe(true)
+   })
+ 
+   test('no row drawn: no check runs', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     const clock = world(on, new Map([plan]), ROOT, log)
+     await bash($, 'true')
+-    const before = log.filter(line => line.startsWith('stat ')).length
++    const before = log.length
+     await clock.advance(60_000)
+-    expect(log.filter(line => line.startsWith('stat ')).length).toBe(before)
++    expect(log.length).toBe(before)
+   })
+ 
+   test('band off: no check runs', { options: { ...ON, band: false } }, async ($, on) => {
+     const log: string[] = []
+     const clock = world(on, new Map([plan]), ROOT, log)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+-    const before = log.filter(line => line.startsWith('stat ')).length
++    const before = log.length
+     await clock.advance(60_000)
+-    expect(log.filter(line => line.startsWith('stat ')).length).toBe(before)
++    expect(log.length).toBe(before)
+   })
+ })
+ 
+@@ -367,8 +417,8 @@ describe('pane', () => {
+     await $.session.start({ source: 'startup', cwd: ROOT } as any)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     await bandText($)
+-    await $.ui.press({ plugin: 'shawarma-companion', key: 'row' })
+-    expect(log.filter(line => !/^(exists|stat|read) /.test(line))).toEqual(['command shawarma-companion', 'open shawarma-companion'])
++    await $.ui.press({ plugin: 'shawarma-companion', key: `row:${TICKET}` })
++    expect(log.filter(line => !/^(exists|stat|read|list|run) /.test(line))).toEqual(['command shawarma-companion', 'open shawarma-companion'])
+   })
+ 
+   test('pane off: no command, no button', { options: { ...ON, pane: false } }, async ($, on) => {
+@@ -378,23 +428,23 @@ describe('pane', () => {
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND } as any)
+     expect(await ui.find({ type: 'Button' })).toBe(undefined)
+-    expect(log.filter(line => !/^(exists|stat|read) /.test(line))).toEqual([])
++    expect(log.filter(line => !/^(exists|stat|read|list|run) /.test(line))).toEqual([])
+   })
+ })
+ 
+ describe('model', () => {
+   test('parseMarker', async () => {
+-    expect(parseMarker('d\nrun W0\n', MARKER)).toEqual({ planDir: `${ROOT}/d`, step: 'run W0' })
+-    expect(parseMarker('/abs\nplan 1\n', MARKER)?.planDir).toBe('/abs')
+-    expect(parseMarker('d\nwalk W0\n', MARKER)).toBe(null)
+-    expect(parseMarker('d\nplan\n', MARKER)).toBe(null)
+-    expect(parseMarker('d\nplanning 2\n', MARKER)).toBe(null)
+-    expect(parseMarker('', MARKER)).toBe(null)
++    expect(parseMarker('d\nrun W0\n', ROOT)).toEqual({ kind: 'plan', planDir: `${ROOT}/d`, step: 'run W0' })
++    expect((parseMarker('/abs\nplan 1\n', ROOT) as any)?.planDir).toBe('/abs')
++    expect(parseMarker('d\nwalk W0\n', ROOT)).toBe(null)
++    expect(parseMarker('d\nplan\n', ROOT)).toBe(null)
++    expect(parseMarker('d\nplanning 2\n', ROOT)).toBe(null)
++    expect(parseMarker('', ROOT)).toBe(null)
+   })
+ 
+   test('parseMarker: exactly two lines, trailing slashes dropped', async () => {
+-    expect(parseMarker('d\nrun W0\nextra\n', MARKER)).toBe(null)
+-    expect(parseMarker('d/\nrun W1\n\n', MARKER)?.planDir).toBe(`${ROOT}/d`)
++    expect(parseMarker('d\nrun W0\nextra\n', ROOT)).toBe(null)
++    expect((parseMarker('d/\nrun W1\n\n', ROOT) as any)?.planDir).toBe(`${ROOT}/d`)
+   })
+ 
+   test('clean and redSet', async () => {
+@@ -431,7 +481,7 @@ describe('model', () => {
+ 
+ describe('review round 1', () => {
+   const TREE = `${ROOT}/.worktrees/w`
+-  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read) /.test(line))
++  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
+   const pane = async ($: any) => {
+     const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+       requestId: 'shawarma-companion', props: {} } as any)
+@@ -457,25 +507,25 @@ describe('review round 1', () => {
+     expect(await bandText($)).toMatch(/^skills-x — renamed · run W1/)
+   })
+ 
+-  // W3-R2: at most 10 fs calls per tool call.
+-  test('a Bash call with two markers: at most 10 fs calls (3e)', { options: ON }, async ($, on) => {
++  // Q3 (was W3-R2, 10 a call): at most W + 3M fs calls per tool call.
++  test('a Bash call with two markers: at most W + 3M fs calls (Q3)', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([plan, [MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }],
+       [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]],
+       [`${TREE}/docs/plans/2026-10-16-skills-x-thing/decisions.md`, decisions[1]]]), ROOT, log)
+-    await write($, `${TREE}/.shawarma/active`, MARKER_TEXT('run W0'))
++    await write($, `${TREE}/.shawarma/active-other`, MARKER_TEXT('run W0'))
+     const n0 = log.length
+     await bash($, 'true')
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 2).toBe(true)
+   })
+ 
+-  test('a marker Write, one marker: at most 10 fs calls (3e)', { options: ON }, async ($, on) => {
++  test('a marker Write, one marker: at most W + 3M fs calls (Q3)', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([plan, decisions]), ROOT, log)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     const n0 = log.length
+     await write($, MARKER, MARKER_TEXT('run W2'))
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 1).toBe(true)
+   })
+ 
+   // W3-R3: CR and CRLF line ends.
+@@ -486,11 +536,11 @@ describe('review round 1', () => {
+   })
+ 
+   // W3-D1: a failed Edit records no own write.
+-  test('a failed Edit of another session\'s worktree marker is not own', { options: ON }, async ($, on) => {
+-    world(on, new Map([[`${TREE}/.shawarma/active`, { text: MARKER_TEXT('run OTHER'), mtimeMs: STARTED + 5 }],
++  test('a failed Edit of another session\'s worktree marker: its text, no label', { options: ON }, async ($, on) => {
++    world(on, new Map([[`${TREE}/.shawarma/active-${TICKET}`, { text: MARKER_TEXT('run OTHER'), mtimeMs: STARTED + 5 }],
+       [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]]]))
+-    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W9', new_string: 'run W10' } as any)
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run OTHER/)
++    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-${TICKET}`, old_string: 'run W9', new_string: 'run W10' } as any)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run OTHER/)
+   })
+ 
+   // W3-D2: C1 controls.
+@@ -556,7 +606,7 @@ describe('review round 1', () => {
+     await bash($, `rm ${MARKER}`)
+     const n0 = log.length
+     await clock.advance(60_000)
+-    expect(log.slice(n0).filter(line => line === `stat ${MARKER}`)).toEqual([])
++    expect(log.slice(n0).filter(line => line === `list ${ROOT}/.shawarma`)).toEqual([])
+   })
+ 
+   test('row, gone, row again: one check, not two', { options: ON }, async ($, on) => {
+@@ -567,47 +617,51 @@ describe('review round 1', () => {
+     await write($, MARKER, MARKER_TEXT('run W2'))
+     const n0 = log.length
+     await clock.advance(60_000)
+-    expect(log.slice(n0).filter(line => line === `stat ${MARKER}`).length).toBe(4)
++    expect(log.slice(n0).filter(line => line === `list ${ROOT}/.shawarma`).length).toBe(4)
+   })
+ 
+   test('reload with a row kept in state: the first drawing restarts the check', { options: ON }, async ($, on) => {
+     const files = new Map([plan, [MARKER, { text: MARKER_TEXT('run W1'), mtimeMs: STARTED + 61_000 }]])
+     const clock = world(on, files)
+-    const kept = { marker: MARKER, title: 'skills-x — the thing', step: 'run W1', since: STARTED + 61_000,
+-      isEarlier: false, isUnconfirmed: false, decisions: 0, planDir: DIR, planAt: 0, decisionsAt: null }
++    const kept = { ticket: TICKET, marker: MARKER, tree: ROOT, title: 'skills-x — the thing', step: 'run W1', since: STARTED + 61_000,
++      isEarlier: false, decisions: 0, planDir: DIR, planAt: 0, decisionsAt: null }
+     on('state.get', { plugin: 'shawarma-companion' } as any, async (_$, e: any, next: any) => {
+       const r = await next(e)
+-      return e.key === 'snap' && r.value.version === 0 ? { value: { value: kept, version: 0 } } : r
++      return e.key === 'rows' && r.value.version === 0 ? { value: { value: [kept], version: 0 } } : r
+     })
+     expect(await bandText($)).toMatch(/run W1/)
+-    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 999_000 })
++    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 130_000 })
+     await clock.advance(15_000)
+-    expect(await bandText($)).toMatch(/^unconfirmed: .* run W2/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run W2/)
+   })
+ })
+ 
+ describe('review round 3 (W3-R4)', () => {
+   const TREE = `${ROOT}/.worktrees/w`
+-  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read) /.test(line))
++  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
+   const paneText = async ($: any) => {
+     const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+       requestId: 'shawarma-companion', props: {} } as any)
+     return (await ui.find({ type: 'Markdown' }))?.props.text ?? (await ui.find({ type: 'Text' }))?.text
+   }
+ 
+-  test('F2 a Write whose before-call stat fails still makes its marker the one drawn', { options: ON }, async ($, on) => {
++  test('F2 a worktree marker and the cwd marker: both rows, the own tree first (Q4)', { options: ON }, async ($, on) => {
+     world(on, new Map([plan,
+-      [`${TREE}/.shawarma/active`, { text: MARKER_TEXT('run OLD'), mtimeMs: STARTED + 5 }],
++      [`${TREE}/.shawarma/active-${TICKET}`, { text: MARKER_TEXT('run OLD'), mtimeMs: STARTED + 5 }],
+       [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, { text: '# tree plan\n', mtimeMs: 0 }],
+-      [MARKER, { text: MARKER_TEXT('run CWD'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${TREE}/.shawarma/active`]))
+-    await write($, `${TREE}/.shawarma/active`, MARKER_TEXT('run W1'))
+-    expect(await bandText($)).toMatch(/^tree plan · run W1 · /)
++      [MARKER, { text: MARKER_TEXT('run CWD'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${TREE}/.shawarma/active-${TICKET}`]))
++    await write($, `${TREE}/.shawarma/active-${TICKET}`, MARKER_TEXT('run W1'))
++    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND } as any)
++    const texts = (await ui.findAll({ type: 'Text' })).map((one: any) => one.text)
++    expect(texts.length).toBe(2)
++    expect(texts[0]).toMatch(/^skills-x — the thing · run CWD · /)
++    expect(texts[1]).toMatch(/^skills-x · tree plan · run W1 · /)
+   })
+ 
+-  test('F2 an Edit whose before-call stat fails is not own', { options: ON }, async ($, on) => {
++  test('F2 an Edit whose before-call stat fails: drawn, no label', { options: ON }, async ($, on) => {
+     world(on, new Map([plan, [MARKER, { text: MARKER_TEXT('run W1'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${MARKER}`]))
+     await $.tool.call({ tool: 'Edit', file_path: MARKER, old_string: 'run W1', new_string: 'run W2' } as any)
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run W2/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run W2/)
+   })
+ 
+   test('F4 a CR-only plan.md: title, recap and decision lines', { options: ON }, async ($, on) => {
+@@ -626,7 +680,7 @@ describe('review round 3 (W3-R4)', () => {
+     await write($, MARKER, 'bad\n')
+     const n0 = log.length
+     const text = await paneText($)
+-    expect(text).toBe(`shawarma: ${MARKER} is malformed`)
++    expect(text).toBe(`shawarma: ${TICKET}: malformed marker (${MARKER})`)
+     expect(fsCalls(log, n0)).toEqual([])
+   })
+ 
+@@ -637,23 +691,23 @@ describe('review round 3 (W3-R4)', () => {
+     expect(await bandText($)).toMatch(/plan dir not found/)
+     files.set(`${DIR}/notes.txt`, { text: '', mtimeMs: 0 })
+     await clock.advance(15_000)
+-    expect(await bandText($)).toBe(`2026-10-16-skills-x-thing · run W1 · ${SINCE(1)} · 0 decisions`)
++    expect(await bandText($)).toBe(`skills-x · 2026-10-16-skills-x-thing · run W1 · ${SINCE(1)} · 0 decisions`)
+   })
+ 
+-  test('F1 a failed Edit of a missing marker, cwd marker, plan dir missing: at most 10 fs calls', { options: ON }, async ($, on) => {
++  test('F1 a failed Edit of a missing marker, cwd marker, plan dir missing: at most W + 3M fs calls', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }]]), ROOT, log)
+     const n0 = log.length
+-    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W0', new_string: 'run W1' } as any)
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-other`, old_string: 'run W0', new_string: 'run W1' } as any)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 1).toBe(true)
+   })
+ 
+-  test('F1 a failed Write of a new marker, cwd marker, plan dir missing: at most 10 fs calls', { options: ON }, async ($, on) => {
++  test('F1 a failed Write of a new marker, cwd marker, plan dir missing: at most W + 3M fs calls', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }]]), ROOT, log)
+     const n0 = log.length
+-    await write($, `${TREE}/.shawarma/active`, `${MARKER_TEXT('run W0')}#fail`)
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    await write($, `${TREE}/.shawarma/active-other`, `${MARKER_TEXT('run W0')}#fail`)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 1).toBe(true)
+   })
+ 
+   test('F3 a press on the row when the pane cannot open: nothing escapes', { options: ON }, async ($, on) => {
+@@ -664,68 +718,913 @@ describe('review round 3 (W3-R4)', () => {
+     await bandText($)
+     fail.add('open')
+     const n0 = log.length
+-    expect(await $.ui.press({ plugin: 'shawarma-companion', key: 'row' }).then(() => 'resolved', () => 'rejected')).toBe('resolved')
++    expect(await $.ui.press({ plugin: 'shawarma-companion', key: `row:${TICKET}` }).then(() => 'resolved', () => 'rejected')).toBe('resolved')
+     expect(log.slice(n0).filter(line => line.startsWith('open '))).toEqual(['open shawarma-companion'])
+     expect(await bandText($)).toMatch(/run W1/)
+   })
+ 
+-  test('D9 each check period: at most 6 fs calls, plan dir missing', { options: ON }, async ($, on) => {
++  test('D9 each check period: at most W + 2M fs calls, plan dir missing', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     const clock = world(on, new Map(), ROOT, log)
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     for (let period = 0; period < 3; period += 1) {
+       const n0 = log.length
+       await clock.advance(15_000)
+-      expect(fsCalls(log, n0).length <= 6).toBe(true)
++      expect(fsCalls(log, n0).length <= 2 + 2 * 1).toBe(true)
+     }
+   })
+ })
+ 
+ describe('review round 4 (W3-R5)', () => {
+   const TREE = `${ROOT}/.worktrees/w`
+-  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read) /.test(line))
++  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
+ 
+-  test('N1 a failed Edit of a missing marker, no brief yet: at most 10 fs calls', { options: ON }, async ($, on) => {
++  test('N1 a failed Edit of a missing marker, no brief yet: at most W + 3M fs calls', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }], decisions]), ROOT, log)
+     const n0 = log.length
+-    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W0', new_string: 'run W1' } as any)
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-other`, old_string: 'run W0', new_string: 'run W1' } as any)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 1).toBe(true)
+   })
+ 
+-  test('N1 a failed Write of a missing marker, no brief yet: at most 10 fs calls', { options: ON }, async ($, on) => {
++  test('N1 a failed Write of a missing marker, no brief yet: at most W + 3M fs calls', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }], decisions]), ROOT, log)
+     const n0 = log.length
+-    await write($, `${TREE}/.shawarma/active`, `${MARKER_TEXT('run W0')}#fail`)
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    await write($, `${TREE}/.shawarma/active-other`, `${MARKER_TEXT('run W0')}#fail`)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 1).toBe(true)
+   })
+ 
+-  test('N1 a failed Edit of a missing marker, plan dir with neither file: at most 10 fs calls', { options: ON }, async ($, on) => {
++  test('N1 a failed Edit of a missing marker, plan dir with neither file: at most W + 3M fs calls', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     world(on, new Map([[MARKER, { text: MARKER_TEXT('run A'), mtimeMs: STARTED + 5 }],
+       [`${DIR}/notes.txt`, { text: '', mtimeMs: 0 }]]), ROOT, log)
+     const n0 = log.length
+-    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active`, old_string: 'run W0', new_string: 'run W1' } as any)
+-    expect(fsCalls(log, n0).length <= 10).toBe(true)
++    await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-other`, old_string: 'run W0', new_string: 'run W1' } as any)
++    expect(fsCalls(log, n0).length <= 2 + 3 * 1).toBe(true)
+   })
+ 
+-  test('N2 an Edit of a missing marker that another writer creates inside the call: unconfirmed', { options: ON }, async ($, on) => {
++  test('N2 an Edit of a missing marker that another writer creates inside the call: drawn, no label', { options: ON }, async ($, on) => {
+     world(on, new Map([plan]))
+     await $.tool.call({ tool: 'Edit', file_path: MARKER, old_string: '#appear', new_string: 'x' } as any)
+-    expect(await bandText($)).toMatch(/^unconfirmed: skills-x — the thing · run OTHER/)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run OTHER/)
+   })
+ 
+-  test('N3 a failed Write, the file already holding its text: unconfirmed', { options: ON }, async ($, on) => {
++  test('N3 a failed Write, the file already holding its text: drawn, no label', { options: ON }, async ($, on) => {
+     const text = MARKER_TEXT('run W1 #fail')
+     world(on, new Map([plan, [MARKER, { text, mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${MARKER}`]))
+     await write($, MARKER, text)
+-    expect(await bandText($)).toMatch(/^unconfirmed: /)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run W1 #fail · /)
+   })
+ 
+-  test('a successful Write whose before-call stat fails is still own', { options: ON }, async ($, on) => {
++  test('a successful Write whose before-call stat fails: drawn, no label', { options: ON }, async ($, on) => {
+     world(on, new Map([plan, [MARKER, { text: MARKER_TEXT('run OLD'), mtimeMs: STARTED + 5 }]]), ROOT, [], new Set([`stat once ${MARKER}`]))
+     await write($, MARKER, MARKER_TEXT('run W1'))
+     expect(await bandText($)).toMatch(/^skills-x — the thing · run W1 · /)
+   })
+ })
++
++describe('v2tm per-ticket markers', () => {
++  const SIB = '/elsewhere/repo-t5b2'
++  const A = `${ROOT}/.worktrees/a`
++  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
++  const mountBand = ($: any, props: any = BAND) =>
++    $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props } as any)
++  const texts = async ($: any): Promise<string[]> => (await (await mountBand($)).findAll({ type: 'Text' })).map((one: any) => one.text as string)
++  const paneMd = async ($: any) => {
++    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
++      requestId: 'shawarma-companion', props: {} } as any)
++    return (await ui.find({ type: 'Markdown' }))?.props.text ?? (await ui.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
++  }
++  const planIn = (tree: string, slug: string, title: string, rows = 0): [string, File][] => [
++    [`${tree}/docs/plans/${slug}/plan.md`, { text: `# ${title}\n\n## 1. What\n\nrecap of ${title}\n`, mtimeMs: 0 }],
++    [`${tree}/docs/plans/${slug}/decisions.md`, { text: '2026-10-16 | Q1 RULING | a | b\n'.repeat(rows), mtimeMs: 0 }],
++  ]
++  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
++    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
++
++  test('the marker is .shawarma/active-<ticket>, the ticket from its name', { options: ON }, async ($, on) => {
++    world(on, new Map([plan, decisions, markerAt(ROOT, 'skills-x', MARKER_TEXT('run W3'), STARTED + 5)]))
++    await bash($, 'true')
++    expect(await bandText($)).toBe(`skills-x — the thing · run W3 · since 14:00 · 2 decisions`)
++  })
++
++  test('D4 the old .shawarma/active is not read', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    world(on, new Map([plan, [`${ROOT}/.shawarma/active`, { text: MARKER_TEXT('run W3'), mtimeMs: STARTED + 5 }]]), ROOT, log)
++    await bash($, 'true')
++    expect(await bandText($)).toBe(undefined)
++    expect(log.filter(line => line === `read ${ROOT}/.shawarma/active`)).toEqual([])
++  })
++
++  test('a name that is not active-<ticket> is no marker', { options: ON }, async ($, on) => {
++    world(on, new Map([plan, markerAt(ROOT, '', MARKER_TEXT('run W3'), STARTED + 5),
++      [`${ROOT}/.shawarma/.gitignore`, { text: '*\n', mtimeMs: STARTED + 5 }],
++      [`${ROOT}/.shawarma/active-dir/x`, { text: '', mtimeMs: STARTED + 5 }]]))
++    await bash($, 'true')
++    expect(await bandText($)).toBe(undefined)
++  })
++
++  test('D1 a trivial marker: <ticket> · trivial · since HH:MM, no plan file read', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    world(on, new Map([markerAt(ROOT, 'skills-t', 'skills-t\ntrivial\n', STARTED + 60_000)]), ROOT, log)
++    await bash($, 'true')
++    expect(await bandText($)).toBe('skills-t · trivial · since 14:01')
++    expect(log.filter(line => /^(list|read|stat|exists) .*docs/.test(line))).toEqual([])
++  })
++
++  test('D1 a trivial marker: the pane reads "Trivial run: no brief" with the ticket', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'skills-t', 'skills-t\ntrivial\n', STARTED + 60_000)]))
++    await bash($, 'true')
++    const text = await paneMd($)
++    expect(text).toMatch(/\*\*skills-t\*\* · trivial/)
++    expect(text).toMatch(/Trivial run: no brief/)
++  })
++
++  test('Q4 many markers: the own tree first, then newest first, one Text each', { options: ON }, async ($, on) => {
++    world(on, new Map([
++      ...planIn(ROOT, 'p-own', 'own-1 — mine'), ...planIn(A, 'p-a', 'a-1 — in a'), ...planIn(SIB, 'p-s', 's-1 — sibling'),
++      markerAt(ROOT, 'own-1', 'docs/plans/p-own\nplan 2\n', STARTED + 10),
++      markerAt(A, 'a-1', 'docs/plans/p-a\nrun W1\n', STARTED + 30),
++      markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)]), ROOT, [], new Set(), { trees: [ROOT, A, SIB] })
++    await bash($, 'true')
++    const all = await texts($)
++    expect(all.map(line => line.split(' — ')[0])).toEqual(['own-1', 'a-1', 's-1'])
++  })
++
++  test('Q4 a cwd inside a linked worktree: that tree is own', { options: ON }, async ($, on) => {
++    world(on, new Map([
++      ...planIn(ROOT, 'p-own', 'own-1 — main'), ...planIn(A, 'p-a', 'a-1 — in a'),
++      markerAt(ROOT, 'own-1', 'docs/plans/p-own\nplan 2\n', STARTED + 30),
++      markerAt(A, 'a-1', 'docs/plans/p-a\nrun W1\n', STARTED + 10)]), `${A}/sub`, [], new Set(), { trees: [ROOT, A] })
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' — ')[0])).toEqual(['a-1', 'own-1'])
++  })
++
++  test('Q4 two markers with the same mtime: ticket order', { options: ON }, async ($, on) => {
++    world(on, new Map([
++      markerAt(WT, 'zz', 'zz\ntrivial\n', STARTED + 10), markerAt(WT, 'aa', 'aa\ntrivial\n', STARTED + 10)]))
++    await bash($, 'true')
++    expect(await texts($)).toEqual(['aa · trivial · since 14:00', 'zz · trivial · since 14:00'])
++  })
++
++  test('Q4 one Button per row, keyed per ticket; a press opens the pane on that ticket, the header lists the others', { options: ON }, async ($, on) => {
++    world(on, new Map([
++      ...planIn(ROOT, 'p-own', 'own-1 — mine'), ...planIn(SIB, 'p-s', 's-1 — sibling', 3),
++      markerAt(ROOT, 'own-1', 'docs/plans/p-own\nplan 2\n', STARTED + 10),
++      markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)]), ROOT, [], new Set(), { trees: [ROOT, SIB] })
++    await bash($, 'true')
++    const ui = await mountBand($)
++    expect((await ui.findAll({ type: 'Button' })).map((one: any) => one.key)).toEqual(['row:own-1', 'row:s-1'])
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:s-1' })
++    const text = await paneMd($)
++    expect(text).toMatch(/^\*\*s-1 — sibling\*\* · run W2\n\nOther tickets: own-1\n\n### Recap\n\nrecap of s-1 — sibling/)
++  })
++
++  test('Q4 /shawarma-companion opens the pane on the first row', { options: ON }, async ($, on) => {
++    world(on, new Map([
++      ...planIn(ROOT, 'p-own', 'own-1 — mine'), ...planIn(SIB, 'p-s', 's-1 — sibling'),
++      markerAt(ROOT, 'own-1', 'docs/plans/p-own\nplan 2\n', STARTED + 10),
++      markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)]), ROOT, [], new Set(), { trees: [ROOT, SIB] })
++    await bash($, 'true')
++    await mountBand($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:s-1' })
++    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
++      requestId: 'shawarma-companion', props: {} } as any)
++    expect((await pane.find({ type: 'Markdown' }))?.props.text).toMatch(/^\*\*s-1 — sibling\*\*/)
++    await $.command.run({ command: 'shawarma-companion', args: '' } as any)
++    expect((await pane.find({ type: 'Markdown' }))?.props.text).toMatch(/^\*\*own-1 — mine\*\* · plan 2\n\nOther tickets: s-1/)
++  })
++
++  test('Q2 a sibling-folder worktree is found by git worktree list', { options: ON }, async ($, on) => {
++    world(on, new Map([...planIn(SIB, 'p-s', 's-1 — sibling'), markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)]),
++      ROOT, [], new Set(), { trees: [ROOT, SIB] })
++    await bash($, 'true')
++    expect(await bandText($)).toMatch(/^s-1 — sibling · run W2/)
++  })
++
++  test('D3 prunable and bare records skipped; locked and detached read', { options: ON }, async ($, on) => {
++    const P = '/x/prunable', L = '/x/locked', T = '/x/detached'
++    world(on, new Map([markerAt(P, 'p', 'p\ntrivial\n', STARTED + 4), markerAt(L, 'l', 'l\ntrivial\n', STARTED + 3),
++      markerAt(T, 't', 't\ntrivial\n', STARTED + 2), markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 1)]), ROOT, [], new Set(), {
++      records: [[`worktree ${ROOT}`, 'bare'], [`worktree ${P}`, 'HEAD 1', 'branch refs/heads/p', 'prunable gitdir file points to non-existent location'],
++        [`worktree ${L}`, 'HEAD 2', 'branch refs/heads/l', 'locked on a USB stick'], [`worktree ${T}`, 'HEAD 3', 'detached']],
++    })
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['l', 't'])
++  })
++
++  test('Q2 git worktree list exits non-zero: the file-API fallback, main plus <main>/.worktrees/*, a sibling missed', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 3), markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2),
++      markerAt(SIB, 's', 's\ntrivial\n', STARTED + 1)]), ROOT, [], new Set(), { trees: [ROOT, A, SIB], worktree: { exitCode: 129, stdout: '' } })
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['m', 'a'])
++  })
++
++  test('Q2 git worktree list prints garbage: the fallback', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2)]), ROOT, [], new Set(),
++      { worktree: { exitCode: 0, stdout: 'warning: something\nnot a record\n' } })
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['a'])
++  })
++
++  // Q2 fallback by the file API: no process at all.
++  const NOPROC: Git = { worktree: 'reject', revparse: 'reject' }
++  const linkedGit = (tree: string, name: string, commondir = true): [string, File][] => [
++    [`${tree}/.git`, { text: `gitdir: ${ROOT}/.git/worktrees/${name}\n`, mtimeMs: 1 }],
++    ...(commondir ? [[`${ROOT}/.git/worktrees/${name}/commondir`, { text: '../..\n', mtimeMs: 1 }] as [string, File]] : []),
++  ]
++  const three = (): Files => new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 3), markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2),
++    markerAt(SIB, 's', 's\ntrivial\n', STARTED + 2), ...linkedGit(A, 'a'), ...linkedGit(SIB, 's')])
++
++  test('Q2 process.run rejects for every command, cwd in main: main and .worktrees/* drawn, the sibling not (known limit)', { options: ON }, async ($, on) => {
++    world(on, three(), ROOT, [], new Set(), NOPROC)
++    const out: any = await bash($, 'true')
++    expect(out?.result?.text).toBe('ok')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['m', 'a'])
++  })
++
++  test('Q2 process.run rejects, cwd deep in a linked worktree under .worktrees: that tree first, then main', { options: ON }, async ($, on) => {
++    world(on, three(), `${A}/x/y`, [], new Set(), NOPROC)
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['a', 'm'])
++  })
++
++  test('Q2 process.run rejects, a linked worktree with no commondir file: gitdir/../.. is the common dir', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 3), markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2),
++      ...linkedGit(A, 'a', false)]), A, [], new Set(), NOPROC)
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['a', 'm'])
++  })
++
++  test('Q2 process.run rejects, cwd in a sibling worktree: its own tree, main and .worktrees/*, not other siblings', { options: ON }, async ($, on) => {
++    const OTHER = '/elsewhere/repo-wb64'
++    world(on, new Map([...three(), markerAt(OTHER, 'o', 'o\ntrivial\n', STARTED + 9), ...linkedGit(OTHER, 'o')]), SIB, [], new Set(), NOPROC)
++    await bash($, 'true')
++    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['s', 'm', 'a'])
++  })
++
++  test('Q2 process.run rejects, no .git up to /: nothing drawn', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt('/x', 'm', 'm\ntrivial\n', STARTED + 3)]), '/x/y', [], new Set(), { ...NOPROC, noRepo: true })
++    await bash($, 'true')
++    expect(await bandText($)).toBe(undefined)
++  })
++
++  test('Q2 the walk: one stat per level, kept per cwd across calls and turns', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    world(on, three(), `${ROOT}/a/b/c/d`, log, new Set(), NOPROC)
++    const walkCalls = (from: number) => log.slice(from).filter(line => /^(stat|read) .*(\.git|commondir)/.test(line))
++    await bash($, 'true')
++    expect(walkCalls(0)).toEqual(['/repo/a/b/c/d', '/repo/a/b/c', '/repo/a/b', '/repo/a', '/repo'].map(d => `stat ${d}/.git`))
++    const n0 = log.length
++    await bash($, 'true')
++    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
++    await bash($, 'true')
++    expect(walkCalls(n0)).toEqual([])
++  })
++
++  test('parseGitdir, resolvePath, parentOf', async () => {
++    expect(parseGitdir('gitdir: /repo/.git/worktrees/a\n', '/repo/.worktrees/a')).toBe('/repo/.git/worktrees/a')
++    expect(parseGitdir('gitdir: ../../.git/worktrees/a\n', '/repo/.worktrees/a')).toBe('/repo/.git/worktrees/a')
++    expect(parseGitdir('nonsense\n', '/r')).toBe(null)
++    expect(resolvePath('/repo/.git/worktrees/a', '../..')).toBe('/repo/.git')
++    expect(resolvePath('/x', '/abs/./y/')).toBe('/abs/y')
++    expect([parentOf('/a/b'), parentOf('/a'), parentOf('/')]).toEqual(['/a', '/', '/'])
++  })
++
++  test('D6 .shawarma missing, a file, or unreadable in one tree: the others still draw', { options: ON }, async ($, on) => {
++    const F = '/x/file', U = '/x/unreadable', N = '/x/none'
++    world(on, new Map([[`${F}/.shawarma`, { text: 'x', mtimeMs: 1 }], markerAt(U, 'u', 'u\ntrivial\n', STARTED + 9),
++      markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 2)]), ROOT, [], new Set([`list ${U}/.shawarma`]), { trees: [ROOT, F, U, N] })
++    await bash($, 'true')
++    expect(await texts($)).toEqual(['m · trivial · since 14:00'])
++  })
++
++  test('malformed markers: 1 line, 3 lines, empty, bad step, each its own row', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'one', 'd\n', STARTED + 4), markerAt(ROOT, 'three', 'd\nrun W1\nx\n', STARTED + 3),
++      markerAt(ROOT, 'empty', '', STARTED + 2), markerAt(ROOT, 'bad', 'd\nwalk W1\n', STARTED + 1)]))
++    await bash($, 'true')
++    expect(await texts($)).toEqual(['one', 'three', 'empty', 'bad'].map(t => `${t === 'bad' ? 'earlier session: ' : ''}shawarma: ${t}: malformed marker`))
++  })
++
++  test('parseMarker: trivial, and a plan dir that says trivial is not', async () => {
++    expect(parseMarker('skills-t\ntrivial\n', ROOT)).toEqual({ kind: 'trivial', step: 'trivial' })
++    expect(parseMarker('\ntrivial\n', ROOT)).toBe(null)
++    expect(parseMarker('skills-t\ntrivial extra\n', ROOT)).toBe(null)
++    expect(parseMarker('skills-t\nTRIVIAL\n', ROOT)).toBe(null)
++  })
++
++  test('parseWorktrees: records, flags, garbage', async () => {
++    expect(parseWorktrees(`worktree /a\0HEAD 1\0branch b\0\0worktree /b\0detached\0locked\0\0worktree /c\0prunable x\0\0`)).toEqual([
++      { path: '/a', isBare: false, isPrunable: false, isLocked: false, isDetached: false },
++      { path: '/b', isBare: false, isPrunable: false, isLocked: true, isDetached: true },
++      { path: '/c', isBare: false, isPrunable: true, isLocked: false, isDetached: false }])
++    expect(parseWorktrees('')).toBe(null)
++    expect(parseWorktrees('fatal: not a git repository\n')).toBe(null)
++  })
++
++  test('order: own first, newest first, ticket on a tie', async () => {
++    const r = (ticket: string, tree: string, since: number) => ({ ticket, tree, since })
++    expect(order([r('b', '/s', 5), r('a', '/s', 5), r('o', '/own', 1), r('c', '/s', 9)], '/own').map(x => x.ticket))
++      .toEqual(['o', 'c', 'a', 'b'])
++  })
++
++  test('D5 a marker as old as the session start reads earlier session; one newer than start + 1 ms reads current (F3)', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'eq', 'eq\ntrivial\n', STARTED), markerAt(ROOT, 'new', 'new\ntrivial\n', STARTED + 2)]))
++    await bash($, 'true')
++    const ui = await mountBand($)
++    const found = await ui.findAll({ type: 'Text' })
++    expect(found.map((one: any) => [one.text, one.props.dimColor])).toEqual([
++      ['new · trivial · since 14:00', false], ['earlier session: eq · trivial · since 14:00', true]])
++  })
++
++  test('D2 a leftover marker stays, dimmed (a day old: stale, Q5), beside a live one', { options: ON }, async ($, on) => {
++    world(on, new Map([...planIn(ROOT, 'p-old', 'old-1 — crashed'), ...planIn(ROOT, 'p-new', 'new-1 — live'),
++      markerAt(ROOT, 'old-1', 'docs/plans/p-old\nrun W2\n', STARTED - 86_400_000),
++      markerAt(ROOT, 'new-1', 'docs/plans/p-new\nplan 1\n', STARTED + 5)]))
++    await bash($, 'true')
++    expect(await texts($)).toEqual(['new-1 — live · plan 1 · since 14:00 · 0 decisions',
++      'stale: old-1 — crashed · run W2 · since 10-15 14:00 · 0 decisions'])
++  })
++
++  test('a title not naming its ticket gets the ticket in front (Q1)', { options: ON }, async ($, on) => {
++    world(on, new Map([...planIn(ROOT, 'p', 'Untitled thing'), markerAt(ROOT, 'skills-q', 'docs/plans/p\nplan 1\n', STARTED + 5)]))
++    await bash($, 'true')
++    expect(await bandText($)).toMatch(/^skills-q · Untitled thing · plan 1/)
++  })
++
++  test('plan dir missing in one row only', { options: ON }, async ($, on) => {
++    world(on, new Map([...planIn(ROOT, 'p', 'ok-1 — here'), markerAt(ROOT, 'ok-1', 'docs/plans/p\nplan 1\n', STARTED + 5),
++      markerAt(ROOT, 'gone-1', 'docs/plans/gone\nplan 1\n', STARTED + 4)]))
++    await bash($, 'true')
++    expect(await texts($)).toEqual(['ok-1 — here · plan 1 · since 14:00 · 0 decisions',
++      `gone-1 · gone · plan 1 · since 14:00 · 0 decisions · plan dir not found: ${ROOT}/docs/plans/gone`])
++  })
++
++  // Q3 at W=3 worktrees, M=2 markers.
++  const W3M2 = (): Files => new Map([
++    ...planIn(ROOT, '2026-10-16-skills-x-thing', 'own-1 — mine', 2), ...planIn(SIB, 'p-s', 's-1 — sibling', 1),
++    markerAt(ROOT, 'own-1', MARKER_TEXT('plan 2'), STARTED + 10),
++    markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)])
++
++  test('Q3 W=3, M=2: per tool call at most W + 3M fs calls and one git worktree list per turn', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const files = W3M2()
++    world(on, files, ROOT, log, new Set(), { trees: [ROOT, A, SIB] })
++    await $.session.start({ source: 'startup', cwd: ROOT } as any)
++    const runs = () => log.filter(line => line.startsWith('run git worktree list --porcelain')).length
++    expect(runs()).toBe(1)
++    for (const command of ['true', 'echo plan 3 > .shawarma/active-own-1', 'echo run W3 > .shawarma/active-own-1', 'true']) {
++      const n0 = log.length
++      await bash($, command)
++      expect(fsCalls(log, n0).length <= 3 + 3 * 2).toBe(true)
++    }
++    expect(runs()).toBe(1)
++    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
++    expect(runs()).toBe(2)
++    await bash($, 'true')
++    expect(runs()).toBe(2)
++  })
++
++  test('Q3 W=3, M=2: per check at most W + 2M fs calls, no read, no process', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const clock = world(on, W3M2(), ROOT, log, new Set(), { trees: [ROOT, A, SIB] })
++    await bash($, 'true')
++    expect((await texts($)).length).toBe(2)
++    for (let period = 0; period < 4; period += 1) {
++      const n0 = log.length
++      await clock.advance(15_000)
++      const calls = log.slice(n0)
++      expect(fsCalls(log, n0).length <= 3 + 2 * 2).toBe(true)
++      expect(calls.filter(line => /^(read|run) /.test(line))).toEqual([])
++    }
++  })
++
++  test('Q3 a sibling marker rewritten while idle: the row follows within 15 s, one marker read', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const files = W3M2()
++    const clock = world(on, files, ROOT, log, new Set(), { trees: [ROOT, A, SIB] })
++    await bash($, 'true')
++    files.set(`${SIB}/.shawarma/active-s-1`, { text: 'docs/plans/p-s\nrun W9\n', mtimeMs: STARTED + 130_000 })
++    const n0 = log.length
++    await clock.advance(15_000)
++    expect((await texts($))[1]).toMatch(/^s-1 — sibling · run W9/)
++    expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([`read ${ROOT}/.shawarma/active-own-1`, `read ${SIB}/.shawarma/active-s-1`])
++  })
++})
++
++describe('lane 3a fixes', () => {
++  const SIB = '/elsewhere/repo-t5b2'
++  const NOPROC: Git = { worktree: 'reject', revparse: 'reject' }
++  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
++    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
++  const mountBand = ($: any, props: any = BAND) =>
++    $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props } as any)
++  const found = async ($: any, props: any = BAND): Promise<{ text: string; dim: boolean }[]> => (await (await mountBand($, props)).findAll({ type: 'Text' }))
++    .map((one: any) => ({ text: one.text as string, dim: one.props.dimColor as boolean }))
++  const names = async ($: any) => (await found($)).map(one => one.text.replace(/^earlier session: /, '').split(' ')[0])
++
++  test('F1 a worktree path holding "\\n\\nworktree /X" injects no tree (-z)', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9), markerAt('/X', 'x', 'x\ntrivial\n', STARTED + 9)]), ROOT, log, new Set(), {
++      records: [[`worktree ${ROOT}`, 'HEAD 1', 'branch refs/heads/main'], [`worktree ${ROOT}/a\n\nworktree /X`, 'HEAD 2', 'detached']] })
++    await bash($, 'true')
++    expect(await names($)).toEqual(['m'])
++    expect(log.filter(line => line === 'list /X/.shawarma')).toEqual([])
++  })
++
++  test('F1 a truncated worktree list is a failed list: the fallback', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9), markerAt(SIB, 's', 's\ntrivial\n', STARTED + 8)]), ROOT, [], new Set(), {
++      worktree: { exitCode: 0, stdout: z => render(recordsOf([ROOT, SIB]), z), truncated: true } })
++    await bash($, 'true')
++    expect(await names($)).toEqual(['m'])
++  })
++
++  test('F1 parseWorktrees reads NUL-framed records, a "/" root kept as "/"', async () => {
++    expect(parseWorktrees('worktree /a\nb\0HEAD 1\0locked held\nprunable\0\0worktree /\0HEAD 2\0detached\0\0')).toEqual([
++      { path: '/a\nb', isBare: false, isPrunable: false, isLocked: true, isDetached: false },
++      { path: '/', isBare: false, isPrunable: false, isLocked: false, isDetached: true }])
++    expect(parseWorktrees('worktree /a\nHEAD 1\n\nworktree /b\nHEAD 2\n')).toBe(null)
++  })
++
++  test('F1 a worktree at "/": its .shawarma is /.shawarma', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    world(on, new Map([markerAt('', 'r', 'r\ntrivial\n', STARTED + 9)]), '/', log, new Set(), { records: [['worktree /', 'HEAD 1', 'detached']] })
++    await bash($, 'true')
++    expect(await names($)).toEqual(['r'])
++    expect(log.filter(line => line.startsWith('list ') && line.includes('.shawarma'))).toEqual(['list /.shawarma'])
++  })
++
++  test('F3 fractional mtimes against a whole-ms start: current only past start + 1 ms', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'a', 'a\ntrivial\n', STARTED + 0.5), markerAt(ROOT, 'b', 'b\ntrivial\n', STARTED + 1),
++      markerAt(ROOT, 'c', 'c\ntrivial\n', STARTED + 1.25), markerAt(ROOT, 'd', 'd\ntrivial\n', STARTED - 0.5)]))
++    await bash($, 'true')
++    expect((await found($)).map(one => [one.text.replace(/ · since.*/, ''), one.dim])).toEqual([
++      ['c · trivial', false], ['earlier session: b · trivial', true], ['earlier session: a · trivial', true],
++      ['earlier session: d · trivial', true]])
++  })
++
++  test('F5 clean blanks bidi controls', async () => {
++    expect(clean('a\u061Cb\u200Ec\u200Fd\u202Ae\u202Bf\u202Cg\u202Dh\u202Ei\u2066j\u2067k\u2068l\u2069m'))
++      .toBe('a b c d e f g h i j k l m')
++    expect(clean('a\u202Eb\nc', true)).toBe('a b\nc')
++  })
++
++  test('F5 a ticket holding U+202E draws no bidi control', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'ev\u202Eil', 'x\ntrivial\n', STARTED + 9)]))
++    await bash($, 'true')
++    const [row] = await found($)
++    expect(row?.text).toBe('ev il · trivial · since 14:00')
++  })
++
++  test('F8 a walk that failed once is tried again at the turn end', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, [], new Set([`stat once ${ROOT}/.git`]), NOPROC)
++    await bash($, 'true')
++    expect(await bandText($)).toBe(undefined)
++    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
++    expect(await names($)).toEqual(['m'])
++  })
++
++  test('F8 a walk that failed once is tried again at session start', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, [], new Set([`stat once ${ROOT}/.git`]), NOPROC)
++    await bash($, 'true')
++    await $.session.start({ source: 'startup', cwd: ROOT } as any)
++    expect(await names($)).toEqual(['m'])
++  })
++
++  test('F9 every process.run carries timeoutMs 2000', { options: ON }, async ($, on) => {
++    const inits: unknown[] = []
++    world(on, new Map(), ROOT, [], new Set(), { worktree: 'reject', inits })
++    await bash($, 'true')
++    expect(inits.length > 0).toBe(true)
++    expect(inits.every((init: any) => init?.timeoutMs === 2000)).toBe(true)
++  })
++
++  test('F9 git never answers: the tool call answers by 2 s on the clock, from the fallback', { options: ON }, async ($, on) => {
++    const clock = world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, [], new Set(), { worktree: 'hang' })
++    let out: any = 'pending'
++    void bash($, 'true').then((r: unknown) => { out = r })
++    await clock.advance(1_999)
++    expect(out).toBe('pending')
++    await clock.advance(1)
++    expect(out?.result?.text).toBe('ok')
++    expect(await names($)).toEqual(['m'])
++  })
++
++  const LONG = `docs/plans/${'x'.repeat(150)}`
++  for (const columns of [120, 40]) {
++    test(`F10 plan dir missing, long path, ${columns} columns: the row keeps its ticket`, { options: ON }, async ($, on) => {
++      world(on, new Map([markerAt(ROOT, 'skills-long', `${LONG}\nplan 1\n`, STARTED + 9)]))
++      await bash($, 'true')
++      const [row] = await found($, { ...BAND, bodyColumns: columns })
++      expect(row!.text.startsWith('skills-long')).toBe(true)
++      expect(row!.text.length <= columns).toBe(true)
++    })
++
++    test(`F10 malformed marker, ${columns} columns: shawarma: <ticket>: malformed marker`, { options: ON }, async ($, on) => {
++      world(on, new Map([markerAt(ROOT, 'skills-mal', 'one line only\n', STARTED + 9)]))
++      await bash($, 'true')
++      const [row] = await found($, { ...BAND, bodyColumns: columns })
++      expect(row!.text).toBe('shawarma: skills-mal: malformed marker')
++    })
++  }
++
++  test('F10 rowText: the title and problem are cut before the ticket', async () => {
++    const row = { ticket: 'skills-x', title: `skills-x — ${'long '.repeat(30)}`, step: 'run W1', since: 0, isEarlier: true,
++      decisions: 3, problem: `plan dir not found: /${'p'.repeat(200)}` }
++    for (const columns of [120, 60, 40, 30]) {
++      const text = rowText(row, columns)
++      expect(text.length <= columns).toBe(true)
++      expect(text.startsWith('earlier session: skills-x')).toBe(true)
++    }
++  })
++
++  test('the ticket prefix needs the exact ticket at the title start', { options: ON }, async ($, on) => {
++    world(on, new Map([[`${ROOT}/docs/plans/p/plan.md`, { text: '# skills-x2 — other\n', mtimeMs: 0 }],
++      markerAt(ROOT, 'skills-x', 'docs/plans/p\nplan 1\n', STARTED + 9)]))
++    await bash($, 'true')
++    expect(await bandText($)).toMatch(/^skills-x · skills-x2 — other · plan 1/)
++  })
++
++  test('a pane whose chosen ticket is gone says so, not another row', { options: ON }, async ($, on) => {
++    const files = new Map([markerAt(ROOT, 'own-1', 'own-1\ntrivial\n', STARTED + 9), markerAt(WT, 's-1', 's-1\ntrivial\n', STARTED + 8),
++      [`${WT}/.shawarma/.gitignore`, { text: '*\n', mtimeMs: 1 }] as [string, File]])
++    world(on, files)
++    await bash($, 'true')
++    await mountBand($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:s-1' })
++    files.delete(`${WT}/.shawarma/active-s-1`)
++    await bash($, 'true')
++    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
++      requestId: 'shawarma-companion', props: {} } as any)
++    const text = (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
++    expect(text).toMatch(/^s-1: no longer active/)
++  })
++})
++
++describe('Q5 liveness (stale)', () => {
++  const H12 = 12 * 3600 * 1000
++  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
++    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
++  const found = async ($: any): Promise<{ text: string; dim: boolean }[]> =>
++    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND } as any))
++      .findAll({ type: 'Text' })).map((one: any) => ({ text: one.text as string, dim: one.props.dimColor as boolean }))
++
++  test('Q5 a run that crashed after the start reads current until 12 h, then stale on the check, no file change', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const at = STARTED + 60_000
++    const clock = world(on, new Map([markerAt(WT, 'dead', 'dead\ntrivial\n', at)]), ROOT, log, new Set(), { now: at + H12 - 20_000 })
++    await bash($, 'true')
++    expect(await found($)).toEqual([{ text: 'dead · trivial · since 10-16 14:01', dim: false }])
++    await clock.advance(15_000)
++    expect((await found($))[0]?.dim).toBe(false)
++    const n0 = log.length
++    await clock.advance(15_000)
++    expect(await found($)).toEqual([{ text: 'stale: dead · trivial · since 10-16 14:01', dim: true }])
++    expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([])
++  })
++
++  test('Q5 dated 2 min in the future: stale; 30 s in the future: current', { options: ON }, async ($, on) => {
++    const now = STARTED + 120_000
++    world(on, new Map([markerAt(ROOT, 'fut', 'fut\ntrivial\n', now + 120_000), markerAt(ROOT, 'near', 'near\ntrivial\n', now + 30_000)]))
++    await bash($, 'true')
++    expect((await found($)).map(one => [one.text.replace(/ · since.*/, ''), one.dim])).toEqual([
++      ['stale: fut · trivial', true], ['near · trivial', false]])
++  })
++
++  test('Q5 both earlier and stale: stale wins', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'old', 'old\ntrivial\n', STARTED - 13 * 3600 * 1000), markerAt(ROOT, 'prev', 'prev\ntrivial\n', STARTED - 60_000)]))
++    await bash($, 'true')
++    expect((await found($)).map(one => [one.text.replace(/ · since.*/, ''), one.dim])).toEqual([
++      ['earlier session: prev · trivial', true], ['stale: old · trivial', true]])
++  })
++})
++
++describe('Q6 cost bounds and caps', () => {
++  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
++  const setup = (W: number, Mk: number) => {
++    const trees = Array.from({ length: W }, (_, i) => (i === 0 ? ROOT : `/wt/t${i}`))
++    const files: Files = new Map()
++    const markers: string[] = []
++    for (let m = 0; m < Mk; m += 1) {
++      const tree = trees[m % W]!
++      files.set(`${tree}/docs/plans/p${m}/plan.md`, { text: `# k${m} — t\n`, mtimeMs: 1 })
++      files.set(`${tree}/docs/plans/p${m}/decisions.md`, { text: '2026-10-16 | Q1 | a | b\n', mtimeMs: 1 })
++      files.set(`${tree}/.shawarma/active-k${m}`, { text: `docs/plans/p${m}\nrun W1\n`, mtimeMs: STARTED + 100 + m })
++      markers.push(`${tree}/.shawarma/active-k${m}`)
++    }
++    return { trees, files, markers }
++  }
++  const texts = async ($: any): Promise<{ text: string; dim: boolean }[]> =>
++    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt',
++      props: { ...BAND, maxRows: 40, scroll: { offset: 0, bodyRows: 40 } } } as any))
++      .findAll({ type: 'Text' })).map((one: any) => ({ text: one.text as string, dim: one.props.dimColor as boolean }))
++
++  for (const [W, Mk] of [[3, 2], [6, 4]] as const) {
++    test(`Q6 W=${W}, M=${Mk}: cold (session start; every plan file changed) <= W + 4M, steady <= W + 2M, check <= W + M`, { options: ON }, async ($, on) => {
++      const log: string[] = []
++      const { trees, files } = setup(W, Mk)
++      const clock = world(on, files, ROOT, log, new Set(), { trees })
++      let n0 = log.length
++      await $.session.start({ source: 'startup', cwd: ROOT } as any)
++      expect(fsCalls(log, n0).length <= W + 4 * Mk).toBe(true)
++      expect((await texts($)).length).toBe(Mk)
++      for (const [path, file] of [...files]) if (/(plan|decisions)\.md$/.test(path)) files.set(path, { ...file, mtimeMs: STARTED + 5_000 })
++      n0 = log.length
++      await bash($, 'true')
++      expect(fsCalls(log, n0).length <= W + 4 * Mk).toBe(true)
++      expect(fsCalls(log, n0).filter(line => line.startsWith('read ')).length).toBe(3 * Mk)
++      n0 = log.length
++      await bash($, 'true')
++      expect(fsCalls(log, n0).length <= W + 2 * Mk).toBe(true)
++      for (let period = 0; period < 3; period += 1) {
++        n0 = log.length
++        await clock.advance(15_000)
++        expect(fsCalls(log, n0).length <= W + Mk).toBe(true)
++      }
++    })
++  }
++
++  test('Q6 50 worktrees: all scanned, no more-row', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const { trees, files } = setup(50, 1)
++    world(on, files, ROOT, log, new Set(), { trees })
++    await bash($, 'true')
++    expect(log.filter(line => /^list .*\.shawarma$/.test(line)).length).toBe(50)
++    expect((await texts($)).map(one => one.text).filter(text => text.includes('more not shown'))).toEqual([])
++  })
++
++  test('Q6 51 worktrees (FAIL size): 50 scanned, the own tree among them, one dimmed "1 worktree not scanned" (N3)', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const { trees, files } = setup(51, 1)
++    files.set(`${trees[50]}/.shawarma/active-last`, { text: 'last\ntrivial\n', mtimeMs: STARTED + 900 })
++    world(on, files, trees[50]!, log, new Set(), { trees })
++    await bash($, 'true')
++    expect(log.filter(line => /^list .*\.shawarma$/.test(line)).length).toBe(50)
++    const rows = await texts($)
++    expect(rows[0]?.text).toMatch(/^last · trivial/)
++    expect(rows.at(-1)).toEqual({ text: '1 worktree not scanned', dim: true })
++  })
++
++  test('Q6 20 markers: 20 rows, no more-row', { options: ON }, async ($, on) => {
++    const { trees, files } = setup(2, 20)
++    world(on, files, ROOT, [], new Set(), { trees })
++    await bash($, 'true')
++    const rows = await texts($)
++    expect(rows.length).toBe(20)
++    expect(rows.filter(one => one.text.includes('more not shown'))).toEqual([])
++  })
++
++  test('Q6 21 markers (FAIL size): 20 read and drawn, the oldest own-tree marker kept, "+1 more not shown", no read for the 21st', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const SIB = '/wt/t1'
++    const files: Files = new Map([[`${ROOT}/.shawarma/active-k0`, { text: 'k0\ntrivial\n', mtimeMs: STARTED + 2 }]])
++    for (let m = 1; m <= 20; m += 1) files.set(`${SIB}/.shawarma/active-k${m}`, { text: `k${m}\ntrivial\n`, mtimeMs: STARTED + 100 + m })
++    world(on, files, ROOT, log, new Set(), { trees: [ROOT, SIB] })
++    await bash($, 'true')
++    const rows = await texts($)
++    expect(rows.length).toBe(21)
++    expect(rows[0]?.text).toMatch(/^k0 · trivial/)
++    expect(rows.slice(1, 20).every(one => !one.text.startsWith('k1 '))).toBe(true)
++    expect(rows[20]).toEqual({ text: '+1 more not shown', dim: true })
++    expect(log.filter(line => /^read .*\.shawarma\/active-/.test(line)).length).toBe(20)
++    expect(fsCalls(log, 0).length <= 2 + 4 * 20).toBe(true)
++  })
++})
++
++describe('lane 3a round 2 fixes', () => {
++  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
++    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
++  const BIG = { ...BAND, maxRows: 40, scroll: { offset: 0, bodyRows: 40 } }
++  const band = async ($: any): Promise<string[]> =>
++    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
++      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
++  const mountPane = ($: any) => $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
++    requestId: 'shawarma-companion', props: {} } as any)
++  const paneOf = async (pane: any): Promise<string> =>
++    (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
++  const fsCalls = (log: string[], from: number) => log.slice(from).filter(line => /^(exists|stat|read|list) /.test(line))
++
++  test('N1 a chosen ticket pushed past the 20-row limit: "not shown", not "no longer active"', { options: ON }, async ($, on) => {
++    const files: Files = new Map()
++    for (let m = 0; m < 25; m += 1) files.set(`${ROOT}/.shawarma/active-k${m}`, { text: 'x\ntrivial\n', mtimeMs: STARTED + 100 + m })
++    world(on, files, ROOT, [], new Set(), { trees: [ROOT] })
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:k5' })
++    for (let m = 25; m < 30; m += 1) files.set(`${ROOT}/.shawarma/active-k${m}`, { text: 'x\ntrivial\n', mtimeMs: STARTED + 100 + m })
++    await bash($, 'true')
++    const pane = await mountPane($)
++    expect(await paneOf(pane)).toBe('k5: not shown (past the 20-row limit)')
++    files.delete(`${ROOT}/.shawarma/active-k5`)
++    await bash($, 'true')
++    expect(await paneOf(pane)).toBe('k5: no longer active')
++  })
++
++  test('N2 a stale chosen row: the pane title carries "stale: ", the header labels the others', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(WT, 'dead', 'docs/p\nrun W2\n', STARTED + 60_000), markerAt(ROOT, 'old', 'old\ntrivial\n', STARTED - 5),
++      [`${WT}/docs/p/plan.md`, { text: '# dead — x\n\n## 1. What\n\nr\n', mtimeMs: 1 }]]), ROOT, [], new Set(), { now: STARTED + 13 * 3600 * 1000 })
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:dead' })
++    expect(await paneOf(await mountPane($))).toMatch(/^stale: \*\*dead — x\*\* · run W2\n\nOther tickets: old \(stale\)\n\n### Recap/)
++  })
++
++  test('N2 an earlier-session chosen row: labelled in the pane; a current other listed bare', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'old', 'old\ntrivial\n', STARTED - 5), markerAt(WT, 'live', 'live\ntrivial\n', STARTED + 100)]))
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:old' })
++    expect(await paneOf(await mountPane($))).toMatch(/^earlier session: \*\*old\*\* · trivial\n\nOther tickets: live\n\nTrivial run: no brief/)
++  })
++
++  const treesN = (n: number) => Array.from({ length: n }, (_, i) => (i === 0 ? ROOT : `/t/w${String(i).padStart(3, '0')}`))
++
++  test('N3 the only marker in an unscanned 51st tree: one dimmed "1 worktree not scanned" row', { options: ON }, async ($, on) => {
++    const trees = treesN(51)
++    world(on, new Map([markerAt(trees[50]!, 'lost', 'x\ntrivial\n', STARTED + 5)]), ROOT, [], new Set(), { trees })
++    await bash($, 'true')
++    expect(await band($)).toEqual(['1 worktree not scanned'])
++  })
++
++  test('N3 markers in tree 1 and 51: the row counts no unlisted marker', { options: ON }, async ($, on) => {
++    const trees = treesN(51)
++    world(on, new Map([markerAt(ROOT, 'one', 'x\ntrivial\n', STARTED + 5), markerAt(trees[50]!, 'a', 'x\ntrivial\n', STARTED + 6),
++      markerAt(trees[50]!, 'b', 'x\ntrivial\n', STARTED + 7)]), ROOT, [], new Set(), { trees })
++    await bash($, 'true')
++    expect(await band($)).toEqual(['one · trivial · since 14:00', '1 worktree not scanned'])
++  })
++
++  test('N3 52 trees, none past 50 holding markers: "2 worktrees not scanned", no "+n"', { options: ON }, async ($, on) => {
++    const trees = treesN(52)
++    world(on, new Map([markerAt(ROOT, 'one', 'x\ntrivial\n', STARTED + 5)]), ROOT, [], new Set(), { trees })
++    await bash($, 'true')
++    expect(await band($)).toEqual(['one · trivial · since 14:00', '2 worktrees not scanned'])
++  })
++
++  test('N3 both caps: "+1 more not shown · 1 worktree not scanned"', { options: ON }, async ($, on) => {
++    const trees = treesN(51)
++    const files: Files = new Map()
++    for (let m = 0; m < 21; m += 1) files.set(`${ROOT}/.shawarma/active-k${m}`, { text: 'x\ntrivial\n', mtimeMs: STARTED + 100 + m })
++    world(on, files, ROOT, [], new Set(), { trees })
++    await bash($, 'true')
++    const rows = await band($)
++    expect(rows.length).toBe(21)
++    expect(rows[20]).toBe('+1 more not shown · 1 worktree not scanned')
++  })
++
++  test('N4 a hidden marker touched each period: no refresh, each check <= W + M', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const files: Files = new Map()
++    for (let m = 0; m < 25; m += 1) {
++      files.set(`${ROOT}/.shawarma/active-k${m}`, { text: `docs/p${m}\nrun W1\n`, mtimeMs: STARTED + 100 + m })
++      files.set(`${ROOT}/docs/p${m}/plan.md`, { text: `# k${m} — t\n`, mtimeMs: 1 })
++      files.set(`${ROOT}/docs/p${m}/decisions.md`, { text: '2026-11-02 | Q | a | b\n', mtimeMs: 1 })
++    }
++    const clock = world(on, files, ROOT, log, new Set(), { trees: [ROOT] })
++    await bash($, 'true')
++    const ops: number[] = []
++    for (let p = 0; p < 4; p += 1) {
++      files.set(`${ROOT}/.shawarma/active-k0`, { ...files.get(`${ROOT}/.shawarma/active-k0`)!, mtimeMs: STARTED + 50 - p })
++      const n0 = log.length
++      await clock.advance(15_000)
++      ops.push(fsCalls(log, n0).length)
++    }
++    expect(ops).toEqual([21, 21, 21, 21])
++  })
++
++  test('N4 a hidden marker rewritten to the newest: drawn within 15 s', { options: ON }, async ($, on) => {
++    const files: Files = new Map()
++    for (let m = 0; m < 25; m += 1) files.set(`${ROOT}/.shawarma/active-k${m}`, { text: 'x\ntrivial\n', mtimeMs: STARTED + 100 + m })
++    const clock = world(on, files, ROOT, [], new Set(), { trees: [ROOT] })
++    await bash($, 'true')
++    files.set(`${ROOT}/.shawarma/active-k0`, { text: 'x\ntrivial\n', mtimeMs: STARTED + 125_000 })
++    await clock.advance(15_000)
++    expect((await band($))[0]).toMatch(/^k0 · trivial/)
++  })
++
++  test('N6 clean blanks U+2028 and U+2029', async () => {
++    expect(clean('a\u2028b\u2029c')).toBe('a b c')
++    expect(clean('a\u2028b\nc', true)).toBe('a b\nc')
++  })
++})
++
++describe('lane 3a round 3 fixes', () => {
++  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
++    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
++  const BIG = { ...BAND, maxRows: 40, scroll: { offset: 0, bodyRows: 40 } }
++  const band = async ($: any): Promise<string[]> =>
++    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
++      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
++  const paneText = async ($: any): Promise<string> => {
++    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
++      requestId: 'shawarma-companion', props: {} } as any)
++    return (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
++  }
++  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
++
++  test('R3-1 the chosen marker\'s tree moved past 50 worktrees: "not shown (not in the last scan)"', { options: ON }, async ($, on) => {
++    const many = Array.from({ length: 60 }, (_, i) => `/t/w${String(i).padStart(3, '0')}`)
++    const X = many[5]!
++    const trees = [ROOT, ...many]
++    world(on, new Map([markerAt(X, 'x', 'x\ntrivial\n', STARTED + 5), markerAt(ROOT, 'own', 'own\ntrivial\n', STARTED + 6)]), ROOT, [], new Set(), { trees })
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:x' })
++    trees.splice(trees.indexOf(X), 1)
++    trees.push(X)
++    await turnEnd($)
++    expect(await paneText($)).toBe('x: not shown (not in the last scan)')
++  })
++
++  test('R3-2 the chosen marker cannot be read: "could not be read"', { options: ON }, async ($, on) => {
++    const fail = new Set<string>()
++    world(on, new Map([markerAt(ROOT, 'a', 'a\ntrivial\n', STARTED + 5), markerAt(ROOT, 'b', 'b\ntrivial\n', STARTED + 6)]), ROOT, [], fail, { trees: [ROOT] })
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:a' })
++    fail.add(`read ${ROOT}/.shawarma/active-a`)
++    await bash($, 'true')
++    expect(await paneText($)).toBe('a: could not be read')
++  })
++
++  test('R3-1 the chosen marker deleted, every tree scanned: "no longer active"', { options: ON }, async ($, on) => {
++    const files = new Map([markerAt(ROOT, 'a', 'a\ntrivial\n', STARTED + 5), markerAt(ROOT, 'b', 'b\ntrivial\n', STARTED + 6)])
++    world(on, files, ROOT, [], new Set(), { trees: [ROOT] })
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:a' })
++    files.delete(`${ROOT}/.shawarma/active-a`)
++    await bash($, 'true')
++    expect(await paneText($)).toBe('a: no longer active')
++  })
++
++  test('R3 reload window: rows and chosen kept in state, no listing since load: "not in the last scan"', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'a', 'a\ntrivial\n', STARTED + 5)]), ROOT, [], new Set(), { trees: [ROOT] })
++    const kept = { ticket: 'a', marker: `${ROOT}/.shawarma/active-a`, tree: ROOT, title: 'a', step: 'trivial', since: STARTED + 5,
++      isEarlier: false, isStale: false, decisions: 0, planDir: '', planAt: null, decisionsAt: null }
++    on('state.get', { plugin: 'shawarma-companion' } as any, async (_$, e: any, next: any) => {
++      const r = await next(e)
++      if (r.value.version !== 0) return r
++      if (e.key === 'rows') return { value: { value: [kept], version: 0 } }
++      if (e.key === 'chosen') return { value: { value: `${ROOT}/.shawarma/active-b`, version: 0 } }
++      return r
++    })
++    expect(await paneText($)).toBe('b: not shown (not in the last scan)')
++  })
++
++  test('R3-3 a failed refresh: "Shawarma state could not be read."', { options: ON }, async ($, on) => {
++    const fail = new Set<string>()
++    world(on, new Map([markerAt(ROOT, 'a', 'a\ntrivial\n', STARTED + 5)]), ROOT, [], fail, { trees: [ROOT] })
++    await bash($, 'true')
++    await band($)
++    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:a' })
++    fail.add('usage')
++    await bash($, 'true')
++    expect(await paneText($)).toBe('Shawarma state could not be read.')
++  })
++
++  test('R3-3 no marker anywhere: "No shawarma marker in the last scan."', { options: ON }, async ($, on) => {
++    world(on, new Map(), ROOT, [], new Set(), { trees: [ROOT] })
++    await bash($, 'true')
++    expect(await paneText($)).toBe('No shawarma marker in the last scan.')
++  })
++
++  test('R3-3 only the more-row: the pane names it, and the 15 s check still runs', { options: ON }, async ($, on) => {
++    const many = Array.from({ length: 51 }, (_, i) => (i === 0 ? ROOT : `/t/w${String(i).padStart(3, '0')}`))
++    const files = new Map([markerAt(many[50]!, 'lost', 'x\ntrivial\n', STARTED + 5)])
++    const clock = world(on, files, ROOT, [], new Set(), { trees: many })
++    await bash($, 'true')
++    expect(await band($)).toEqual(['1 worktree not scanned'])
++    expect(await paneText($)).toBe('No row drawn: 1 worktree not scanned')
++    files.set(`${many[1]}/.shawarma/active-later`, { text: 'later\ntrivial\n', mtimeMs: STARTED + 125_000 })
++    await clock.advance(15_000)
++    expect(await band($)).toEqual(['later · trivial · since 14:02', '1 worktree not scanned'])
++  })
++
++  test('R3-3 only the more-row drawn: the 15 s check still runs', { options: ON }, async ($, on) => {
++    const many = Array.from({ length: 51 }, (_, i) => (i === 0 ? ROOT : `/t/w${String(i).padStart(3, '0')}`))
++    const files = new Map([markerAt(many[50]!, 'lost', 'x\ntrivial\n', STARTED + 5)])
++    const clock = world(on, files, ROOT, [], new Set(), { trees: many })
++    await bash($, 'true')
++    await band($)
++    files.set(`${many[1]}/.shawarma/active-later`, { text: 'later\ntrivial\n', mtimeMs: STARTED + 125_000 })
++    await clock.advance(15_000)
++    expect(await band($)).toEqual(['later · trivial · since 14:02', '1 worktree not scanned'])
++  })
++
++  test('R3-4 a stale malformed marker: the band row carries "stale: " as the pane does', { options: ON }, async ($, on) => {
++    world(on, new Map([markerAt(ROOT, 'bad', 'one line\n', STARTED - 13 * 3600 * 1000)]))
++    await bash($, 'true')
++    expect(await band($)).toEqual(['stale: shawarma: bad: malformed marker'])
++  })
++})
++
++describe('Q5 boundaries (lane 3a R-A6)', () => {
++  test('isStaleAt: age exactly 12 h current, 12 h + 1 ms stale; +60000 ms ahead current, +60001 stale', async () => {
++    const now = STARTED + 13 * 3600 * 1000
++    const H12 = 12 * 3600 * 1000
++    expect([isStaleAt(now - H12, now), isStaleAt(now - H12 - 1, now), isStaleAt(now - H12 + 1, now),
++      isStaleAt(now + 60_000, now), isStaleAt(now + 60_001, now)]).toEqual([false, true, false, false, true])
++  })
++})
+diff --git a/mods/shawarma-companion/types/index.d.ts b/mods/shawarma-companion/types/index.d.ts
+index 412de7a..782263b 100644
+--- a/mods/shawarma-companion/types/index.d.ts
++++ b/mods/shawarma-companion/types/index.d.ts
+@@ -1,23 +1,27 @@
+ export type Snapshot = {
++  /** The ticket, from the marker's file name `active-<ticket>`. */
++  ticket: string
+   /** Absolute path of the marker the row was read from. */
+   marker: string
+-  /** `# <ticket> — <title>` of plan.md, else the plan dir's name. */
++  /** The tree root whose `.shawarma/` holds the marker. */
++  tree: string
++  /** `# <ticket> — <title>` of plan.md, else the plan dir's name; the ticket for a trivial marker. */
+   title: string
+-  /** The marker's second line, as written: `plan <step>` or `run W<n> ...`. */
++  /** The marker's second line, as written: `plan <step>`, `run W<n> ...` or `trivial`; empty when malformed. */
+   step: string
+   /** The marker's mtime, ms since the epoch. */
+   since: number
+-  /** True when the marker's modification time is before this session's start (a copy that keeps old times reads the same). */
++  /** True unless the marker's modification time is after this session's start (D5: a row reads current only then). */
+   isEarlier: boolean
+-  /** True when the marker is newer than this session's start and no Write or Edit of this session was seen writing it: another session, or this one by other means. */
+-  isUnconfirmed: boolean
++  /** Q5: true when the marker was not rewritten for 12 h or is dated more than 1 min ahead; the check re-tests it on the clock. */
++  isStale: boolean
+   /** Lines of decisions.md that start with a date and `|`: the row's count. */
+   decisions: number
+-  /** Absolute plan dir; empty when the marker is malformed. */
++  /** Absolute plan dir; empty when the marker is malformed or trivial. */
+   planDir: string
+-  /** plan.md's `mtimeMs` when read, null when missing: the check compares it. */
++  /** plan.md's `mtimeMs` when listed, null when missing: the check compares it. */
+   planAt: number | null
+-  /** decisions.md's `mtimeMs` when read, null when missing: the check compares it. */
++  /** decisions.md's `mtimeMs` when listed, null when missing: the check compares it. */
+   decisionsAt: number | null
+   /** A short line naming the file that could not be read, when one could not. */
+   problem?: string
+@@ -25,6 +29,6 @@ export type Snapshot = {
+ 
+ declare module 'claude-code' {
+   interface PluginState {
+-    'shawarma-companion': { snap: Snapshot | null; marker: string | null; own: string[] }
++    'shawarma-companion': { rows: Snapshot[]; chosen: string | null; hidden: { markers: number; trees: number } }
+   }
+ }

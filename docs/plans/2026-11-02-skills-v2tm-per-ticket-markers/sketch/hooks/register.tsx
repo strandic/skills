@@ -1,0 +1,464 @@
+import { atom, read, update } from 'claude-code'
+import type { EngineInterface, FsEntry, Register, Timer } from 'claude-code'
+
+import type { Snapshot } from '../types'
+import {
+  MARKER_PREFIX, clean, lines, order, ownTree, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
+  MAX_ROWS, MAX_TREES, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
+} from './model'
+
+const PANE = 'shawarma-companion'
+/** One row per live marker, in drawing order (Q4). */
+const rowsAtom = atom({ plugin: 'shawarma-companion', key: 'rows' } as const, [])
+/** The marker path the pane shows: set by a row press or the command. */
+const chosen = atom({ plugin: 'shawarma-companion', key: 'chosen' } as const, null)
+/** Q6, round 2 N3: markers listed but not read, and worktrees not scanned: one dimmed more-row. */
+const hiddenAtom = atom({ plugin: 'shawarma-companion', key: 'hidden' } as const, { markers: 0, trees: 0 })
+/**
+ * The check's signature (round 2 N4): the markers that would be drawn, from
+ * the listings, plus the hidden counts. A hidden marker rewritten while it
+ * stays hidden changes nothing; one that rises into the top MAX_ROWS does.
+ */
+let lastListed: string | null = null
+/**
+ * What the last scan found, for the pane's reasons (round 2 N1, round 3):
+ * `none` until a refresh ran since load, `failed` when the last one threw.
+ * `trees` are the trees whose `.shawarma` listing answered; `paths` every
+ * listed marker; `unread` the picked markers whose files failed to read.
+ */
+type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string>; unread: Set<string> }
+let lastScan: Scan = { status: 'none', trees: new Set(), paths: new Set(), unread: new Set() }
+
+/** Why the chosen marker is not drawn, from facts the last scan holds only. */
+function reasonFor(want: string): string {
+  if (lastScan.status !== 'ok') return 'not shown (not in the last scan)'
+  if (lastScan.unread.has(want)) return 'could not be read'
+  if (lastScan.paths.has(want)) return `not shown (past the ${MAX_ROWS}-row limit)`
+  const tree = want.slice(0, want.lastIndexOf('/.shawarma/')) || '/'
+  return lastScan.trees.has(tree) ? 'no longer active' : 'not shown (not in the last scan)'
+}
+
+/** The trees to scan, and the one holding the session's cwd. */
+type Trees = { own: string | null; roots: string[] }
+/** Per cwd, from `git worktree list` (or the fallback): cleared at each turn end (Q2). */
+const worktrees = new Map<string, Trees>()
+/** Fallback only: the file-API walk per cwd, kept for the session when it found a repo. */
+const walks = new Map<string, { own: string; main: string | null }>()
+/** The trees of the last refresh: the check scans these and runs no process. */
+let lastTrees: Trees | null = null
+/** Derived values per path and `mtimeMs`: a file is read again only when its time changed (Q3). */
+type Cached<T> = Map<string, { at: number; value: T }>
+const titles: Cached<string | null> = new Map()
+const counts: Cached<number> = new Map()
+
+const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
+/** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
+export const RUN_MS = 2_000
+
+/** `argv` in `cwd`, or null when it rejects, runs past RUN_MS, or its stdout was cut. */
+async function run($: EngineInterface, argv: readonly string[], cwd: string): Promise<{ exitCode: number; stdout: string } | null> {
+  let timer: Timer | null = null
+  const late = new Promise<null>(resolve => { timer = $.clock.after(RUN_MS, () => resolve(null)) })
+  const out = await Promise.race([
+    $.process.run(argv, { cwd, timeoutMs: RUN_MS }).then(git => (git.isStdoutTruncated ? null : git), () => null),
+    late,
+  ]).catch(() => null)
+  ;(timer as Timer | null)?.cancel()
+  return out
+}
+/** While a row is drawn, the trees and drawn plan dirs are listed this often (R5). */
+export const CHECK_MS = 15_000
+/** The running check, or null; a reload cancels it with the old module. */
+let check: Timer | null = null
+/** Set from `options.band` at register: the check runs only while a row can be drawn. */
+let isBandOn = false
+
+/** One pass's listings, each path listed at most once; a failed listing is null (D6: it rejects on a missing folder). */
+type Lister = (path: string) => Promise<FsEntry[] | null>
+function lister($: EngineInterface): Lister {
+  const memo = new Map<string, Promise<FsEntry[] | null>>()
+  return path => {
+    let hit = memo.get(path)
+    if (hit === undefined) {
+      hit = $.fs.list(path).then(entries => entries, () => null)
+      memo.set(path, hit)
+    }
+    return hit
+  }
+}
+
+/** `fn(text)` of the file at `path`, read only when `at` differs from the cached time. */
+async function derived<T>($: EngineInterface, cache: Cached<T>, path: string, at: number, fn: (text: string) => T): Promise<T> {
+  const hit = cache.get(path)
+  if (hit !== undefined && hit.at === at) return hit.value
+  const value = fn(String(await $.fs.read(path)))
+  cache.set(path, { at, value })
+  return value
+}
+
+/** The file's text, or null when it is missing: one stat, one read (the pane only). */
+async function readOr($: EngineInterface, path: string): Promise<string | null> {
+  const isThere = await $.fs.stat(path).then(() => true, async (err: unknown) => {
+    if (await $.fs.exists(path)) throw err
+    return false
+  })
+  return isThere ? String(await $.fs.read(path)) : null
+}
+
+/**
+ * The trees of the session's cwd: `git worktree list --porcelain` once per cwd
+ * per turn, NUL-framed, prunable and bare records skipped, locked and detached
+ * ones kept (D3). When it cannot run, runs past RUN_MS, exits non-zero, is cut
+ * or prints no record: the file-API
+ * walk (no process), then the main checkout, `<main>/.worktrees/*` and the
+ * cwd's own tree (Q2). A sibling-folder worktree is then missed.
+ */
+async function discover($: EngineInterface): Promise<Trees> {
+  const cwd = await $.session.cwd()
+  const hit = worktrees.get(cwd)
+  if (hit !== undefined) return hit
+  const git = await run($, ['git', 'worktree', 'list', '--porcelain', '-z'], cwd)
+  const listed = git !== null && git.exitCode === 0 ? parseWorktrees(git.stdout) : null
+  let trees: Trees
+  if (listed !== null) {
+    const roots = [...new Set(listed.filter(tree => !tree.isPrunable && !tree.isBare).map(tree => tree.path))]
+    trees = { own: ownTree(cwd, roots), roots }
+  } else {
+    trees = await fallback($, cwd)
+  }
+  worktrees.set(cwd, trees)
+  return trees
+}
+
+/**
+ * Q2 fallback, the file API only: walk up from the cwd to the first folder
+ * holding `.git` (one stat per level). A `.git` folder: that folder is the
+ * main checkout. A `.git` file: its `gitdir:` line names `<common>/worktrees/<name>`,
+ * whose `commondir` file (else `../..`) names the common `.git`; the main
+ * checkout is the folder above it. A found repo is kept per cwd for the
+ * session; a failed walk is not, so the next turn end or session start tries
+ * again (lane 3a F8).
+ */
+async function walk($: EngineInterface, cwd: string): Promise<{ own: string; main: string | null } | null> {
+  for (let dir = cwd; ; dir = parentOf(dir)) {
+    const git = `${dir === '/' ? '' : dir}/.git`
+    const stat = await $.fs.stat(git).then(one => one, () => null)
+    if (stat?.kind === 'dir') return { own: dir, main: dir }
+    if (stat?.kind === 'file') {
+      const gitdir = parseGitdir(String(await $.fs.read(git)), dir)
+      if (gitdir === null) return { own: dir, main: null }
+      const common = (await $.fs.read(`${gitdir}/commondir`).then(text => String(text).trim(), () => '')) || '../..'
+      const commonDir = resolvePath(gitdir, common)
+      return { own: dir, main: commonDir.endsWith('/.git') ? parentOf(commonDir) : null }
+    }
+    if (dir === '/') return null
+  }
+}
+
+async function fallback($: EngineInterface, cwd: string): Promise<Trees> {
+  const at = walks.get(cwd) ?? (await walk($, cwd).catch(() => null))
+  if (at === null) return { own: null, roots: [] }
+  walks.set(cwd, at)
+  const main = at.main
+  const linked = main === null ? [] : ((await $.fs.list(under(main, '.worktrees')).then(entries => entries, () => null)) ?? [])
+    .filter(entry => entry.kind === 'dir')
+    .map(entry => under(main, `.worktrees/${entry.name}`))
+  return { own: at.own, roots: [...new Set([...(main === null ? [] : [main]), ...linked, at.own])] }
+}
+
+/** Every live marker of `roots`: one listing per tree's `.shawarma` (a missing or unreadable one has none). */
+async function markersOf(list: Lister, roots: readonly string[], answered: Set<string> = new Set()): Promise<{ root: string; ticket: string; at: number }[]> {
+  const found: { root: string; ticket: string; at: number }[] = []
+  for (const root of roots) {
+    const entries = await list(under(root, '.shawarma'))
+    if (entries !== null) answered.add(root)
+    for (const entry of entries ?? []) {
+      const ticket = ticketOf(entry.name)
+      if (entry.kind === 'file' && ticket !== null) found.push({ root, ticket, at: entry.mtimeMs })
+    }
+  }
+  return found
+}
+
+/**
+ * One row. The marker is read once; the plan dir is listed once (both files' times, and whether it is there); plan.md and
+ * decisions.md are read only when their times changed (Q3).
+ */
+async function rowOf($: EngineInterface, list: Lister, found: { root: string; ticket: string; at: number },
+  startedAt: number, now: number): Promise<Snapshot> {
+  const { root, ticket, at } = found
+  const marker = under(root, `.shawarma/${MARKER_PREFIX}${ticket}`)
+  // The marker is read each pass: a rewrite keeping its time still shows (pi0y L13).
+  const parsed = parseMarker(String(await $.fs.read(marker)), root)
+  // D5: a row reads current only when its marker is newer than the session
+  // start. startedAt is whole ms (the true start lies in [startedAt,
+  // startedAt + 1)), mtimes are fractional: current only past startedAt + 1
+  // (lane 3a F3), so a marker written in the start's own ms reads earlier.
+  const base = { ticket, marker, tree: root, since: at, isEarlier: !(at > startedAt + 1), isStale: isStaleAt(at, now), decisions: 0,
+    planDir: '', planAt: null, decisionsAt: null }
+  if (parsed === null) return { ...base, title: '', step: '', problem: 'malformed marker' }
+  if (parsed.kind === 'trivial') return { ...base, title: ticket, step: 'trivial' }
+  const dir = parsed.planDir
+  const dirName = dir.split('/').pop() ?? dir
+  const entries = await list(dir)
+  if (entries === null) {
+    const problem = (await $.fs.exists(dir)) ? `plan dir not readable: ${dir}` : `plan dir not found: ${dir}`
+    return { ...base, title: dirName, step: parsed.step, planDir: dir, problem }
+  }
+  const timeOf = (name: string) => entries.find(entry => entry.name === name && entry.kind === 'file')?.mtimeMs ?? null
+  const planAt = timeOf('plan.md')
+  const decisionsAt = timeOf('decisions.md')
+  const title = planAt === null ? null : await derived($, titles, `${dir}/plan.md`, planAt, parseTitle)
+  const decisions = decisionsAt === null ? 0
+    : await derived($, counts, `${dir}/decisions.md`, decisionsAt, text => parseDecisions(text).decisions)
+  return { ...base, title: title ?? dirName, step: parsed.step, planDir: dir, planAt, decisionsAt, decisions }
+}
+
+/** The trees scanned: the own tree first, at most MAX_TREES (Q6); how many were left out. */
+function scanned(trees: Trees): { roots: string[]; left: number } {
+  const all = trees.own === null ? trees.roots : [trees.own, ...trees.roots.filter(root => root !== trees.own)]
+  return { roots: all.slice(0, MAX_TREES), left: Math.max(0, all.length - MAX_TREES) }
+}
+
+const keyOf = (one: { root: string; ticket: string; at: number }) => `${under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)}@${one.at}`
+
+/**
+ * Every row, in drawing order: the listings are ordered first (own tree,
+ * newest, ticket), then at most MAX_ROWS markers are read; the rest only
+ * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
+ */
+type Found = { root: string; ticket: string; at: number }
+/** The markers to draw, in order, and the signature the check compares (N4). */
+function pick(found: Found[], trees: Trees, left: number): { picked: Found[]; signature: string } {
+  const picked = order(found.map(one => ({ ...one, tree: one.root, since: one.at })), trees.own).slice(0, MAX_ROWS)
+  return { picked, signature: `${picked.map(keyOf).join('\n')}\n#${found.length - picked.length}\n#${left}` }
+}
+
+async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise<{ rows: Snapshot[]; hidden: { markers: number; trees: number };
+  listed: string; scan: Scan }> {
+  const scan = scanned(trees)
+  const answered = new Set<string>()
+  const found = await markersOf(list, scan.roots, answered)
+  const { picked, signature: listed } = pick(found, trees, scan.left)
+  const facts: Scan = { status: 'ok', trees: answered, unread: new Set(),
+    paths: new Set(found.map(one => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))) }
+  if (found.length === 0) return { rows: [], hidden: { markers: 0, trees: scan.left }, listed, scan: facts }
+  const { startedAt } = await $.session.usage()
+  const now = await $.clock.now()
+  const rows: Snapshot[] = []
+  for (const one of picked) {
+    const row = await rowOf($, list, one, startedAt, now).catch((err: unknown) => {
+      $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
+      return null
+    })
+    if (row !== null) rows.push(row)
+    else facts.unread.add(under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))
+  }
+  return { rows, hidden: { markers: found.length - picked.length, trees: scan.left }, listed, scan: facts }
+}
+
+/** Never throws: a failed discovery or read draws nothing rather than a stale row. */
+async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($)): Promise<void> {
+  const next = await (async () => {
+    const at = trees ?? (await discover($))
+    lastTrees = at
+    return snapshot($, at, list)
+  })().catch((err: unknown) => {
+    $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
+    return { rows: [] as Snapshot[], hidden: { markers: 0, trees: 0 }, listed: null,
+      scan: { status: 'failed', trees: new Set(), paths: new Set(), unread: new Set() } as Scan }
+  })
+  lastListed = next.listed
+  lastScan = next.scan
+  await update($, rowsAtom, () => next.rows)
+  await update($, hiddenAtom, () => next.hidden)
+  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees) !== null)
+}
+
+/** Starts the check when a row or the more-row is drawn (round 3 R3-3), stops it when neither is. */
+function watch($: EngineInterface, isDrawn: boolean): void {
+  if (!isDrawn || !isBandOn) {
+    check?.cancel()
+    check = null
+  } else if (check === null) {
+    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => {
+      lastScan = { status: 'failed', trees: new Set(), paths: new Set(), unread: new Set() }
+      return update($, rowsAtom, () => [])
+    }))
+  }
+}
+
+/**
+ * Lists only: each tree's `.shawarma` and each drawn plan dir, at most W + M
+ * calls and no read (Q3). A refresh, reusing those listings, only when a
+ * marker appeared, went or changed time, or a drawn plan dir's plan.md or
+ * decisions.md did, or a plan dir the row says is missing now lists.
+ */
+async function stale($: EngineInterface): Promise<void> {
+  const rows = await read($, rowsAtom)
+  const hidden = await read($, hiddenAtom)
+  if (rows.length === 0 && moreText(hidden.markers, hidden.trees) === null) return watch($, false)
+  if (lastTrees === null) return refresh($)
+  const trees = lastTrees
+  const list = lister($)
+  const scan = scanned(trees)
+  let isChanged = lastListed === null || pick(await markersOf(list, scan.roots), trees, scan.left).signature !== lastListed
+  for (const row of rows) {
+    if (isChanged) break
+    if (row.planDir === '') continue
+    const entries = await list(row.planDir)
+    const wasMissing = row.problem?.startsWith('plan dir not') === true
+    if (entries === null) {
+      isChanged = !wasMissing
+    } else {
+      const timeOf = (name: string) => entries.find(entry => entry.name === name && entry.kind === 'file')?.mtimeMs ?? null
+      isChanged = wasMissing || timeOf('plan.md') !== row.planAt || timeOf('decisions.md') !== row.decisionsAt
+    }
+  }
+  if (isChanged) return refresh($, trees, list)
+  // Q5: a row crosses 12 h (or out of the future window) with no file change: flip it on the clock, no file call.
+  const now = await $.clock.now()
+  if (rows.some(row => isStaleAt(row.since, now) !== row.isStale)) {
+    await update($, rowsAtom, all => all.map(row => ({ ...row, isStale: isStaleAt(row.since, now) })))
+  }
+}
+
+/** Opens the pane on `marker`; never throws. */
+async function openOn($: EngineInterface, marker: string | null): Promise<{ isOpen: boolean; err?: unknown }> {
+  await update($, chosen, () => marker).catch(() => undefined)
+  return $.ui.open({ id: PANE, title: 'Shawarma' }).then(() => ({ isOpen: true }), (err: unknown) => ({ isOpen: false, err }))
+}
+
+/** Button keys, one per ticket; a ticket live in two trees gets its index too. */
+function keysOf(rows: readonly Snapshot[]): string[] {
+  return rows.map((row, i) => (rows.filter(other => other.ticket === row.ticket).length > 1 ? `row:${row.ticket}:${i}` : `row:${row.ticket}`))
+}
+
+export const register: Register = (on, options) => {
+  isBandOn = options.band === true
+  on('session.start', async ($, e, next) => {
+    worktrees.clear()
+    if (options.pane === true) {
+      await $.command
+        .register({
+          name: 'shawarma-companion',
+          description: 'Show the active shawarma plans or runs: recap, decisions, amendments',
+        })
+        .catch((err: unknown) => $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
+    }
+    await refresh($)
+    return next(e)
+  })
+
+  on('tool.call', async ($, e, next) => {
+    if (!WRITERS.has(e.tool)) return next(e)
+    const result = await next(e)
+    await refresh($)
+    return result
+  })
+
+  on('turn.complete', async ($, e, next) => {
+    worktrees.clear()
+    await refresh($)
+    return next(e)
+  })
+
+  on('command.run', { command: 'shawarma-companion' }, async $ => {
+    const first = (await read($, rowsAtom))[0]?.marker ?? null
+    const out = await openOn($, first)
+    return out.isOpen ? { text: 'Shawarma pane opened.' } : { text: `Shawarma pane could not open: ${String(out.err)}` }
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const rows = await read($, rowsAtom)
+    const hidden = await read($, hiddenAtom)
+    const more = moreText(hidden.markers, hidden.trees)
+    // N3: the more-row is drawn even when no other row is.
+    if (options.band !== true || (rows.length === 0 && more === null) || e.props.hasSurvey) return next(e)
+    // A settings change re-registers the module without a session.start: the
+    // first drawing after it restarts the check.
+    watch($, true)
+    const context =
+      options.context === true
+        ? await $.session.usage().then(usage => usage.context.percent, () => null)
+        : undefined
+    if (context === null) return next(e)
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const now = await $.clock.now()
+    const keys = keysOf(rows)
+    return (
+      <Box flexDirection="column">
+        {rows.map((row, i) => {
+          const key = keys[i] ?? `row:${i}`
+          const text = (
+            <Text key={key} dimColor={row.isEarlier || row.isStale}>
+              {rowText({ ...row, context: i === 0 ? context : undefined }, e.props.bodyColumns, now)}
+            </Text>
+          )
+          if (options.pane !== true) return text
+          return (
+            <Button key={key} plain onPress={() => void openOn($, row.marker)}>
+              {text}
+            </Button>
+          )
+        })}
+        {more !== null ? <Text key="more" dimColor>{more.length <= e.props.bodyColumns ? more : `${more.slice(0, Math.max(0, e.props.bodyColumns - 1))}…`}</Text> : null}
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    const { Box, Markdown, Text } = $.ui.resolve(e)
+    const rows = await read($, rowsAtom)
+    // Round 3: every sentence here comes from facts the last scan holds.
+    if (lastScan.status === 'failed') return <Text dimColor>Shawarma state could not be read.</Text>
+    const want = await read($, chosen)
+    const picked = rows.find(one => one.marker === want)
+    if (want !== null && picked === undefined) {
+      const ticket = ticketOf(want.split('/').pop() ?? '') ?? want
+      return <Text dimColor>{clean(`${ticket}: ${reasonFor(want)}`)}</Text>
+    }
+    if (rows.length === 0) {
+      const hidden = await read($, hiddenAtom)
+      const more = moreText(hidden.markers, hidden.trees)
+      const line = lastScan.status === 'none' ? 'No scan has run since the mod loaded.'
+        : more !== null ? `No row drawn: ${more}` : 'No shawarma marker in the last scan.'
+      return <Text dimColor>{line}</Text>
+    }
+    const row = picked ?? rows[0]!
+    // N2: the others with their labels, never called live.
+    const others = rows.filter(one => one !== row)
+      .map(one => `${one.ticket}${one.isStale ? ' (stale)' : one.isEarlier ? ' (earlier session)' : ''}`)
+    const header = others.length === 0 ? null : clean(`Other tickets: ${others.join(', ')}`)
+    const label = labelOf(row)
+    if (row.planDir === '' && row.step !== 'trivial') {
+      const line = <Text dimColor>{clean(`${label}shawarma: ${row.ticket}: ${row.problem ?? 'malformed marker'} (${row.marker})`)}</Text>
+      return header === null ? line : <Box flexDirection="column">{line}<Text dimColor>{header}</Text></Box>
+    }
+    if (row.step === 'trivial') {
+      const parts = [`${label}**${row.ticket}** · trivial`, ...(header === null ? [] : [header]), 'Trivial run: no brief.']
+      return <Box flexDirection="column"><Markdown text={clean(parts.join('\n\n'), true)} /></Box>
+    }
+    const files = await Promise.all([readOr($, `${row.planDir}/plan.md`), readOr($, `${row.planDir}/decisions.md`)])
+      .catch((err: unknown) => String(err))
+    if (typeof files === 'string') {
+      return <Text dimColor>{clean(`The plan files could not be read: ${files}`)}</Text>
+    }
+    const [plan, decisions] = files
+    const parts = [
+      `${label}**${row.title}** · ${row.step}`,
+      ...(header === null ? [] : [header]),
+      plan === null ? '_No brief yet: the plan is in progress._' : `### Recap\n\n${section(plan, 1) ?? '_§1 not found._'}`,
+      `### Decisions\n\n${decisions === null ? '_None recorded._' : lines(decisions.trim()).map(line => `- ${line}`).join('\n')}`,
+      ...(plan === null ? [] : [
+        `### Amendments\n\n${section(plan, 9) ?? '_§9 not found._'}`,
+        `### Red set\n\n${redSet(plan) ?? '_No predicted red set in §4._'}`,
+      ]),
+    ]
+    return (
+      <Box flexDirection="column">
+        <Markdown text={clean(parts.join('\n\n'), true)} />
+      </Box>
+    )
+  })
+}
