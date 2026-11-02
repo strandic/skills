@@ -2118,3 +2118,256 @@ describe('review round 4 (R4, mutants)', () => {
     expect(log.filter(line => many.some(root => line === `stat ${root} resolve`)).length).toBe(50)
   })
 })
+
+
+describe('review round 5 (R5, mutants)', () => {
+  const markerAt = (tree: string, ticket: string, body: string, at: number): [string, File] =>
+    [`${tree}/.shawarma/active-${ticket}`, { text: body, mtimeMs: at }]
+  const BIG = { ...BAND, maxRows: 40, scroll: { offset: 0, bodyRows: 40 } }
+  const band = async ($: any): Promise<string[]> =>
+    (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
+      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
+  const paneText = async ($: any): Promise<string> => {
+    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
+  }
+  /** The pane mounted, `state.ui` set once the mount answers (its drawing done). */
+  const mountPane = ($: any) => {
+    const state: { ui: any } = { ui: null }
+    const done = $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any).then((ui: any) => { state.ui = ui; return ui })
+    return { state, done }
+  }
+  const markdownOf = async (ui: any): Promise<string | undefined> => (await ui?.find({ type: 'Markdown' }))?.props.text
+  const LATER = `${ROOT}/docs/plans/later`
+  const P2 = `${ROOT}/docs/plans/p`
+  const touched = (log: string[], dir = LATER) => log.filter(line => line === `list ${dir}` || line.startsWith(`read ${dir}/`))
+  const FORGED: File = { text: '# s-1 — FORGED\n\n## 1. What\n\nOUTSIDE SECRET\n', mtimeMs: 7 }
+  const notFound = (ticket: string, dir = LATER, title = 'later') =>
+    `${ticket} · ${title} · run W1 · since 14:00 · 0 decisions · plan dir not found: ${dir}`
+
+  /** s-1 drawn from an inside folder, the folder deleted (a refresh sees it missing), then made a link out with a forged plan.md. */
+  async function swapped($: any, on: any, log: string[]) {
+    const links: Record<string, string> = {}
+    const files: Files = new Map([markerAt(ROOT, 's-1', 'docs/plans/later\nrun W1\n', STARTED + 5),
+      [`${LATER}/plan.md`, { text: '# s-1 — inside\n', mtimeMs: 1 }]])
+    const clock = world(on, files, ROOT, log, new Set(), { trees: [ROOT], links })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['s-1 — inside · run W1 · since 14:00 · 0 decisions'])
+    files.delete(`${LATER}/plan.md`)
+    await bash($, 'true')
+    expect(await band($)).toEqual([notFound('s-1')])
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, FORGED)
+    files.set('/outside/p/plan.md', FORGED)
+    return clock
+  }
+
+  /** h-1 at docs/plans/p, whose real-path stat runs past 2 s on the first call of the turn: kept as outside. */
+  async function lateRow($: any, on: any, files: Files, git: any) {
+    files.set(`${ROOT}/.shawarma/active-h-1`, { text: 'docs/plans/p\nrun W1\n', mtimeMs: STARTED + 5 })
+    files.set(`${P2}/plan.md`, { text: '# h-1 — p\n', mtimeMs: 1 })
+    git.hangStat = P2
+    const clock = world(on, files, ROOT, [], new Set(), git)
+    const call = bash($, 'true')
+    await clock.advance(2_000)
+    await call
+    expect(await band($)).toEqual(['shawarma: h-1: plan dir outside its tree'])
+    return clock
+  }
+
+  test('R5a an inside plan folder deleted, then made a link out (marker unchanged): the 15 s check and its refresh read nothing there, the row turns outside', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = await swapped($, on, log)
+    const n0 = log.length
+    await clock.advance(15_000)
+    expect([await band($), touched(log.slice(n0))]).toEqual([['shawarma: s-1: plan dir outside its tree'], []])
+  })
+
+  test('R5a an inside plan folder deleted, then made a link out (marker unchanged): after the 15 s check the pane reads nothing there', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = await swapped($, on, log)
+    await clock.advance(15_000)
+    const n0 = log.length
+    const text = await paneText($)
+    expect([text, touched(log.slice(n0))]).toEqual([`shawarma: s-1: plan dir outside its tree (${ROOT}/.shawarma/active-s-1)`, []])
+  })
+
+  test('R5b a not-found row whose pane real-path stat never answers: once timed out this turn, a second pane draw does not wait 2 s again', { options: ON }, async ($, on) => {
+    const git: any = { trees: [ROOT] }
+    const clock = world(on, new Map([markerAt(ROOT, 'g-1', 'docs/plans/later\nrun W1\n', STARTED + 5)]), ROOT, [], new Set(), git)
+    await bash($, 'true')
+    expect(await band($)).toEqual([notFound('g-1')])
+    git.hangStat = LATER
+    const first = mountPane($)
+    await clock.advance(2_000)
+    expect(await markdownOf(await first.done)).toMatch(/No brief yet/)
+    await first.state.ui.unmount()
+    const second = mountPane($)
+    await clock.advance(1)
+    expect(await markdownOf(second.state.ui)).toMatch(/No brief yet/)
+    await clock.advance(2_000)
+    await second.done
+  })
+
+  test('N3 a marker rewritten (new time) after its plan stat ran late: asked again in the same turn and drawn', { options: ON }, async ($, on) => {
+    const files: Files = new Map()
+    const git: any = { trees: [ROOT] }
+    await lateRow($, on, files, git)
+    git.hangStat = undefined
+    files.set(`${ROOT}/.shawarma/active-h-1`, { text: 'docs/plans/p\nrun W2\n', mtimeMs: STARTED + 6 })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['h-1 — p · run W2 · since 14:00 · 0 decisions'])
+  })
+
+  test('N4 a marker rewritten to a new plan dir with the same time after its plan stat ran late: the new dir is asked and drawn', { options: ON }, async ($, on) => {
+    const files: Files = new Map()
+    const git: any = { trees: [ROOT] }
+    await lateRow($, on, files, git)
+    files.set(`${ROOT}/.shawarma/active-h-1`, { text: 'docs/plans/q\nrun W1\n', mtimeMs: STARTED + 5 })
+    files.set(`${ROOT}/docs/plans/q/plan.md`, { text: '# h-1 — q\n', mtimeMs: 1 })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['h-1 — q · run W1 · since 14:00 · 0 decisions'])
+  })
+
+  test('N6 a plan stat that ran late is asked again after a session start', { options: ON }, async ($, on) => {
+    const files: Files = new Map()
+    const git: any = { trees: [ROOT] }
+    await lateRow($, on, files, git)
+    git.hangStat = undefined
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    expect(await band($)).toEqual(['h-1 — p · run W1 · since 14:00 · 0 decisions'])
+  })
+
+  test('N7 a marker whose plan stat ran late, deleted then re-created with the same time in the same turn: asked again and drawn', { options: ON }, async ($, on) => {
+    const files: Files = new Map()
+    const git: any = { trees: [ROOT] }
+    await lateRow($, on, files, git)
+    const marker = files.get(`${ROOT}/.shawarma/active-h-1`)!
+    files.delete(`${ROOT}/.shawarma/active-h-1`)
+    await bash($, 'true')
+    expect(await band($)).toEqual([])
+    git.hangStat = undefined
+    files.set(`${ROOT}/.shawarma/active-h-1`, marker)
+    await bash($, 'true')
+    expect(await band($)).toEqual(['h-1 — p · run W1 · since 14:00 · 0 decisions'])
+  })
+
+  test('N11 a not-readable row: the 15 s check asks whether it exists and starts no refresh (no read)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = world(on, new Map([markerAt(ROOT, 'u-1', 'docs/plans/later\nrun W1\n', STARTED + 5), [`${LATER}/plan.md`, { text: '# u-1\n', mtimeMs: 1 }]]),
+      ROOT, log, new Set([`list ${LATER}`]), { trees: [ROOT] })
+    await bash($, 'true')
+    expect(await band($)).toEqual([`u-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
+    const n0 = log.length
+    await clock.advance(15_000)
+    expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([])
+  })
+
+  test('N22 a not-readable folder made listable through a link out: the 15 s check does not list it', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const links: Record<string, string> = {}
+    const fail = new Set([`list ${LATER}`])
+    const files: Files = new Map([markerAt(ROOT, 'u-1', 'docs/plans/later\nrun W1\n', STARTED + 5), [`${LATER}/plan.md`, { text: '# u-1\n', mtimeMs: 1 }]])
+    const clock = world(on, files, ROOT, log, fail, { trees: [ROOT], links })
+    await bash($, 'true')
+    expect(await band($)).toEqual([`u-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
+    fail.delete(`list ${LATER}`)
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, FORGED)
+    files.set('/outside/p/plan.md', FORGED)
+    const n0 = log.length
+    await clock.advance(15_000)
+    expect(touched(log.slice(n0))).toEqual([])
+  })
+
+  test('N15 a tree spelled through a link: a not-found folder created inside is read by the pane (real root compared)', { options: ON }, async ($, on) => {
+    const W2 = '/t/WTS/w'
+    const PD = `${W2}/docs/plans/w`
+    const files: Files = new Map([markerAt(W2, 'k-1', 'docs/plans/w\nrun W1\n', STARTED + 5)])
+    world(on, files, W2, [], new Set(), { trees: [W2], links: { '/t/WTS': '/t/wts' } })
+    await bash($, 'true')
+    expect(await band($)).toEqual([notFound('k-1', PD, 'w')])
+    files.set(`${PD}/plan.md`, { text: '# k-1 — inside\n\n## 1. What\n\nINSIDE BODY\n', mtimeMs: 1 })
+    expect(await paneText($)).toMatch(/INSIDE BODY/)
+  })
+
+  test('N16 a not-found row whose pane real-path stat rejects: read as missing, nothing listed or read there', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const fail = new Set<string>()
+    const files: Files = new Map([markerAt(ROOT, 'r-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    world(on, files, ROOT, log, fail, { trees: [ROOT] })
+    await bash($, 'true')
+    expect(await band($)).toEqual([notFound('r-1')])
+    files.set(`${LATER}/plan.md`, FORGED)
+    fail.add(`stat once ${LATER}`)
+    const n0 = log.length
+    await paneText($)
+    expect(touched(log.slice(n0))).toEqual([])
+  })
+
+  test('N17 a not-readable folder made a link out: the pane asks its real path and reads nothing', { options: ON }, async ($, on) => {
+    const links: Record<string, string> = {}
+    const fail = new Set([`list ${LATER}`])
+    const files: Files = new Map([markerAt(ROOT, 'x-1', 'docs/plans/later\nrun W1\n', STARTED + 5), [`${LATER}/plan.md`, { text: '# x-1\n', mtimeMs: 1 }]])
+    world(on, files, ROOT, [], fail, { trees: [ROOT], links })
+    await bash($, 'true')
+    expect(await band($)).toEqual([`x-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
+    fail.delete(`list ${LATER}`)
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, FORGED)
+    files.set('/outside/p/plan.md', FORGED)
+    expect(await paneText($)).toBe(`shawarma: x-1: plan dir outside its tree (${ROOT}/.shawarma/active-x-1)`)
+  })
+
+  test('N20 a not-found row whose pane real-path stat never answers (first time this turn): the pane answers by 2 s', { options: ON }, async ($, on) => {
+    const git: any = { trees: [ROOT] }
+    const clock = world(on, new Map([markerAt(ROOT, 'g-1', 'docs/plans/later\nrun W1\n', STARTED + 5)]), ROOT, [], new Set(), git)
+    await bash($, 'true')
+    expect(await band($)).toEqual([notFound('g-1')])
+    git.hangStat = LATER
+    const pane = mountPane($)
+    await clock.advance(2_000)
+    expect(await markdownOf(pane.state.ui)).toMatch(/No brief yet/)
+  })
+
+  test('N21 the pane\'s problem line keeps the other tickets\' header', { options: ON }, async ($, on) => {
+    world(on, new Map([markerAt(ROOT, 'a-1', 'just one line\n', STARTED + 9), markerAt(ROOT, 'b-1', 'b-1\ntrivial\n', STARTED + 5)]),
+      ROOT, [], new Set(), { trees: [ROOT] })
+    await bash($, 'true')
+    expect(await paneText($)).toBe(`shawarma: a-1: malformed marker (${ROOT}/.shawarma/active-a-1)\nOther tickets: b-1`)
+  })
+
+  test('N23 a not-found folder made a link out whose pane real-path stat never answers: nothing listed or read there', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const links: Record<string, string> = {}
+    const git: any = { trees: [ROOT], links }
+    const files: Files = new Map([markerAt(ROOT, 'g-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    const clock = world(on, files, ROOT, log, new Set(), git)
+    await bash($, 'true')
+    expect(await band($)).toEqual([notFound('g-1')])
+    links[LATER] = '/outside/p'
+    files.set(`${LATER}/plan.md`, FORGED)
+    files.set('/outside/p/plan.md', FORGED)
+    git.hangStat = LATER
+    const n0 = log.length
+    const pane = paneText($)
+    await clock.advance(2_000)
+    await pane
+    expect(touched(log.slice(n0))).toEqual([])
+  })
+
+  test('N25 a worktree row whose missing folder is made a link into the main tree: the pane compares with that worktree\'s real path', { options: ON }, async ($, on) => {
+    const WL = `${WT}/docs/plans/later`
+    const links: Record<string, string> = {}
+    const files: Files = new Map([markerAt(WT, 'w-1', 'docs/plans/later\nrun W1\n', STARTED + 5)])
+    world(on, files, ROOT, [], new Set(), { trees: [ROOT, WT], links })
+    await bash($, 'true')
+    links[WL] = `${ROOT}/docs/plans/main`
+    const body: File = { text: '# w-1 — main\n\n## 1. What\n\nMAIN TREE BODY\n', mtimeMs: 1 }
+    files.set(`${WL}/plan.md`, body)
+    files.set(`${ROOT}/docs/plans/main/plan.md`, body)
+    expect(await paneText($)).toBe(`shawarma: w-1: plan dir outside its tree (${WT}/.shawarma/active-w-1)`)
+  })
+})
