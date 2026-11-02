@@ -17,3 +17,5 @@
 2026-11-02 | D10 DEFAULT | Rename the eight "W + 3M" test names to name the Q6 bound; assertions unchanged | Accepted by the go.
 2026-11-02 | D11 RULING | Refuse plan dirs outside the marker's tree: "plan dir outside its tree", nothing read there (amends frozen §3 2a; replaces pi0y L6) | The owner gave the go after the plan ending quoted this change; recorded as a ruling because it edits a frozen line.
 2026-11-02 | D12 DEFAULT | The pane reads only plan files its plan-dir listing shows as regular files that are not links | Accepted by the go.
+2026-11-02 | R1 RULING | D11 checks the plan dir's real path (cached per marker path and time), else the text; a new or rewritten marker costs at most W + 5M (amends Q6's cold bound) | Owner: "Go with recos". A committed symlink inside the tree got around the text check.
+2026-11-02 | R2 RULING | With no row drawn, the pane says "<n> marker(s) could not be read." when the last scan listed markers it could not read (amends §3 2i) | Owner: "Go with recos". The pane said no marker was in the scan.
