@@ -10,3 +10,10 @@
 2026-11-02 | D6 DEFAULT | Whether `$.fs.list` rejects on a missing folder is settled by one spike probe; the design handles both | Owner: "Go".
 2026-11-02 | Q5 RULING | Liveness (amends D2, D5): a marker not rewritten for 12 h, or dated more than 1 min in the future, reads `stale:` and is dimmed like `earlier session:`; a row reads current only when newer than the session start (+1 ms, F3) and not stale | Owner: "Stale after 12 h". A run that crashed after the session started read current for 6 h+ in lane 3a (F2); a live run rewrites its marker each step or wave.
 2026-11-02 | Q6 RULING | Cost (amends Q3): cold or changed tool call <= W + 4M, steady call <= W + 2M, 15 s check <= W + M, tests pinning all three including cold; caps: at most 50 worktrees scanned and 20 markers read and drawn, past either one dimmed row "+n more not shown"; FAIL size 51 worktrees or 21 markers | Owner: "W+4M cold, capped". A cold marker costs ~4 operations (read, plan-dir list, plan.md, decisions.md); lane 3a found no cap (F6, F7).
+2026-11-02 | W0 DEFAULT | Run base b882344; the base diff since f1fc87e touches no mod file, so the reds were not re-run before the tests commit | Only the plan folder and the ticket changed.
+2026-11-02 | D7 DEFAULT | Accept: a same-time marker rewrite is missed by the 15 s check and shows at the next tool call or turn end | Accepted by the go (/strandic:shawarma run v2tm).
+2026-11-02 | D8 DEFAULT | Accept: below about 20 columns the ticket is cut before the label | Accepted by the go.
+2026-11-02 | D9 DEFAULT | Accept: an unreadable picked row is dropped, not counted | Accepted by the go.
+2026-11-02 | D10 DEFAULT | Rename the eight "W + 3M" test names to name the Q6 bound; assertions unchanged | Accepted by the go.
+2026-11-02 | D11 RULING | Refuse plan dirs outside the marker's tree: "plan dir outside its tree", nothing read there (amends frozen §3 2a; replaces pi0y L6) | The owner gave the go after the plan ending quoted this change; recorded as a ruling because it edits a frozen line.
+2026-11-02 | D12 DEFAULT | The pane reads only plan files its plan-dir listing shows as regular files that are not links | Accepted by the go.
