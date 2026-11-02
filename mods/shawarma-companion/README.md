@@ -51,6 +51,8 @@ Two parts are added at the end when they apply:
 
 If a marker is malformed, its row reads only `shawarma: <ticket>: malformed marker`, with its label in front when it has one. The pane adds the marker's path.
 
+The plan folder must be inside the marker's own tree: the tree root or a folder under it, after `.` and `..` are resolved. If it is not, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
+
 No row runs wider than the window. The ticket stays at the start of the row. The title is cut first, then the problem text, then the end of the line. Characters that could reorder the text on screen are drawn as spaces.
 
 The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
@@ -75,7 +77,7 @@ When no row is shown, the pane says `No shawarma marker in the last scan.`, or `
 - the amendments: section 9 of `plan.md`;
 - the predicted red set: the `Predicted red set` line of section 4 of `plan.md`.
 
-If `plan.md` does not exist yet, the pane says there is no brief yet and shows only the title, the step and the decisions. For a `trivial` marker it reads "Trivial run: no brief" with the ticket.
+If `plan.md` does not exist yet, the pane says there is no brief yet and shows only the title, the step and the decisions. The band and the pane read `plan.md` and `decisions.md` only when they are regular files. A file that is a link is treated as missing. For a `trivial` marker it reads "Trivial run: no brief" with the ticket.
 
 ## Settings
 

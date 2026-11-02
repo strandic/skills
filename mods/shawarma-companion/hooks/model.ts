@@ -49,7 +49,9 @@ export type Marker = { kind: 'plan'; planDir: string; step: string } | { kind: '
 /**
  * Line 1: the plan dir, relative to the tree root or absolute; when line 2 is
  * `trivial`, the ticket id. Line 2: `plan <step>`, `run <wave>` or `trivial`.
- * Exactly two lines after trimming. Anything else is malformed: null.
+ * Exactly two lines after trimming. Anything else is malformed: null. The plan
+ * dir is `resolvePath(treeRoot, line 1)`, `.` and `..` folded; it may lie
+ * outside the tree: the caller checks it with `isInside` (D11).
  */
 export function parseMarker(text: string, treeRoot: string): Marker | null {
   const lines = text.split('\n').map(line => line.trim())
@@ -60,7 +62,12 @@ export function parseMarker(text: string, treeRoot: string): Marker | null {
   if (first === '') return null
   if (step === 'trivial') return { kind: 'trivial', step }
   if (!/^(plan|run) \S/.test(step)) return null
-  return { kind: 'plan', planDir: first.startsWith('/') ? first : under(treeRoot, first), step }
+  return { kind: 'plan', planDir: resolvePath(treeRoot, first), step }
+}
+
+/** Whether `path` is `root` or under it, at a `/` boundary (`/repo-evil` is not under `/repo`); a root of `/` holds every path. */
+export function isInside(root: string, path: string): boolean {
+  return root === '/' || path === root || path.startsWith(`${root}/`)
 }
 
 /** One record of `git worktree list --porcelain`. */
@@ -121,8 +128,7 @@ export function parseGitdir(text: string, dir: string): string | null {
 export function ownTree(cwd: string, roots: readonly string[]): string | null {
   let best: string | null = null
   for (const root of roots) {
-    const isUnder = root === '/' || cwd === root || cwd.startsWith(`${root}/`)
-    if (isUnder && (best === null || root.length > best.length)) best = root
+    if (isInside(root, cwd) && (best === null || root.length > best.length)) best = root
   }
   return best
 }
