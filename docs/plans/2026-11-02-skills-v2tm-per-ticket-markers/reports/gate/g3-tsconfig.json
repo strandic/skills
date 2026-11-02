@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "es2023", "lib": ["es2023"], "types": [],
+    "module": "esnext", "moduleResolution": "bundler",
+    "strict": true, "noUncheckedIndexedAccess": true,
+    "noEmit": true, "skipLibCheck": true,
+    "jsx": "react", "jsxFactory": "h", "jsxFragmentFactory": "Fragment"
+  },
+  "include": ["/private/tmp/claude-502/bundled-skills/2.1.316/eac234a816e8a349e67cbc846383e891/plugin-authoring/types/claude-code.d.ts", "/Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/hooks", "/Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/types", "/Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/tests"]
+}
