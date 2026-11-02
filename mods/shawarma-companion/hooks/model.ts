@@ -114,3 +114,11 @@ export function rowText(row: RowInput, columns: number, now: number = row.since)
   const line = clean(title === '' ? `${head}${tail}` : `${head}${title} · ${tail}`)
   return line.length <= columns ? line : `${line.slice(0, Math.max(0, columns - 1))}…`
 }
+
+// Stubs for the tests commit (skills-v2tm): the new signatures, so the test file links. Replaced by the code commit.
+export const order: any = () => []
+export const parseWorktrees: any = () => undefined
+export const parentOf: any = () => undefined
+export const parseGitdir: any = () => undefined
+export const resolvePath: any = () => undefined
+export const isStaleAt: any = () => undefined
