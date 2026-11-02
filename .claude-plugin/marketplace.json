@@ -21,8 +21,8 @@
     {
       "name": "shawarma-companion",
       "source": "./mods/shawarma-companion",
-      "description": "Shows the active shawarma plan or run above the prompt: ticket, step, decisions so far.",
-      "version": "0.1.0",
+      "description": "Shows the active shawarma plans and runs above the prompt, one row each: ticket, step, decisions so far.",
+      "version": "0.2.0",
       "author": { "name": "Strandic" },
       "category": "workflow",
       "keywords": ["shawarma", "mod", "claude-code"]
