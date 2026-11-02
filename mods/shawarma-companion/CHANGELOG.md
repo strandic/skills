@@ -24,6 +24,6 @@ Reads the per-ticket markers of shawarma 0.9 (skills-v2tm, PR #5).
 ### Removed
 - The `unconfirmed:` label, and the old single `.shawarma/active` marker.
 
-## [0.1.0] - 2026-10-28
+## [0.1.0] - 2026-11-01
 
 First release: one row above the prompt for the active shawarma plan or run, and a detail pane.
