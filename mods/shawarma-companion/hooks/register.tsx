@@ -4,7 +4,7 @@ import type { EngineInterface, FsEntry, Register, Timer } from 'claude-code'
 import type { Snapshot } from '../types'
 import {
   MARKER_PREFIX, clean, lines, order, ownTree, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
-  MAX_ROWS, MAX_TREES, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
+  MAX_ROWS, MAX_TREES, isInside, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
 } from './model'
 
 const PANE = 'shawarma-companion'
@@ -96,13 +96,24 @@ async function derived<T>($: EngineInterface, cache: Cached<T>, path: string, at
   return value
 }
 
-/** The file's text, or null when it is missing: one stat, one read (the pane only). */
-async function readOr($: EngineInterface, path: string): Promise<string | null> {
-  const isThere = await $.fs.stat(path).then(() => true, async (err: unknown) => {
-    if (await $.fs.exists(path)) throw err
-    return false
+/** The time of `name` in a plan-dir listing when it is a regular file and not a link, else null (D12). */
+function timeIn(entries: readonly FsEntry[], name: string): number | null {
+  return entries.find(entry => entry.name === name && entry.kind === 'file' && entry.isLink !== true)?.mtimeMs ?? null
+}
+
+/**
+ * The pane's plan.md and decisions.md, each null when missing (D12): one
+ * listing of `dir`, then a read only of a name it shows as a regular file and
+ * not a link. A dir that does not list and does not exist reads both as
+ * missing; one that exists and does not list, or a read that fails, throws.
+ */
+async function planFiles($: EngineInterface, dir: string): Promise<[string | null, string | null]> {
+  const entries = await $.fs.list(dir).catch(async (err: unknown) => {
+    if (await $.fs.exists(dir)) throw err
+    return [] as FsEntry[]
   })
-  return isThere ? String(await $.fs.read(path)) : null
+  const readIf = async (name: string) => (timeIn(entries, name) === null ? null : String(await $.fs.read(`${dir}/${name}`)))
+  return Promise.all([readIf('plan.md'), readIf('decisions.md')])
 }
 
 /**
@@ -182,7 +193,8 @@ async function markersOf(list: Lister, roots: readonly string[], answered: Set<s
 
 /**
  * One row. The marker is read once; the plan dir is listed once (both files' times, and whether it is there); plan.md and
- * decisions.md are read only when their times changed (Q3).
+ * decisions.md are read only when their times changed (Q3), and only when listed as regular files, not links (D12). A plan
+ * dir outside the marker's own tree is a problem row with no plan dir: nothing there is listed or read (D11).
  */
 async function rowOf($: EngineInterface, list: Lister, found: { root: string; ticket: string; at: number },
   startedAt: number, now: number): Promise<Snapshot> {
@@ -198,6 +210,7 @@ async function rowOf($: EngineInterface, list: Lister, found: { root: string; ti
     planDir: '', planAt: null, decisionsAt: null }
   if (parsed === null) return { ...base, title: '', step: '', problem: 'malformed marker' }
   if (parsed.kind === 'trivial') return { ...base, title: ticket, step: 'trivial' }
+  if (!isInside(root, parsed.planDir)) return { ...base, title: '', step: '', problem: 'plan dir outside its tree' }
   const dir = parsed.planDir
   const dirName = dir.split('/').pop() ?? dir
   const entries = await list(dir)
@@ -205,9 +218,8 @@ async function rowOf($: EngineInterface, list: Lister, found: { root: string; ti
     const problem = (await $.fs.exists(dir)) ? `plan dir not readable: ${dir}` : `plan dir not found: ${dir}`
     return { ...base, title: dirName, step: parsed.step, planDir: dir, problem }
   }
-  const timeOf = (name: string) => entries.find(entry => entry.name === name && entry.kind === 'file')?.mtimeMs ?? null
-  const planAt = timeOf('plan.md')
-  const decisionsAt = timeOf('decisions.md')
+  const planAt = timeIn(entries, 'plan.md')
+  const decisionsAt = timeIn(entries, 'decisions.md')
   const title = planAt === null ? null : await derived($, titles, `${dir}/plan.md`, planAt, parseTitle)
   const decisions = decisionsAt === null ? 0
     : await derived($, counts, `${dir}/decisions.md`, decisionsAt, text => parseDecisions(text).decisions)
@@ -311,8 +323,7 @@ async function stale($: EngineInterface): Promise<void> {
     if (entries === null) {
       isChanged = !wasMissing
     } else {
-      const timeOf = (name: string) => entries.find(entry => entry.name === name && entry.kind === 'file')?.mtimeMs ?? null
-      isChanged = wasMissing || timeOf('plan.md') !== row.planAt || timeOf('decisions.md') !== row.decisionsAt
+      isChanged = wasMissing || timeIn(entries, 'plan.md') !== row.planAt || timeIn(entries, 'decisions.md') !== row.decisionsAt
     }
   }
   if (isChanged) return refresh($, trees, list)
@@ -439,8 +450,7 @@ export const register: Register = (on, options) => {
       const parts = [`${label}**${row.ticket}** · trivial`, ...(header === null ? [] : [header]), 'Trivial run: no brief.']
       return <Box flexDirection="column"><Markdown text={clean(parts.join('\n\n'), true)} /></Box>
     }
-    const files = await Promise.all([readOr($, `${row.planDir}/plan.md`), readOr($, `${row.planDir}/decisions.md`)])
-      .catch((err: unknown) => String(err))
+    const files = await planFiles($, row.planDir).catch((err: unknown) => String(err))
     if (typeof files === 'string') {
       return <Text dimColor>{clean(`The plan files could not be read: ${files}`)}</Text>
     }
