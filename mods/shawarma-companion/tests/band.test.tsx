@@ -1650,7 +1650,8 @@ describe('v2tm amendments (D11, D12)', () => {
     return (await pane.find({ type: 'Markdown' }))?.props.text ?? (await pane.findAll({ type: 'Text' })).map((one: any) => one.text).join('\n')
   }
   const outside = (log: string[], prefix: string) =>
-    log.filter(line => /^(exists|stat|read|list) /.test(line) && line.slice(line.indexOf(' ') + 1).startsWith(prefix))
+    // R1: the plan dir's one real-path stat (`stat <dir> resolve`) is allowed; nothing else there is touched.
+    log.filter(line => /^(exists|stat|read|list) /.test(line) && !line.endsWith(' resolve') && line.slice(line.indexOf(' ') + 1).startsWith(prefix))
   const EVIL: [string, File][] = [['/etc/p/plan.md', { text: '# o-1 — forged\n\n## 1. What\n\nsecret\n', mtimeMs: 1 }],
     ['/etc/p/decisions.md', { text: '2026-10-16 | Q1 RULING | a | b\n', mtimeMs: 1 }]]
 
@@ -1668,7 +1669,7 @@ describe('v2tm amendments (D11, D12)', () => {
       ['/outside/p/plan.md', { text: '# o-2 — forged\n', mtimeMs: 1 }]]), ROOT, log)
     await bash($, 'true')
     expect(await band($)).toEqual(['shawarma: o-2: plan dir outside its tree'])
-    expect(log.filter(line => /^(exists|stat|read|list) .*outside/.test(line))).toEqual([])
+    expect(log.filter(line => /^(exists|stat|read|list) .*outside/.test(line) && !line.endsWith(' resolve'))).toEqual([])
   })
 
   test('D11 a plan dir whose name shares the tree\'s prefix (/repo-evil): outside', { options: ON }, async ($, on) => {

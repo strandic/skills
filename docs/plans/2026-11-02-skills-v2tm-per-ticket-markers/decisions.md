@@ -19,3 +19,4 @@
 2026-11-02 | D12 DEFAULT | The pane reads only plan files its plan-dir listing shows as regular files that are not links | Accepted by the go.
 2026-11-02 | R1 RULING | D11 checks the plan dir's real path (cached per marker path and time), else the text; a new or rewritten marker costs at most W + 5M (amends Q6's cold bound) | Owner: "Go with recos". A committed symlink inside the tree got around the text check.
 2026-11-02 | R2 RULING | With no row drawn, the pane says "<n> marker(s) could not be read." when the last scan listed markers it could not read (amends §3 2i) | Owner: "Go with recos". The pane said no marker was in the scan.
+2026-11-02 | R1a RULING | The D11 tests allow the one real-path stat R1 asks; every other call at an outside path stays forbidden | Follows from the owner's R1 ("Go with recos"); the tests were stricter than D11's text.
