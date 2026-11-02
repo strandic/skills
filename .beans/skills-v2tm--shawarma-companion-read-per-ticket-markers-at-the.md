@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-02T08:38:09Z
-updated_at: 2026-11-02T18:34:40Z
+updated_at: 2026-11-02T18:47:50Z
 ---
 
 Filed by the round-9 retro (D6), 2026-11-02. Evidence: the round-9 record (private). (R8.)
@@ -53,3 +53,15 @@ unruled: D9 an unreadable drawn row is dropped, not counted — default accept
 > **What this is about:** eight carried-over tests still say "W + 3M" in their names while asserting a stricter count.
 
 unruled: D10 test names that say W + 3M — default rename them to the Q6 bounds in the tests commit
+
+
+
+**Added 2026-11-02 after a security review of the sketch:**
+
+> **What this is about:** a marker can name a plan folder anywhere on disk, and the mod then reads its plan.md and decisions.md; a cloned repo could ship such a marker.
+
+unruled: D11 plan folders outside the marker's own tree — default refuse them: a problem row that reads no file (replaces pi0y L6)
+
+> **What this is about:** the pane follows a symlinked plan.md that the band skips.
+
+unruled: D12 pane and band read the same files — default the pane reads only regular, non-link files from its listing
