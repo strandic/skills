@@ -57,16 +57,20 @@ const counts: Cached<number> = new Map()
 /**
  * R1, R3: per marker path, the real path of its plan dir, asked with one
  * `$.fs.stat(dir, { resolve: true })` for the marker's time and plan dir.
- * Only a real path is kept: a stat that rejects, answers none or runs past
- * RUN_MS is asked again next time. One entry per marker path, and each
- * refresh drops the markers it no longer lists.
+ * Only a real path is kept: a stat that rejects or answers none is asked
+ * again next time; one that runs past RUN_MS is kept as outside in
+ * `lateDirs` until the turn ends. An entry is dropped when its plan dir does
+ * not list in a refresh (the row not found or not readable), so a folder seen
+ * missing is checked afresh (R5). One entry per marker path, and each refresh
+ * drops the markers it no longer lists.
  */
 const realDirs = new Map<string, { at: number; dir: string; real: string }>()
 /**
  * R4 (b): per marker path, a plan dir whose real-path stat gave no answer in
  * RUN_MS, for the marker's time: read as outside without asking again until
  * the turn ends (cleared with `worktrees`), so a hanging stat costs 2 s once
- * per turn. Pruned with `realDirs`.
+ * per turn. Written by the refresh and by the pane, read by both (R5).
+ * Pruned with `realDirs`.
  */
 const lateDirs = new Map<string, { at: number; dir: string }>()
 
@@ -286,6 +290,8 @@ async function rowOf($: EngineInterface, list: Lister, found: { root: string; ti
   const dirName = dir.split('/').pop() ?? dir
   const entries = where === 'unknown' ? null : await list(dir)
   if (entries === null) {
+    // R5: a folder seen missing or unreadable is checked afresh next time, not through a kept real path.
+    realDirs.delete(marker)
     const problem = (await $.fs.exists(dir)) ? `plan dir not readable: ${dir}` : `plan dir not found: ${dir}`
     return { ...base, title: dirName, step: parsed.step, planDir: dir, problem }
   }
@@ -379,7 +385,8 @@ function watch($: EngineInterface, isDrawn: boolean): void {
  * calls, no read and no stat (Q3). A refresh, reusing those listings, only
  * when a marker appeared, went or changed time, or a drawn plan dir's plan.md
  * or decisions.md did. A plan dir the row says is not found or not readable
- * was never confirmed inside its tree: it is not listed, only asked whether
+ * was not confirmed inside its tree since it was last found missing or
+ * unreadable: it is not listed, only asked whether
  * it exists, and a change in that (found now, or gone) starts the refresh (R4).
  */
 async function stale($: EngineInterface): Promise<void> {
@@ -530,10 +537,14 @@ export const register: Register = (on, options) => {
       const parts = [`${label}**${row.ticket}** · trivial`, ...(header === null ? [] : [header]), 'Trivial run: no brief.']
       return <Box flexDirection="column"><Markdown text={clean(parts.join('\n\n'), true)} /></Box>
     }
-    // R4: a plan dir the refresh found missing or unreadable was never confirmed inside: its real path first.
+    // R4, R5: a plan dir the refresh found missing or unreadable was not confirmed inside since: its real path first.
+    // A late answer this turn (the refresh's or the pane's own) reads as missing without asking again.
     let isMissing = false
     if (row.problem?.startsWith('plan dir not') === true) {
-      const out = await within($, $.fs.stat(row.planDir, { resolve: true }))
+      const kept = lateDirs.get(row.marker)
+      const isKept = kept !== undefined && kept.at === row.since && kept.dir === row.planDir
+      const out = isKept ? { kind: 'late' as const } : await within($, $.fs.stat(row.planDir, { resolve: true }))
+      if (out.kind === 'late') lateDirs.set(row.marker, { at: row.since, dir: row.planDir })
       const real = out.kind === 'ok' ? (out.value?.realPath ?? null) : null
       if (real !== null && !isInside(lastTrees?.reals.get(row.tree) ?? row.tree, real)) return problemLine('plan dir outside its tree')
       isMissing = real === null
