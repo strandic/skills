@@ -3,10 +3,11 @@
 title: 'shawarma: start without a human (model-invoked, orchestrator-dispatched) and rulings relayed by message'
 status: todo
 type: task
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-17T12:46:23Z
-updated_at: 2026-10-17T12:46:23Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-sp16
 blocked_by:
     - skills-hekn
@@ -28,3 +29,7 @@ Sketch (to rule at the retro):
 - [ ] The ask format ("Asking the human") is the message a hub shows; check it reads alone, outside the session that wrote it.
 - [ ] Trap bank: a dispatched `run` with no relayed go stops; a hub-written "go" is not counted as a ruling; silence over a relay does not accept a DEFAULT.
 - [ ] Size meter reading before/after in the retro record.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

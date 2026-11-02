@@ -3,10 +3,11 @@
 title: 'shawarma: what to take from google/elephant-goldfish-model (EGM)'
 status: todo
 type: task
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T09:19:22Z
-updated_at: 2026-10-28T09:19:22Z
+updated_at: 2026-11-02T14:17:33Z
 ---
 
 Owner request, 2026-10-28: what can shawarma learn from https://github.com/google/elephant-goldfish-model (EGM), and does EGM come with evals? Research done 2026-10-28 on the repo at its public history (107 commits, ~1 week public). Clone, not run: scratchpad only.
@@ -35,3 +36,7 @@ Not a toy: careful engineering, honest disclaimers. But no evidence it works. Sh
 ## Not worth borrowing without evidence
 
 The 9-reviewer, 5-stage review with a synthesizer; running each reviewer twice; the 6-reviewer brainstorm swarm; bottom-up README generation. The only data point says they cost more for the same catches. If shawarma ever adds a fresh-context reviewer lane, test it against one plain fresh review on its own tickets, as the outside experiment did.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

@@ -1,12 +1,13 @@
 ---
 # skills-tlmu
 title: 'shawarma: the ''What this is about:'' blockquote belongs in the ask format'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-21T13:17:21Z
-updated_at: 2026-10-21T13:17:21Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-sp16
 ---
 
@@ -40,3 +41,7 @@ Don't label anything "in plain English". Save this as a feedback memory in this
 project so it survives compaction and new sessions; delete that memory once the
 shawarma skill's "Asking the human" section carries the rule.
 ```
+
+
+
+**Closed by the round-9 retro (v0.9.0, 2026-11-02).** See the round-9 rulings (R4, R8, R15).

@@ -3,10 +3,11 @@
 title: 'shawarma: batch triage — run the Trivial test over a ticket list, clear the trivial ones'
 status: todo
 type: feature
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T09:16:26Z
-updated_at: 2026-10-28T09:16:26Z
+updated_at: 2026-11-02T14:17:33Z
 ---
 
 Owner request, 2026-10-28: run shawarma's **Trivial** test (SKILL.md, Triage) on a batch of tickets and clear the trivial ones fast. The method finds issues faster than they get closed. Open backlog today, by `beans list --json` counted by status: bigbrain 87 todo + 16 draft, incurio-frontend 149 todo + 32 draft. A second organisation's tickets live outside beans.
@@ -35,3 +36,7 @@ The costly error is a false `trivial`: a structural change that skips the brief.
 - [ ] Replay the screen against tickets at the commit before their real plan, as `retro-workflow.js` replays plans.
 
 The skill changes only at a retro (retro.md). This lands as a round-9 proposition with the size meter reading for the new load path.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

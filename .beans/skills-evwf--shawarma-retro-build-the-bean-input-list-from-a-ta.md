@@ -3,10 +3,11 @@
 title: 'shawarma retro: build the bean input list from a tag query, one disposition per bean'
 status: todo
 type: task
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T10:26:07Z
-updated_at: 2026-10-28T10:26:07Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-sp16
 ---
 
@@ -25,3 +26,7 @@ Prep done 2026-10-28: every open shawarma bean now carries the `shawarma` tag (m
 ## Correction (2026-10-28)
 
 A query already exists as a house rule: bigbrain `docs/plans/README.md:139-141` ("read the skill repo's open tickets (`beans list --json`, those naming shawarma or 'next retro'): each one addressed to the retro is ruled, done or noted on that ticket within the retro"). u376 and lhdg both name shawarma, so the rule matched them. The miss happened in applying it: round 8's inputs.md lists beans by hand, with no command output. The first item narrows to: paste the command and its output into `inputs.md`, and check the dispositions table against that output. The tag filter is optional on top.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

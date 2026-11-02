@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-10-28T10:26:07Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-sp16
 blocking:
     - skills-jk6n
@@ -43,3 +43,7 @@ The bank ran outside retro-workflow.js again, six runs (scripts in bigbrain bigb
 - **63at T2 is the case to watch.** Pooled T2 at 1: before 5/8, draft 5/15 (Fisher one-sided p ≈ 0.18). The scorer is noisy too: the same reference output was scored down on T1 and T2 once each.
 - **Planner git must not reach the shared config.** In run 6 a planner wrote core.worktree into the main checkout's .git/config (worktrees share it), and the main checkout read its scratch tree until the line was removed. Give each arm its own clone (git clone --local), not a worktree, or at least diff the main .git/config after each replay.
 - A one-off ±0.5 reading needs ≥ 6 runs per arm to read; two runs misled round 8's R7–R9.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

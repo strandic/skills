@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-10-28T10:26:07Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-mcfe
 ---
 
@@ -23,3 +23,7 @@ R4 adds a re-ask when research widens a ruled question: it can add a round. Rese
 ## Round 8 note (2026-10-19)
 
 Asks are now headed `## Ask <date> · <kind>` on the ticket and counted by check_pr.py --asks (v0.8.0), which gives this meter its input from round 9 on. Reading this round, by hand: 12 of 12 newer asks were answered with the recommendation. Minutes waiting per round are not metered yet. Record: bigbrain docs/retros/2026-10-18-shawarma-round-8/ record.md.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).

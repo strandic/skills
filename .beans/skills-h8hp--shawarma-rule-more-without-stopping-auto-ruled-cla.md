@@ -3,10 +3,11 @@
 title: 'shawarma: rule more without stopping — auto-ruled classes, standing permissions, symmetric asks'
 status: todo
 type: task
+priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T09:25:55Z
-updated_at: 2026-10-28T09:25:55Z
+updated_at: 2026-11-02T14:17:33Z
 parent: skills-mcfe
 ---
 
@@ -40,3 +41,7 @@ Related: skills-lxpq (fewer ask rounds, measured), skills-u376 (DEFAULT standing
 ## Residue from skills-pi0y W0-R1 (2026-10-28)
 
 - [ ] **Define the decisions.md label.** SKILL.md "State files" writes `<date> | <label> | <decision> | <why>` and never says what `<label>` holds. Real logs read `Q1 RULING`, `D1–D8 DEFAULT`, `R1 (Q1, excerpt bound)`, `D1 (constants)`, and some are Markdown tables. Over the 28 logs on this machine: 421 dated rows; a strict `RULING`/`DEFAULT` field matches 85, a word search 291, and 5 files carry no label word at all. Proposed: `<id> RULING` or `<id> DEFAULT`, one row per decision (no `D1–D8` ranges), plain lines, no table. The companion mod (pi0y) counts dated rows only until then; its ruling/default split can come back once logs carry the label. This also feeds this bean's per-class follow-rate count, which needs the label to sort asks.
+
+
+
+**Round 9 (2026-11-02): carried to round 10** (disposition D4).
