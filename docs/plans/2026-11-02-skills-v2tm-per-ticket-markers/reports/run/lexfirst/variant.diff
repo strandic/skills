@@ -1,0 +1,39 @@
+diff -ru /Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/hooks/register.tsx lexfirst/hooks/register.tsx
+--- /Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/hooks/register.tsx	2026-11-02 21:48:26
++++ lexfirst/hooks/register.tsx	2026-11-02 21:55:22
+@@ -204,12 +204,13 @@
+  */
+ async function isPlanInside($: EngineInterface, marker: string, at: number, root: string, dir: string): Promise<boolean> {
+   let hit = realDirs.get(marker)
++  if (!isInside(root, dir)) return false
+   if (hit === undefined || hit.at !== at || hit.dir !== dir) {
+     const real = await $.fs.stat(dir, { resolve: true }).then(stat => stat?.realPath ?? null, () => null)
+     hit = { at, dir, real }
+     realDirs.set(marker, hit)
+   }
+-  return isInside(root, hit.real ?? dir)
++  return isInside(root, dir) && isInside(root, hit.real ?? dir)
+ }
+ 
+ /**
+diff -ru /Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/tests/band.test.tsx lexfirst/tests/band.test.tsx
+--- /Users/jonathan/Documents/strandic-skills/.worktrees/v2tm/mods/shawarma-companion/tests/band.test.tsx	2026-11-02 21:51:39
++++ lexfirst/tests/band.test.tsx	2026-11-02 21:55:22
+@@ -1651,7 +1651,7 @@
+   }
+   const outside = (log: string[], prefix: string) =>
+     // R1: the plan dir's one real-path stat (`stat <dir> resolve`) is allowed; nothing else there is touched.
+-    log.filter(line => /^(exists|stat|read|list) /.test(line) && !line.endsWith(' resolve') && line.slice(line.indexOf(' ') + 1).startsWith(prefix))
++    log.filter(line => /^(exists|stat|read|list) /.test(line) && line.slice(line.indexOf(' ') + 1).startsWith(prefix))
+   const EVIL: [string, File][] = [['/etc/p/plan.md', { text: '# o-1 — forged\n\n## 1. What\n\nsecret\n', mtimeMs: 1 }],
+     ['/etc/p/decisions.md', { text: '2026-10-16 | Q1 RULING | a | b\n', mtimeMs: 1 }]]
+ 
+@@ -1669,7 +1669,7 @@
+       ['/outside/p/plan.md', { text: '# o-2 — forged\n', mtimeMs: 1 }]]), ROOT, log)
+     await bash($, 'true')
+     expect(await band($)).toEqual(['shawarma: o-2: plan dir outside its tree'])
+-    expect(log.filter(line => /^(exists|stat|read|list) .*outside/.test(line) && !line.endsWith(' resolve'))).toEqual([])
++    expect(log.filter(line => /^(exists|stat|read|list) .*outside/.test(line))).toEqual([])
+   })
+ 
+   test('D11 a plan dir whose name shares the tree\'s prefix (/repo-evil): outside', { options: ON }, async ($, on) => {
