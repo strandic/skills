@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -157,10 +158,12 @@ LISTING = """3: - Lesson (bread): a crust test read the oven twice
 """
 
 
-def run_fc(text, listing=None, repo=None, patches=None):
+def run_fc(text, listing=None, repo=None, patches=None, decisions=None):
     with tempfile.TemporaryDirectory() as d:
         p = Path(d) / "plan.md"
         p.write_text(text, encoding="utf-8")
+        if decisions is not None:
+            (Path(d) / "decisions.md").write_text(decisions, encoding="utf-8")
         for name, body in (patches or {}).items():
             (Path(d) / name).write_text(body, encoding="utf-8")
         with contextlib.redirect_stderr(io.StringIO()):
@@ -306,9 +309,15 @@ class FreezeCheck(unittest.TestCase):
             "- bread ×2: both match §4.\n- r2 (one kitchen) matches the run.\n")
         self.assertEqual(ids(run_fc(good, LISTING), "F9"), [])
 
-    def test_f9_an_empty_listing_reads_no_lessons(self):
-        # the lessons listing finds no lesson since a fresh marker: an empty listing, not unusable
-        self.assertEqual(ids(run_fc(GOOD_BRIEF, ""), "F9"), [])
+    def test_f9_an_empty_listing_fails_unless_the_header_reads_none(self):
+        # round 10, D6 (skills-q6f1): a 0-line listing reads FAIL naming the input, not PASS; a
+        # fresh retro marker's empty listing passes when the header says `Lessons read: none`
+        fails = ids(run_fc(GOOD_BRIEF, ""), "F9")
+        self.assertTrue(fails and "--listing" in fails[0] and "empty" in fails[0], fails)
+        lessons = GOOD_BRIEF.split("Lessons read:")[1].split("## 1.")[0]
+        none = GOOD_BRIEF.replace("Lessons read:" + lessons, "Lessons read: none.\n\n")
+        self.assertNotEqual(none, GOOD_BRIEF)
+        self.assertEqual(ids(run_fc(none, ""), "F9"), [])
 
     def test_exit_codes(self):
         with tempfile.TemporaryDirectory() as d:
@@ -925,6 +934,358 @@ class ReplayRefusals(unittest.TestCase):
             "| D1 | 2026-10-18 | default |")
         self.assertNotEqual(plan, GOOD_BRIEF)
         self.assertEqual(ids(run_cp(GOOD_BODY, plan, decisions=GOOD_DECISIONS), "M1"), [])
+
+
+# ---- round 10: asks keyed and answered in one form (D1), the plan precedes the code (D2), the go
+# never answers a RULING (D4), empty inputs (D6), ranges with markup (D7), known limits (D10),
+# no bytecode (D12), plan-time decisions at the freeze (D14), the v0.8 replay (D19) ------------
+
+
+def commit(repo, subject, when, files=None, allow_empty=False):
+    for name, text in (files or {}).items():
+        f = Path(repo) / name
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+    env = dict(GIT_ENV, GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, env=env)
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", subject]
+                   + (["--allow-empty"] if allow_empty else []), check=True, env=env)
+
+
+def main_out(mod, argv):
+    with contextlib.redirect_stdout(io.StringIO()) as out:
+        code = mod.main(argv)
+    return code, out.getvalue()
+
+
+ASKED = ASK.replace("· plan-ending", "· plan-paused")
+
+
+class AsksRound10(unittest.TestCase):
+    def test_a_recommitted_ask_counts_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            git(repo, "init", "-q")
+            commit(repo, "ask(t-0001): plan-paused", "2026-01-02T10:00:00", {"t-0001.md": ASKED})
+            commit(repo, "ask(t-0001): plan-paused — question lines in the grammar",
+                   "2026-01-02T10:00:14", {"t-0001.md": ASKED.replace("too?", "as well?")})
+            commit(repo, "rule(t-0001): U1 W3-D1", "2026-01-02T10:45:00", allow_empty=True)
+            rows, fails = cp.asks([str(repo / "t-0001.md")], repo=repo)
+        self.assertEqual(fails, [])
+        self.assertIn("commits ask=1 rule=1 wait minutes: 45", rows[0])
+
+    def test_a_second_ask_after_an_answer_counts(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            git(repo, "init", "-q")
+            commit(repo, "ask(t-0001): plan-paused", "2026-01-02T10:00:00", {"t-0001.md": ASKED})
+            commit(repo, "rule(t-0001): U1", "2026-01-02T10:45:00", allow_empty=True)
+            later = ASKED + ("\n## Ask 2026-01-03 · ruling\n\n> **What this is about:** x.\n\n"
+                             "**Q2** y?\n")
+            commit(repo, "ask(t-0001): ruling", "2026-01-03T09:00:00", {"t-0001.md": later})
+            commit(repo, "rule(t-0001): Q2", "2026-01-03T09:10:00", allow_empty=True)
+            rows, _ = cp.asks([str(repo / "t-0001.md")], repo=repo)
+        self.assertIn("commits ask=2 rule=2 wait minutes: 45 10", rows[0])
+
+    def test_an_older_ruling_commit_is_read_with_a_deprecation_note(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            git(repo, "init", "-q")
+            commit(repo, "ask(t-0001): plan-paused", "2026-01-02T10:00:00", {"t-0001.md": ASKED})
+            commit(repo, "chore(beans): t-0001 — ruling U1 (refuse)", "2026-01-02T10:37:00",
+                   allow_empty=True)
+            rows, fails = cp.asks([str(repo / "t-0001.md")], repo=repo)
+        self.assertEqual(fails, [], "a pre-change record does not go red")
+        self.assertIn("commits ask=1 rule=1 wait minutes: 37", rows[0])
+        self.assertTrue([r for r in rows if r.startswith("note: ") and "deprecated" in r], rows)
+
+    def test_a_plan_or_built_with_no_matching_ask_is_unparsed(self):
+        plan = ("# t-0001\n\n## Plan (2026-01-03)\n\nTrivial: the parser. Awaiting go.\n\n"
+                "> **What this is about:** spaces.\n\nunruled: U1 trimming — default no\n")
+        asked = plan.replace("## Plan (2026-01-03)\n\nTrivial: the parser. Awaiting go.\n\n",
+                             "## Plan (2026-01-03)\n\nTrivial: the parser. Awaiting go.\n\n"
+                             "## Ask 2026-01-03 · plan-ending\n\n")
+        built = asked + "\n## Built (2026-01-05)\n\nPR #7 open.\n"
+        cases = {"plan, no ask": (plan, 1), "plan + plan-ending": (asked, 0),
+                 "built, no pr-open": (built, 1),
+                 "built + pr-open": (built + "\n## Ask 2026-01-05 · pr-open\n\nPR open.\n", 0)}
+        for case, (text, want) in cases.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as d:
+                code, out = main_out(cp, ["--asks", ask_file(d, text)])
+                self.assertEqual(code, want, out)
+                self.assertEqual("UNPARSED: " in out, bool(want), out)
+
+    def test_an_empty_ticket_fails_naming_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = ask_file(d, "")
+            code, out = main_out(cp, ["--asks", f])
+        self.assertEqual(code, 1)
+        self.assertIn(f"FAIL A0 {f}: empty input", out)
+
+
+PLAN_ENDING_TICKET = TICKET.replace(
+    "Awaiting go.\n\n> **What this is about:** the parser could also trim spaces;",
+    "Awaiting go.\n\n## Ask 2026-01-03 · plan-ending\n\n> **What this is about:** the parser "
+    "could also trim spaces;")
+
+
+class PlanEndingAsk(unittest.TestCase):
+    """The house rules now put the `unruled:` line in the plan-ending ask after `## Plan`."""
+
+    def test_p4_and_f10_read_the_unruled_line_in_the_plan_ending_ask(self):
+        self.assertNotEqual(PLAN_ENDING_TICKET, TICKET)
+        self.assertEqual(run_cp(TRIVIAL_SHAPES["default only, follow-up"], PLAN_ENDING_TICKET), [])
+        with tempfile.TemporaryDirectory() as d:
+            code, out = main_out(fc, [ask_file(d, PLAN_ENDING_TICKET)])
+            self.assertEqual(code, 0, out)
+            code, out = main_out(fc, [ask_file(d, PLAN_ENDING_TICKET.replace(
+                "unruled: U1 trimming spaces", "unruled: trimming spaces"))])
+            self.assertEqual(code, 1, out)
+
+
+class PlanBeforeCode(unittest.TestCase):
+    def repo(self, d, with_plan):
+        repo = Path(d) / "repo"
+        repo.mkdir()
+        git(repo, "init", "-q")
+        git(repo, "symbolic-ref", "HEAD", "refs/heads/main")
+        commit(repo, "docs: base", "2026-01-01T09:00:00", {"README.md": "the parser\n"})
+        commit(repo, "chore(beans): t-0001 filed", "2026-01-01T09:01:00",
+               {".beans/t-0001.md": TICKET.split("## Plan")[0]})
+        if with_plan:
+            commit(repo, "plan(t-0001): the last field — trivial", "2026-01-01T09:02:00",
+                   {".beans/t-0001.md": TICKET})
+        git(repo, "checkout", "-q", "-b", "work")
+        commit(repo, "fix: the parser keeps the last field", "2026-01-01T09:05:00",
+               {"src/parser.py": "def split_line(s):\n    return s.split(',')\n"})
+        return repo
+
+    def test_p9_a_code_commit_with_no_plan_commit_among_its_ancestors(self):
+        body = TRIVIAL_SHAPES["default only, follow-up"]
+        for with_plan in (False, True):
+            for base in (["--base", "main"], []):
+                with self.subTest(with_plan=with_plan, base=base), \
+                        tempfile.TemporaryDirectory() as d:
+                    repo = self.repo(d, with_plan)
+                    t, b = ask_file(d, TICKET), ask_file(d, body, "body.md")
+                    _code, out = main_out(cp, [t, b, "--repo", str(repo), "--head", "work", *base])
+                    self.assertEqual("FAIL P9 " in out, not with_plan, out)
+
+    def test_p9_a_docs_only_branch_is_not_applicable(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = self.repo(d, False)
+            git(repo, "reset", "-q", "--hard", "main")
+            commit(repo, "docs: a note", "2026-01-01T09:06:00", {"docs/note.md": "x\n"})
+            notes = []
+            fails = cp.check(TICKET, TRIVIAL_SHAPES["default only, follow-up"], repo=repo,
+                             head="work", base="main", ticket="t-0001", notes=notes)
+        self.assertEqual(ids(fails, "P9"), [])
+        self.assertTrue([n for n in notes if n.startswith("P9 not applicable")], notes)
+
+
+class RulingNotUnruled(unittest.TestCase):
+    SPOON = "> **What this is about:** the spoon.\n\n"
+
+    def test_f10_an_unruled_id_labelled_ruling(self):
+        inline = GOOD_BRIEF.replace("unruled: none",
+                                    self.SPOON + "unruled: Q2 the spoon — RULING, recommend wood")
+        default = GOOD_BRIEF.replace("unruled: none",
+                                     self.SPOON + "unruled: E2 the spoon — default wood")
+        self.assertTrue(ids(run_fc(inline), "F10"), "labelled RULING on its own line")
+        self.assertEqual(ids(run_fc(default, decisions=GOOD_DECISIONS + "2026-10-18 | E2 DEFAULT | "
+                                    "wood | as recommended\n"), "F10"), [])
+        self.assertTrue(ids(run_fc(default, decisions=GOOD_DECISIONS + "2026-10-18 | E2 RULING | "
+                                   "wood | the human: \"wood\"\n"), "F10"), "decisions.md: RULING")
+        ticket = TICKET.replace("## Plan (2026-01-01)", "## Ask 2026-01-01 · interview\n\n"
+                                "> **What this is about:** spaces.\n\n**U1** trim spaces too? "
+                                "RULING, recommend no.\n\n## Plan (2026-01-01)")
+        with tempfile.TemporaryDirectory() as d:
+            code, out = main_out(fc, [ask_file(d, ticket)])
+        self.assertEqual(code, 1, out)
+        self.assertIn("U1 is a RULING", out)
+
+    def test_m1_a_ruling_answered_only_by_the_run_invocation(self):
+        for why in ('owner: "/shawarma run soup-1"', "/shawarma run soup-1",
+                    "the owner: `/shawarma run soup-1`"):
+            with self.subTest(why=why):
+                dec = GOOD_DECISIONS.replace("one reason to go red", why)
+                self.assertTrue(ids(run_cp(GOOD_BODY, decisions=dec), "M1"))
+        for why in ('owner: "/shawarma run soup-1" and "drop it"', "accepted by the go"):
+            with self.subTest(why=why):
+                dec = GOOD_DECISIONS.replace("one reason to go red", why)
+                self.assertEqual(ids(run_cp(GOOD_BODY, decisions=dec), "M1"), [])
+        dec = GOOD_DECISIONS.replace("you can see the soup", "accepted by the go (`/shawarma run "
+                                     "soup-1`)")
+        self.assertEqual(ids(run_cp(GOOD_BODY, decisions=dec), "M1"), [], "a DEFAULT may")
+
+
+class EmptyInputs(unittest.TestCase):
+    def test_p6_a_tests_commit_with_no_python_test_file_reads_not_run(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            git(repo, "init", "-q")
+            commit(repo, "test: the lid", "2026-01-01T09:00:00",
+                   {"tests/pot.test.js": "test('lid', () => {})\n"})
+            sha = git(repo, "rev-parse", "HEAD")
+            notes = []
+            fails = run_cp(GOOD_BODY.replace("REVIEWED", sha), repo=repo, tests_commit=sha,
+                           notes=notes)
+        self.assertEqual(ids(fails, "P6"), [])
+        self.assertTrue([n for n in notes if n.startswith("P6 NOT RUN")], notes)
+
+
+class RangesWithMarkup(unittest.TestCase):
+    def test_markup_on_each_end_expands_fully(self):
+        cases = {"**D1**–**D29**": [f"D{k}" for k in range(1, 30)],
+                 "`D1`–`D3`": ["D1", "D2", "D3"],
+                 "**D1**-**D3**": ["D1", "D2", "D3"],
+                 "**D1** – **D3**": ["D1", "D2", "D3"],
+                 "`W3-D1`..`D3`": ["W3-D1", "W3-D2", "W3-D3"],
+                 "**D1–D29**": [f"D{k}" for k in range(1, 30)]}
+        for text, want in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(cp.ids_in(f"rows {text} ruled"), set(want))
+
+    def test_near_misses_stay_two_ids(self):
+        cases = {"**D1**–D3": {"D1", "D3"}, "**D1**–**Q3**": {"D1", "Q3"},
+                 "`D1`–**D3**": {"D1", "D3"}, "D1**–**D3": {"D1", "D3"},
+                 "**D1**–`D3`": {"D1", "D3"}}
+        for text, want in cases.items():
+            with self.subTest(text=text):
+                self.assertEqual(cp.ids_in(f"rows {text} ruled"), want)
+
+    def test_m1_reads_a_bold_range_in_the_authority_clause(self):
+        plan = GOOD_BRIEF.replace("authority: the ticket's ruling Q1 (lid first)",
+                                  "authority: the ticket's rulings **Q1**–**Q3**")
+        dec = GOOD_DECISIONS + "2026-10-17 | Q2 RULING | a deep pot | the human: \"deep\"\n"
+        self.assertNotEqual(plan, GOOD_BRIEF)
+        self.assertEqual(ids(run_cp(GOOD_BODY, plan, decisions=dec), "M1"), [])
+
+
+class KnownLimits(unittest.TestCase):
+    def test_p10_a_known_limit_names_a_ticket(self):
+        at = "## Verification"
+        bad = {"heading": "## Known limit\n\nThe lid rattles at a full boil.\n\n",
+               "line": "**Known limit:** the lid rattles at a full boil.\n\n"}
+        good = {"heading": "## Known limit\n\nThe lid rattles at a full boil (`soup-4`).\n\n",
+                "line": "**Known limit:** the lid rattles at a full boil, soup-4.\n\n",
+                "issue": "Known limit: the lid rattles, #12.\n\n",
+                "none": "No known limit.\n\n"}
+        for case, text in bad.items():
+            with self.subTest(bad=case):
+                self.assertTrue(ids(run_cp(GOOD_BODY.replace(at, text + at)), "P10"))
+        for case, text in good.items():
+            with self.subTest(good=case):
+                self.assertEqual(ids(run_cp(GOOD_BODY.replace(at, text + at)), "P10"), [])
+
+
+class NoBytecode(unittest.TestCase):
+    def test_running_the_checkers_writes_no_pycache(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("check_pr.py", "freeze_check.py", "lanes.md"):
+                shutil.copy(HERE / name, d)
+            env = {k: v for k, v in os.environ.items() if k != "PYTHONDONTWRITEBYTECODE"}
+            r = subprocess.run([sys.executable, "freeze_check.py", "--fields"], cwd=d, env=env,
+                               capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertFalse((Path(d) / "__pycache__").exists(), list(Path(d).iterdir()))
+
+
+class PlanTimeDecisionsAtTheFreeze(unittest.TestCase):
+    def test_f11_a_decision_dated_before_the_freeze_with_no_brief_record(self):
+        self.assertEqual(ids(run_fc(GOOD_BRIEF, decisions=GOOD_DECISIONS), "F11"), [])
+        line = "| Q2 RULING | a deeper pot | the human: \"deeper\"\n"
+        self.assertTrue(ids(run_fc(GOOD_BRIEF, decisions=GOOD_DECISIONS + "2026-10-18 " + line),
+                            "F11"))
+        self.assertEqual(ids(run_fc(GOOD_BRIEF, decisions=GOOD_DECISIONS + "2026-10-19 " + line),
+                             "F11"), [], "a run-time line, after the freeze")
+
+
+# The v0.8.0 replay (round 10, D19): each record was allowed by the method it was written under
+# and is refused by v0.9's checks. The current method does not allow any of them (the id on
+# `unruled:`, the strict decisions.md line, the base SHA per row, the blockquote above a question,
+# answers outside the ask all came with v0.9.0), so the scope narrows: the record's format is read
+# from the brief's header (`skill 0.8.0`) or `--written-under 0.8` (a ticket names none), the
+# younger check prints `not applicable (pre-v0.9 format)`, and a current record still FAILs.
+V08_TICKET = TICKET.replace("> **What this is about:** the parser could also trim spaces; the note "
+                            "leaves that alone.\n\nunruled: U1 trimming spaces — default not "
+                            "folded", "unruled: trimming spaces as well — default not folded")
+V08_BRIEF = GOOD_BRIEF.replace("planned 2026-10-18 at base", "planned 2026-10-18 (a model; skill "
+                               "0.8.0) at base")
+
+
+class ReplayV08(unittest.TestCase):
+    def files(self, d, ticket, body):
+        return ask_file(d, ticket), ask_file(d, body, "body.md")
+
+    def test_f10_a_trivial_note_with_an_id_less_unruled_line(self):
+        self.assertNotEqual(V08_TICKET, TICKET)
+        with tempfile.TemporaryDirectory() as d:
+            t = ask_file(d, V08_TICKET)
+            code, out = main_out(fc, [t, "--written-under", "0.8"])
+            self.assertEqual(code, 0, out)
+            self.assertIn("F10 not applicable (pre-v0.9 format)", out)
+            self.assertEqual(main_out(fc, [t])[0], 1, "a current record still FAILs")
+
+    def test_p4_a_trivial_default_row_with_no_id(self):
+        body = TRIVIAL_SHAPES["default only, follow-up"].replace("| U1: trim spaces |",
+                                                                 "| Trim spaces too |")
+        with tempfile.TemporaryDirectory() as d:
+            t, b = self.files(d, V08_TICKET, body)
+            code, out = main_out(cp, [t, b, "--written-under", "0.8"])
+            self.assertEqual(code, 0, out)
+            self.assertIn("P4 not applicable (pre-v0.9 format)", out)
+            self.assertIn("FAIL P4 ", main_out(cp, [t, b])[1])
+
+    def test_p4_a_linter_code_in_an_id_less_row(self):
+        row = "| Delete the E501 per-file ignore for the parser | DEFAULT | deleted | unused |"
+        body = TRIVIAL_SHAPES["default only, follow-up"].replace(
+            "| U1: trim spaces | DEFAULT | not folded | beyond the ticket |", row)
+        with tempfile.TemporaryDirectory() as d:
+            t, b = self.files(d, V08_TICKET, body)
+            code, out = main_out(cp, [t, b, "--written-under", "0.8"])
+            self.assertEqual(code, 0, out)
+        control = body.replace(row, "| **U1** delete the E501 per-file ignore for the parser | "
+                               "DEFAULT | deleted | unused |")
+        self.assertEqual(ids(run_cp(control, TICKET), "P4"), [], "a bold lead id still reads")
+
+    def test_m1_free_labels_in_a_v08_decisions_file(self):
+        dec = ("2026-10-18 | D1 (constants) | a glass lid | as briefed\n"
+               "2026-10-18 | A3, D1 (DEFAULT accepted) | both accepted | the go\n")
+        notes = []
+        self.assertEqual(ids(run_cp(GOOD_BODY, V08_BRIEF, decisions=dec, notes=notes), "M1"), [])
+        self.assertIn("M1 not applicable (pre-v0.9 format)", notes)
+        self.assertTrue(ids(run_cp(GOOD_BODY, decisions=dec), "M1"), "a current brief FAILs")
+        self.assertEqual(ids(run_fc(V08_BRIEF, decisions=dec), "F11"), [])
+
+    def test_p7_a_base_row_whose_sha_sits_in_the_row_above(self):
+        body = GOOD_BODY.replace("| suite | `python3 -m pytest` | 12 passed |",
+                                 "| suite against the base | `python3 -m pytest` on `5d6e7f8` and "
+                                 "on base `1a2b3c4` | 12 passed |\n| lint against the base | "
+                                 "`ruff check .` | the same 3 findings on head and base |")
+        self.assertEqual(ids(run_cp(body, V08_BRIEF), "P7"), [])
+        self.assertTrue(ids(run_cp(body), "P7"), "a current brief FAILs")
+
+    def test_a2_a_question_with_no_blockquote_in_a_v08_ask(self):
+        text = ("# t-0001\n\n## Ask 2026-01-01 · interview\n\nThe parser drops a field.\n\n"
+                "**Q1** — keep an empty last field?\n")
+        with tempfile.TemporaryDirectory() as d:
+            f = ask_file(d, text)
+            code, out = main_out(cp, ["--asks", "--written-under", "0.8", f])
+            self.assertEqual(code, 0, out)
+            self.assertIn("A2 not applicable (pre-v0.9 format)", out)
+            self.assertEqual(main_out(cp, ["--asks", f])[0], 1, "a current ask FAILs A2")
+
+    def test_an_answer_line_inside_a_v08_ask(self):
+        text = ("# t-0001\n\n## Ask 2026-01-01 · interview\n\n> **What this is about:** a "
+                "field.\n\n**Q1** — keep an empty last field?\n\n**Q1 ruling (owner, "
+                "2026-01-01):** \"go\" → (a).\n")
+        with tempfile.TemporaryDirectory() as d:
+            f = ask_file(d, text)
+            code, out = main_out(cp, ["--asks", "--written-under", "0.8", f])
+            self.assertEqual(code, 0, out)
+            self.assertIn("questions=1", out)
+            self.assertIn("UNPARSED: ", main_out(cp, ["--asks", f])[1])
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 ---
 # skills-iim2
 title: 'shawarma retro: a CODING_STANDARDS.md review lane'
-status: todo
+status: scrapped
 type: feature
 priority: normal
 tags:
     - shawarma
 created_at: 2026-10-13T12:56:39Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-09T16:18:17Z
 ---
 
 Let shawarma use a per-project CODING_STANDARDS.md to review the code's shape. It complements, and does not replace, the behaviour checks the method already runs. Source: Matt Pocock's "fixing the PR bottleneck" talk (aihero.dev/skills). His points: the implementer agent is already overloaded, so standards go to a separate reviewer with its own context; checks can lie through tests that restate the implementation, tests tied to code structure, and mocks that cannot fail.
@@ -34,3 +34,7 @@ Dropped this round (R7): adds lane text with no case in this window. Stays open 
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+## Reasons for Scrapping
+
+Closed: carried twice with no case (round 10 D15); the one case in the window went to the style-decline rule (D17).

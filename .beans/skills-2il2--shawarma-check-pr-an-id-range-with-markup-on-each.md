@@ -1,13 +1,13 @@
 ---
 # skills-2il2
 title: 'shawarma check_pr: an id range with markup on each end (**D1**–**D29**) reads as its two ends only'
-status: todo
+status: completed
 type: bug
 priority: normal
 tags:
     - shawarma
 created_at: 2026-11-09T10:34:12Z
-updated_at: 2026-11-09T10:34:12Z
+updated_at: 2026-11-09T16:18:16Z
 ---
 
 Report from a project using strandic 0.9.0, received 2026-11-09. Reproduced on main, where `skills/shawarma/check_pr.py` matches the installed 0.9.0 copy (`diff -q` printed nothing).
@@ -42,3 +42,7 @@ Cause: `RANGE_RE` (`check_pr.py:103`) allows only whitespace around the separato
 Same family as skills-tx1x and skills-ain9 (id grammar), both closed by the round-9 retro.
 
 **Filed 2026-11-09: for round 10.** The skill changes only at a retro.
+
+## Summary of Changes
+
+RANGE_RE expands a range with markup on each end; red cases added (round 10 D7). Shipped in v0.10.0.

@@ -1,13 +1,13 @@
 ---
 # skills-lhdg
 title: 'shawarma: refuse to start plan or run on a checkout another session is working'
-status: todo
+status: completed
 type: task
 priority: normal
 tags:
     - shawarma
 created_at: 2026-10-17T07:55:59Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-09T16:18:17Z
 parent: skills-sp16
 blocked_by:
     - skills-hekn
@@ -34,3 +34,7 @@ If a retro adopts this, it changes the mod's contract in skills-pi0y (glob `.sha
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+## Summary of Changes
+
+Done by round-9 per-ticket markers, with round 10 D16. Shipped in v0.10.0.

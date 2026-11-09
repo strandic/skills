@@ -1,13 +1,13 @@
 ---
 # skills-9064
 title: 'shawarma retro: an init command for house rules and CODING_STANDARDS.md'
-status: todo
+status: scrapped
 type: feature
 priority: normal
 tags:
     - shawarma
 created_at: 2026-10-13T12:56:49Z
-updated_at: 2026-10-28T10:26:07Z
+updated_at: 2026-11-09T16:18:17Z
 blocked_by:
     - skills-iim2
 ---
@@ -26,3 +26,7 @@ Proposed (input to the next retro; the skill text changes only there):
 ## Round 7
 
 Dropped this round (R7): adds lane text with no case in this window. Stays open for a round that has one.
+
+## Reasons for Scrapping
+
+Closed: carried twice with no case (round 10 D15); depended on iim2.

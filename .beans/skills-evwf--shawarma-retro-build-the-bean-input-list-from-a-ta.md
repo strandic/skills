@@ -1,13 +1,13 @@
 ---
 # skills-evwf
 title: 'shawarma retro: build the bean input list from a tag query, one disposition per bean'
-status: todo
+status: completed
 type: task
 priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T10:26:07Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-09T16:18:17Z
 parent: skills-sp16
 ---
 
@@ -30,3 +30,7 @@ A query already exists as a house rule: bigbrain `docs/plans/README.md:139-141` 
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+## Summary of Changes
+
+The retro workflow builds inputs by command and stops on an undisposed run or item (round 10 D8). Shipped in v0.10.0.

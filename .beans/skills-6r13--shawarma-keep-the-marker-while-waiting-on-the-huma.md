@@ -1,13 +1,13 @@
 ---
 # skills-6r13
 title: 'shawarma: keep the marker while waiting on the human'
-status: todo
+status: completed
 type: task
 priority: normal
 tags:
     - shawarma
 created_at: 2026-11-03T13:09:21Z
-updated_at: 2026-11-03T13:09:21Z
+updated_at: 2026-11-09T16:18:17Z
 ---
 
 Owner report, 2026-11-03, from planning a ticket in another repo: the companion pane filled during research, then cleared when the session stopped for the design interview. The work was still in progress.
@@ -44,3 +44,7 @@ Related: skills-mvfd (session id in the marker), also a marker change for a retr
 **Filed 2026-11-03, after round 9: for round 10** (owner request). The skill changes only at a retro.
 
 Workaround until then: in the paused session, write the marker by hand with step `plan interview`, and tell the session to keep it until the interview ends.
+
+## Summary of Changes
+
+The marker names the wait at a stop and is deleted when the work ends (round 10 D16). Shipped in v0.10.0.

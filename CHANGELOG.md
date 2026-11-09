@@ -9,6 +9,29 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-09
+
+shawarma round 10.
+
+### Added
+- `check_pr --asks` counts an ask once per heading; a plan or PR stop with no matching ask reads `UNPARSED`; one answer form.
+- `check_pr` P9: a code commit with no plan commit among its ancestors fails (the trivial path's note precedes its code).
+- `check_pr` P10: a disclosed known limit with no ticket fails. `freeze_check` F11: a decision dated before the freeze needs its brief row.
+- `freeze_check` F10 fails a RULING left on an `unruled:` line; M1 fails a RULING answered only by the run command.
+- `--written-under X.Y`: a check newer than a record's format reads `not applicable`.
+- The retro workflow builds its inputs by command, stops on a null checker replay or an undisposed item, and replays at the PR head.
+
+### Changed
+- A claim of what a user sees, or a command handed to the human, needs its reading like a number does.
+- An option or change added while relaying the human's answer is a new DEFAULT, recorded as relayed.
+- The state marker names the wait at a stop and is deleted when the work ends, not at every stop.
+- A gate rule prints graded/expected and reads cannot-run below it; an empty input a checker requires fails.
+- `style` declines need a reproduction showing no behaviour difference; a ticket on the PR's own new lines is a DEFAULT at the gate.
+- The attack lane flags a test's expected value that is not independent of the sketch. Ranges with markup on each end expand fully.
+
+### Removed
+- The skill-repo porcelain check (the checkers no longer write bytecode) and the review-commit author rule.
+
 ## [0.9.0] - 2026-11-02
 
 shawarma round 9.

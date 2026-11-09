@@ -1,13 +1,13 @@
 ---
 # skills-u376
 title: 'shawarma: start without a human (model-invoked, orchestrator-dispatched) and rulings relayed by message'
-status: todo
+status: completed
 type: task
 priority: normal
 tags:
     - shawarma
 created_at: 2026-10-17T12:46:23Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-09T16:18:17Z
 parent: skills-sp16
 blocked_by:
     - skills-hekn
@@ -33,3 +33,7 @@ Sketch (to rule at the retro):
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+## Summary of Changes
+
+An option or change added while relaying the human's answer is a new DEFAULT, recorded as relayed; the rest of the sketch dropped for want of a case (round 10 D3). Shipped in v0.10.0.

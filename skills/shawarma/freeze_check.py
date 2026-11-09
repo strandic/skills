@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """freeze_check.py — plan step 5's mechanical freeze conditions (the rest stay in plan step 5).
 
-    freeze_check.py <plan.md> [--listing FILE] [--repo DIR]
-    freeze_check.py <ticket.md>            (trivial: F10 on the latest `## Plan` note)
+    freeze_check.py <plan.md> [--listing FILE] [--repo DIR] [--written-under X.Y]
+    freeze_check.py <ticket.md> [--written-under X.Y]   (trivial: F10 on the latest `## Plan` note)
 
 Prints one line per failure, `FAIL <check-id> <where>: <what>`, then `PASS` or `FAIL (<n>)`.
 Exit 0 on PASS, 1 on FAIL, 2 on unusable input (unreadable file, not a brief, lanes.md missing).
@@ -30,10 +30,21 @@ Checks (each is a reading, never a judgement):
   F9 with --listing: the header paragraph (title to `## 1.`) names each lesson tag at least as
      often as the listing holds lessons with that tag (`tag ×2` counts 2). The listing's lines read
      `<line>: - Lesson (<tag>): …` (a lessons file of `- Lesson (<tag>): …` lines, numbered by grep -n).
+     The listing may be empty only when the header says `Lessons read: none`; an empty listing
+     otherwise FAILs, naming it (a listing in another format reads empty, never PASS).
   F10 every `unruled:` line reads `unruled: none` or `unruled: <id> <item> — default <x>`, one
      id per line in check_pr.py's grammar, with a `> **What this is about:**` blockquote above it
-     in its `## ` section. On a ticket (no `## N.` section, a `## Plan` note) only F10 runs, on
-     the latest `## Plan` note; F1–F9 print `not applicable (trivial)`.
+     in its `## ` section; its id is no RULING (`unruled:` holds DEFAULTs only): not labelled
+     RULING on that line, by a question line `**<id>** … RULING` in an `## Ask` section of the
+     same file, or by decisions.md beside the brief. On a ticket (no `## N.` section, a `## Plan`
+     note) only F10 runs, on the latest `## Plan` note; F1–F9 and F11 print `not applicable
+     (trivial)`.
+  F11 with a decisions.md beside the brief: each line dated on or before the freeze (the latest
+     `planned`/`refreshed` date of the header) has its id in a §9 row, an `unruled:` line or the
+     authority clause (check_pr.py's M1 reading of both files).
+
+Format versions (check_pr.py's docstring): a header naming `skill … 0.8.x`, or --written-under
+0.8, prints `F10 not applicable (pre-v0.9 format)` and the same for F11.
 """
 import ast
 import re
@@ -60,6 +71,7 @@ SOURCE_STATES = ("verified", "paraphrased", "not found", "not run")
 LANES = Path(__file__).resolve().parent / "lanes.md"
 # §7 attack ids (ID_RE above) are a subset of the grammar check_pr.py's docstring writes once;
 # F10 reads `unruled:` ids with that grammar itself.
+sys.dont_write_bytecode = True  # importing check_pr leaves no __pycache__ (round-10 D12)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import check_pr  # noqa: E402
 
@@ -492,9 +504,23 @@ def patch_units(b, repo):
 
 # ---- the checks ----------------------------------------------------------------------------
 
-def unruled_fails(lines):
-    """F10 over a list of lines (a brief, or one plan note with its heading)."""
+def ask_rulings(lines):
+    """Ids a question line labels RULING in an `## Ask` section: `**<id>** … RULING …`."""
+    out, on = set(), False
+    for line in lines:
+        if line.startswith("## "):
+            on = bool(re.match(r"^##\s+Ask\b", line))
+        m = re.match(r"^\s*(?:[-*]\s+)?\*\*([^*]+)\*\*(.*)$", line) if on else None
+        if m and check_pr.slot_id(m.group(1)) and re.search(r"\bRULING\b", m.group(2)):
+            out.add(check_pr.slot_id(m.group(1)))
+    return out
+
+
+def unruled_fails(lines, rulings=frozenset()):
+    """F10 over a list of lines (a brief, or one plan note with its heading); rulings: ids
+    decisions.md labels RULING."""
     fails = []
+    rulings = set(rulings) | ask_rulings(lines)
     for k, line, i in check_pr.unruled_ids("\n".join(lines))[1]:
         word = (re.split(r"unruled:(?:\*\*)?", line, maxsplit=1)[1].split() or [""])[0]
         if word.lower().strip(".") == "none":
@@ -505,6 +531,9 @@ def unruled_fails(lines):
             continue
         if word.rstrip("*`").endswith(","):
             fails.append(f"FAIL F10 line {k + 1}: one id per `unruled:` line: {norm(line)[:70]!r}")
+        if i in rulings or re.search(r"[—–-]\s*RULING\b", line.split(word, 1)[-1]):
+            fails.append(f"FAIL F10 line {k + 1}: {i} is a RULING; `unruled:` holds DEFAULTs "
+                         "only (the go never answers a RULING)")
         a, _z = check_pr.section_of(lines, k)
         if not any(check_pr.WHAT_ABOUT.match(x) for x in lines[a:k]):
             fails.append(f"FAIL F10 line {k + 1}: unruled {i} has no `> **What this is about:**` "
@@ -512,19 +541,35 @@ def unruled_fails(lines):
     return fails
 
 
-def check_ticket(text):
+def check_ticket(text, written_under=None):
     """Trivial mode: F10 on the latest `## Plan` note of a ticket."""
+    young = check_pr.too_young("M1", written_under)
+    if young:
+        return [young.replace("M1", "F10")]
     lines = text.splitlines()
     plans = [k for k, line in enumerate(lines) if re.match(r"^##\s+Plan\b", line)]
     if not plans:
         raise Unusable("no `## N.` section and no `## Plan` note — neither a brief nor a ticket")
-    a, z = check_pr.section_of(lines, plans[-1])
+    a, z = check_pr.plan_note_span(lines, plans[-1])
     fails = unruled_fails(lines[:z])
     return [f for f in fails if int(re.search(r"line (\d+)", f).group(1)) > a]
 
 
-def check(b, listing=None, repo=None):
+def decisions_of(b):
+    """The text of decisions.md beside the brief, or None."""
+    p = b.path.parent / "decisions.md"
+    try:
+        return p.read_text(encoding="utf-8") if p.is_file() else None
+    except (OSError, UnicodeDecodeError) as e:
+        raise Unusable(f"cannot read {p}: {e}") from e
+
+
+def check(b, listing=None, repo=None, written_under=None):
     fails = []
+    young = check_pr.too_young("M1", written_under or check_pr.header_version(b.header))
+    young = young and young.replace("M1", "F10")
+    decisions = decisions_of(b)
+    good = check_pr.decisions_lines(decisions)[0] if decisions is not None else []
 
     def fail(cid, where, what):
         fails.append(f"FAIL {cid} {where}: {what}")
@@ -672,6 +717,9 @@ def check(b, listing=None, repo=None):
                        if (m := re.match(r"^\s*\d+:\s*- Lesson \(([^)]+)\)", l)))
         if not tags and listing.strip():
             raise Unusable("--listing holds no `N: - Lesson (tag): …` line")
+        if not listing.strip() and not re.search(r"Lessons read:\s*none\b", b.header, re.I):
+            fail("F9", "--listing", "empty input (0 lines): the lessons listing may be empty only "
+                 "when the header says `Lessons read: none`")
         for tag, want in sorted(tags.items()):
             forms = [tag] + ([tag.split()[-1]] if " " in tag else [])
             got = 0
@@ -685,8 +733,19 @@ def check(b, listing=None, repo=None):
                 fail("F9", "header", f"lesson tag {tag!r}: {want} in the listing, "
                      f"{got} in Lessons read")
 
-    # F10
-    fails += unruled_fails(b.lines)
+    # F10, F11
+    if young:
+        fails += [young, young.replace("F10", "F11")]
+        return fails
+    fails += unruled_fails(b.lines, {i for _k, i, kind in good if kind == "RULING"})
+    rec = check_pr.brief_records(b.text)
+    dates = re.findall(r"\b(?:planned|refreshed)\s+(\d{4}-\d{2}-\d{2})", b.header)
+    frozen = max(dates) if dates else "9999-12-31"
+    known = {i for _k, ids, _kind in rec.s9_rows for i in ids} | rec.unruled | rec.authority
+    for k, i, _kind in good:
+        if decisions.splitlines()[k][:10] <= frozen and i not in known:
+            fail("F11", f"decisions.md:{k + 1}", f"{i} is dated on or before the freeze "
+                 f"({frozen}) and is in no §9 row, `unruled:` line or authority clause")
     return fails
 
 
@@ -697,7 +756,7 @@ def main(argv):
         print("class words: " + ", ".join(CLASS_WORDS))
         return 0
     opts = {}
-    for flag in ("--listing", "--repo"):
+    for flag in ("--listing", "--repo", "--written-under"):
         if flag in args:
             k = args.index(flag)
             if k + 1 >= len(args):
@@ -708,6 +767,10 @@ def main(argv):
     if len(args) != 1 or args[0].startswith("-"):
         print(__doc__.split("\n\n")[1], file=sys.stderr)
         return 2
+    ver = check_pr.version(opts.get("--written-under")) if "--written-under" in opts else None
+    if "--written-under" in opts and not ver:
+        print("--written-under needs a version (`0.8`, `v0.9.0`)", file=sys.stderr)
+        return 2
     try:
         try:
             b = Brief(args[0])
@@ -715,19 +778,20 @@ def main(argv):
             if str(e).startswith("cannot read"):
                 raise
             text = Path(args[0]).read_text(encoding="utf-8")
-            fails = check_ticket(text)
-            print("F1–F9 not applicable (trivial)")
+            fails = check_ticket(text, ver)
+            print("F1–F9 and F11 not applicable (trivial)")
             for f in fails:
                 print(f)
-            print("PASS" if not fails else f"FAIL ({len(fails)})")
-            return 1 if fails else 0
+            n = sum(1 for f in fails if f.startswith("FAIL"))
+            print("PASS" if not n else f"FAIL ({n})")
+            return 1 if n else 0
         listing = None
         if "--listing" in opts:
             try:
                 listing = Path(opts["--listing"]).read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as e:
                 raise Unusable(f"cannot read listing: {e}")
-        fails = check(b, listing, opts.get("--repo"))
+        fails = check(b, listing, opts.get("--repo"), ver)
     except Unusable as e:
         print(f"UNUSABLE: {e}")
         return 2

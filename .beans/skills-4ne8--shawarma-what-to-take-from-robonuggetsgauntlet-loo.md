@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-02T23:06:31Z
-updated_at: 2026-11-02T23:09:20Z
+updated_at: 2026-11-09T16:18:24Z
 ---
 
 Owner request, 2026-11-03: look into https://github.com/robonuggets/gauntlet-loop for aspects that would improve the shawarma method, as skills-8yf4 did for EGM. Research done 2026-11-03 on the repo at its public history (2 commits, 2026-08-05 and 2026-08-06). Clone, not run: scratchpad only.
@@ -44,3 +44,7 @@ Not read: PR #5's diff, PR #2's diff, the forks, the Cursor port, and the primar
 
 
 **Filed 2026-11-03, after round 9: for round 10** (owner request), beside skills-8yf4.
+
+## Round 10 (2026-11-09)
+
+Carried. The "critic names the single biggest gap first" candidate is dropped: research contradicts it (ask the reviewer to report everything and filter in a separate pass).
