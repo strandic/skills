@@ -9,6 +9,11 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-09
+
+### Fixed
+- Retro checker replay: with extra repos read, a host record must be `#<PR number>`; a ticket-shaped host record is refused, since the repo label is the agent's own claim and could carry another repo's id.
+
 ## [0.10.0] - 2026-11-09
 
 shawarma round 10.
