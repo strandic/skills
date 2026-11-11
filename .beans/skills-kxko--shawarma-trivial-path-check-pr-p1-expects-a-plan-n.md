@@ -1,56 +1,37 @@
 ---
 # skills-kxko
-title: 'shawarma trivial path: check_pr P1 expects a plan-note commit, and nothing on the trivial path says to make one'
+title: 'shawarma: the skill never says when to commit the plan note, which check_pr P1 and P9 both need (trivial path, tracker tickets)'
 status: todo
 type: bug
+priority: normal
 tags:
     - shawarma
 created_at: 2026-11-11T12:13:09Z
-updated_at: 2026-11-11T12:13:09Z
+updated_at: 2026-11-11T12:17:19Z
 ---
 
-Field report, 2026-11-11, from a trivial-path run in another repo (strandic 0.9.0). The gap is still in v0.10.1; line numbers below are for v0.10.1.
+Field report, 2026-11-11, from a trivial-path run in another repo. First seen on strandic 0.9.0; re-checked against shawarma 0.10.1. Line numbers below are for 0.10.1, and each claim below was checked against that code.
 
-## What happened
+## What happened (0.9.0)
 
-A trivial-path run (plan judged trivial, then run) reached Wave 4. `check_pr.py <ticket> <body> --repo <worktree>` printed:
+A trivial-path run reached Wave 4 in a repo whose tickets live in Linear. `check_pr.py <ticket> <body> --repo <worktree>` printed `FAIL P1 line 1: first line does not link the plan ending (brief/plan + commit)`. The plan note was a Linear comment, so the first line of the PR body had no SHA to give. The run disclosed the FAIL in the PR's Verification table and left the records unchanged, as run.md step 6 says.
 
-```
-P6 not applicable (trivial)
-P8 not applicable (trivial)
-M1 not applicable (trivial)
-FAIL P1 line 1: first line does not link the plan ending (brief/plan + commit)
-FAIL (1)
-```
+Evidence: biojoule/infrastructure PR 1776 (BIO-1463).
 
-The body's first line was `Plan ending: [trivial note on the ticket](<Linear issue URL>) · ticket <id> · no brief commit (trivial path; the plan note is a ticket comment)`. It contains "plan" but no SHA, so P1 fails. P1 needs `\b(brief|plan)\b` and `\b[0-9a-f]{7,40}\b` on the first line (`check_pr.py:580`).
+## What 0.10.1 changes, and what it leaves open
 
-The run judged the FAIL false, pasted it into the PR's Verification table, and left the records unchanged, as run.md step 6 says.
+1. **P9 requires the plan commit, but the prose never asks for it.** `check_pr.py:51-53`: every commit that touches a path outside `docs/`, `.beans/` and `*.md` needs a `plan(<ticket>)` commit among its ancestors. `grep -n 'plan(' skills/shawarma/*.md` finds nothing. SKILL.md (Triage › Trivial), plan.md step 5 and run.md never say to make this commit, what it holds, or what its subject is. A run that follows the prose fails P9 on its first code commit.
+2. **The trivial path no longer says how to run the checker.** 0.10.1 removed `with check_pr.py <ticket> <body>` from SKILL.md's trivial line. The line still says "as in run step 6", but run.md step 6 gives only the brief form (`<brief> <body> --repo … --tests-commit …`). The checker's trivial mode still expects a ticket file with a `## Plan (<date>)` heading (`check_pr.py:58-62`, `:433`).
+3. **The skeleton still asks for a plan-note commit.** `check_pr.py:164-165` says that on the trivial path the first line links "the ticket's plan-note commit" (`Plan ending: [trivial note <sha>](<link>) · ticket <id>`). This matches P9, but nothing in the prose makes that commit.
+4. **Tickets kept in a tracker have no ticket file.** When tickets live in Linear rather than in the repo (as `.beans/` files), trivial mode has no file to read, and the `## Plan` note has no obvious place. The run built a local copy (the ticket text plus the note under `## Plan (<date>)`) only to feed the checker.
+5. **P1's SHA test is loose.** `check_pr.py:580` accepts any run of 7 to 40 hex characters anywhere on the first line. Unlike the SHA test at `:725`, it does not require a digit, and it does not check that the commit holds the plan. A base-commit SHA passes, and so does a word like `defaced`.
 
-## Why there was no SHA
+## Suggested fix, for the retro to weigh
 
-The skill's text and the checker's skeleton disagree:
+- [ ] Name the plan commit in the prose for both the brief ending and the trivial ending. Commit the plan note as `plan(<ticket>): …` before any code, under `docs/plans/<date>-<ticket>-<name>/`. On the brief path that file is the brief. On the trivial path it is `note.md` with a `## Plan (<date>)` heading. House rules can override the location.
+- [ ] In trivial mode, make that committed file the checker's `<ticket>` argument, and put the trivial form of the checker call back into run step 6.
+- [ ] Tighten P1. The SHA must hold a digit. With `--repo`, it must be the `plan(<ticket>)` commit that P9 found.
 
-- The `--skeleton` comment (`check_pr.py:165`) says that on the trivial path the first line links "the ticket's plan-note commit": `Plan ending: [trivial note <sha>](<link>) · ticket <id>`.
-- SKILL.md's Triage › Trivial (`SKILL.md:23`) says to write the ticket note "per house rules" and then stop. It never says to commit the note. plan.md step 5 says "Note on the ticket and commit per house rules", but that step is the brief ending.
-- In a repo whose tickets live in a tracker such as Linear, and whose house rules (`docs/plans/README.md`) don't cover trivial notes, the note is a tracker comment. Nothing is committed, so P1 can never pass on that path.
+Fallback options from the first report, if the retro rejects a committed note: let P1 accept a tracker comment URL in trivial mode, or at least make SKILL.md's trivial line and the skeleton say the same thing.
 
-## Second gap: the ticket file
-
-In trivial mode the checker reads the ticket as a file (`ticket_records`, `check_pr.py:432`), which needs a `## Plan` heading in the ticket text. With a tracker ticket, that file doesn't exist. The run had to build a local copy (the ticket text plus the plan note under `## Plan (<date>)`) only to feed the checker. Nothing in the skill describes that copy.
-
-## Also seen
-
-P1's SHA test accepts any run of 7 to 40 hex characters anywhere on the line. Any SHA passes, including the base commit's. It doesn't check that the commit holds the plan.
-
-## Options, for the retro to weigh
-
-- [ ] 1. Say where the note is committed. The trivial ending tells the run to commit the note, for example `docs/plans/<date>-<ticket>-<name>/note.md` with a `## Plan (<date>)` heading, either per house rules or by default. P1 then has a real commit, and that file is what the checker reads as the ticket.
-- [ ] 2. Let P1 accept a tracker link. In trivial mode, allow a plan ending that is a tracker comment URL with no commit, and document it.
-- [ ] 3. At least align the docs. Make SKILL.md's trivial line and the skeleton say the same thing, and say what file the checker's `<ticket>` argument is when tickets live in a tracker.
-
-Reporter's preference: option 1. It gives the checker a real commit, gives the trivial path the same kind of record as a brief, and removes the local copy. Whichever option lands, consider tightening P1 so the SHA must be a commit that touches the plan or note file.
-
-Evidence: biojoule/infrastructure PR 1776 (BIO-1463), whose Verification table quotes the FAIL.
-
-**Filed 2026-11-11, for the next retro.** The skill changes only at a retro.
+**Filed 2026-11-11, updated the same day after 0.10.1, for the next retro.** The skill changes only at a retro.
