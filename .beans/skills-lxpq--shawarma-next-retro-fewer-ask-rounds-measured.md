@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-10-09T11:54:42Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-11T11:36:35Z
 parent: skills-mcfe
 ---
 
@@ -27,3 +27,8 @@ Asks are now headed `## Ask <date> · <kind>` on the ticket and counted by check
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+
+## Note of 2026-11-11
+
+`scripts/runmeter.mjs` reads owner turns per session from the transcripts, with no heading the asker has to write. That is part of what this ticket waited for. It does not count ask rounds per plan or the minutes waited per round. Read it at round 11.

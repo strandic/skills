@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-09-24T15:53:50Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-11T11:36:35Z
 parent: skills-sp16
 blocking:
     - skills-jk6n
@@ -47,3 +47,10 @@ The bank ran outside retro-workflow.js again, six runs (scripts in bigbrain bigb
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+
+## Ruling of 2026-11-11
+
+The owner ruled one bounded check: can the bank tell the method from no method? The full text against no skill text, on the four cases that hold the five traps able to show a loss, three runs with the skill text and three without, with the reading rule, thresholds and models committed first, one optional extension, then stop. If the bank cannot see the method, it stops deciding cuts. The protocol goes to the owner before any run.
+
+From the review, not ruled: bank repairs (neutral folder names for scoring, the case that never reaches a brief) can wait for that reading; and the trap that reads 1 every time is worth keeping, because it is the bank's best loss detector.

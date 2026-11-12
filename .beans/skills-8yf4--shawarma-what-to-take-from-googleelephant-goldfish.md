@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T09:19:22Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-11T11:36:35Z
 ---
 
 Owner request, 2026-10-28: what can shawarma learn from https://github.com/google/elephant-goldfish-model (EGM), and does EGM come with evals? Research done 2026-10-28 on the repo at its public history (107 commits, ~1 week public). Clone, not run: scratchpad only.
@@ -40,3 +40,15 @@ The 9-reviewer, 5-stage review with a synthesizer; running each reviewer twice; 
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+
+## Review of 2026-11-11
+
+A critical review of the skill re-read EGM at 187 commits (record private). Nothing here is adopted: the owner ruled a hold on the skill's text for about 15 briefed runs. For round 11, with the cases this ticket lacked:
+
+- **Four answers to a finding**, narrowed: a DECLINE as `unreachable` or `false-positive` cites its reading. Case: since the pull-request checker shipped, 24 of 27 DECLINE rows carry only the reason word, 3 of them with these two reasons. Round 6 proposed a form of this and did not adopt it.
+- **Review-loop stopping rules**: the review recommends keeping them, on the ticket about review rounds that do not converge (skills-s2ae). Case: one run went five review rounds, and rounds 2 to 4 each found a defect in the previous fix.
+- **Paraphrase first** and **unranked options**: the review recommends a small test each, not a drop. The second belongs on the ticket about ruling more without stopping (skills-h8hp).
+- **A failed reviewer is "not run"**, **draft against source**, **a size cap in CI**: the review recommends dropping them. lanes.md says a lane with no report is NOT RUN and run.md says an all-clear with no observed run does not count; SKILL.md asks for a reading beside every claim; retro.md rules growth per load path.
+- Three ideas this list missed: one fixed, plainly written text per lane kind; reading back what a lane was told (`scripts/runmeter.mjs --prompts`); checking a brief's statements about today's system against the code.
+- EGM itself still has no quality evaluation: none of its commits since 2026-10-28 adds one.
