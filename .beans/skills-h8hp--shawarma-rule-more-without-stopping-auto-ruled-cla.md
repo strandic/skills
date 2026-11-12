@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-10-28T09:25:55Z
-updated_at: 2026-11-02T14:17:33Z
+updated_at: 2026-11-11T11:36:35Z
 parent: skills-mcfe
 ---
 
@@ -45,3 +45,8 @@ Related: skills-lxpq (fewer ask rounds, measured), skills-u376 (DEFAULT standing
 
 
 **Round 9 (2026-11-02): carried to round 10** (disposition D4).
+
+
+## Ruling of 2026-11-11
+
+The owner ruled, on a critical review of the skill (record private): the even-handed half goes to round 11 first. That is the same fields for every option, the missing-option probe, and a short "stakes" paragraph in the house rules (who uses the system, how many instances, what data is at risk). Auto-ruled classes wait for a baseline of owner turns. `scripts/runmeter.mjs` prints owner turns per session; a figure per run needs the ticket on splitting a session at each skill command (skills-cb5t). The skill's text is on hold for about 15 briefed runs, so nothing changes before then.

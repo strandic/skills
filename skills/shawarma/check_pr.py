@@ -7,7 +7,9 @@
     check_pr.py --asks [--repo DIR] [--written-under X.Y] <ticket.md> [<ticket.md> ...]
 
 Checking prints one line per failure, `FAIL <check-id> <where>: <what>`, then `PASS` or
-`FAIL (<n>)`; exit 0 on PASS, 1 on FAIL, 2 on unusable input. Stdlib only; git is read-only.
+`FAIL (<n>)`; exit 0 on PASS, 1 on FAIL, 2 on unusable input, 3 when the checker itself crashes
+(a `CRASH` line and no verdict: a bug in this script, never a reading of the record). Stdlib
+only; git is read-only.
 HTML comments in the body (the skeleton's) are not read.
 
 Empty inputs: a ticket given to --asks may not be empty (0 lines: `FAIL A0`); a tests commit
@@ -32,6 +34,7 @@ named the record is read as current.
      `authority:` clause names, one the plan ending defines in bold, or one on an `unruled:` line.
   P5 Unreviewed holds a `git log …` command and its pasted output (or `empty`); with --repo the
      command is re-run at --head (default HEAD) and its commits compared with the pasted ones.
+     A command that does not parse, or that holds an unsafe option, fails P5 and is not re-run.
   P6 with --repo and --tests-commit: every `def test_…` in the test files the tests commit
      touched that no test file holds at --head is named in the brief's §9 (Python test naming only:
      another language's repo reads P6 as NOT RUN).
@@ -104,6 +107,7 @@ import re
 import shlex
 import subprocess
 import sys
+import traceback
 from collections import Counter
 from pathlib import Path
 
@@ -481,8 +485,10 @@ UNSAFE = re.compile(r"^--(output|ext-diff|textconv|exec|upload-pack)\b|^-c$|^-C$
 
 
 def git(repo, *args):
+    # No stdin: a pasted `git log --stdin` must not wait on ours. A git that cannot start raises
+    # OSError, which main() reads as unusable input: it is no reading of the record.
     r = subprocess.run(["git", "-C", str(repo), "--no-pager", *args], capture_output=True,
-                       text=True)
+                       text=True, stdin=subprocess.DEVNULL)
     if r.returncode:
         raise Unusable(f"git {' '.join(args)}: {r.stderr.strip()[:200]}")
     return r.stdout
@@ -680,18 +686,28 @@ def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=
         elif pasted is None:
             fail("P5", f"line {k_cmd + 1}", "the command's pasted output (or `empty`) is missing")
         elif repo:
-            args = shlex.split(cmd)[2:]
-            bad = [a for a in args if UNSAFE.search(a)]
-            if bad:
-                fail("P5", f"line {k_cmd + 1}", f"refused to re-run, unsafe options {bad}")
-            else:
-                args = [re.sub(r"\bHEAD\b", head, a) for a in args]
-                try:
-                    out = git(repo, "log", "--no-ext-diff", "--no-textconv", *args).splitlines()
-                except Unusable as e:  # the pasted command itself does not run
-                    fail("P5", f"line {k_cmd + 1}", f"re-run failed: {e}")
-                    out = None
-            if not bad and out is not None:
+            out, bad = None, []
+            try:
+                args = shlex.split(cmd)[2:]
+            except ValueError as e:  # an unbalanced quote: the pasted text is no command
+                args = None
+                fail("P5", f"line {k_cmd + 1}", f"the pasted command does not parse ({e}); "
+                     "not re-run")
+            if args is not None:
+                bad = [a for a in args if UNSAFE.search(a)]
+                if bad:
+                    fail("P5", f"line {k_cmd + 1}", f"refused to re-run, unsafe options {bad}")
+                elif any("\0" in a for a in args):
+                    fail("P5", f"line {k_cmd + 1}", "the pasted command holds a NUL byte; "
+                         "not re-run")
+                else:
+                    args = [re.sub(r"\bHEAD\b", lambda _m: head, a) for a in args]
+                    try:
+                        out = git(repo, "log", "--no-ext-diff", "--no-textconv",
+                                  *args).splitlines()
+                    except Unusable as e:  # the pasted command itself does not run
+                        fail("P5", f"line {k_cmd + 1}", f"re-run failed: {e}")
+            if out is not None:
                 pl = [norm(x) for x in pasted if x.strip()]
                 ol = [norm(x) for x in out if x.strip()]
                 if pl != ol:
@@ -919,6 +935,22 @@ def pop_opts(args, flags):
 
 
 def main(argv):
+    for stream in (sys.stdout, sys.stderr):  # a console that is not UTF-8 escapes, never fails
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
+    try:
+        return run(argv)
+    except OSError as e:  # a tool (git) or a file that cannot be opened: unusable, not a bug
+        print(f"UNUSABLE: {type(e).__name__}: {e}")
+        return 2
+    except Exception as e:  # a bug in this script, never a reading of the record
+        traceback.print_exc()
+        print(f"CRASH {type(e).__name__}: {e} - check_pr.py itself failed; this is no verdict "
+              "on the record (exit 3)".encode("ascii", "backslashreplace").decode())
+        return 3
+
+
+def run(argv):
     args = list(argv)
     try:
         if args == ["--skeleton"]:
