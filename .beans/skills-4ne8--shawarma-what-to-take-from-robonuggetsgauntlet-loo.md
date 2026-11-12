@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-02T23:06:31Z
-updated_at: 2026-11-09T16:18:24Z
+updated_at: 2026-11-11T10:35:46Z
 ---
 
 Owner request, 2026-11-03: look into https://github.com/robonuggets/gauntlet-loop for aspects that would improve the shawarma method, as skills-8yf4 did for EGM. Research done 2026-11-03 on the repo at its public history (2 commits, 2026-08-05 and 2026-08-06). Clone, not run: scratchpad only.
@@ -48,3 +48,17 @@ Not read: PR #5's diff, PR #2's diff, the forks, the Cursor port, and the primar
 ## Round 10 (2026-11-09)
 
 Carried. The "critic names the single biggest gap first" candidate is dropped: research contradicts it (ask the reviewer to report everything and filter in a separate pass).
+
+
+## Review of 2026-11-11
+
+Two corrections to this ticket, from a critical review of the skill (record private):
+
+- **The evidence is not "None".** The upstream author's own README records the technique in use, and it is negative on the loop: the critics never picked the builder's work, they were wrong together for three rounds, and agents working per piece in parallel did worse than one owner in sequence. The one part with a proven result used an executed gate, not a critic.
+- **"The critic never sees the builder's reasoning"** holds for the fix-review lane only. A first-round review lane reads the brief, which carries the planner's verdicts.
+
+For round 11 (the skill's text is on hold for about 15 briefed runs):
+
+- The review recommends a cheap test: letting the plan-time attack lane design attacks of its own before it sees the planner's lines.
+- A no-skill arm on the trap bank is ruled as one bounded check, on the trap bank ticket (skills-x895).
+- The review recommends not taking: the open-ended loop, a critic's pick as a gate, a critic per small piece, "minimal" for lane prompts.
