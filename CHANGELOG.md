@@ -9,6 +9,30 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-12
+
+Script fixes between retros, and one new script. The owner ruled on 2026-11-11 that the skill's
+scripts may be fixed between retros, with a failing test first and a patch version. The skill's
+text still changes only at a retro, and none changed here.
+
+### Added
+- `scripts/runmeter.mjs` reads Claude Code's session transcripts and prints, per session, each lane's model, effort, minutes and tokens, and the owner's turns. With `--prs` it adds the minutes from open to merge. With `--prompts` it writes each lane's prompt to a new folder outside any git repository. With `--labels` it names each session by the first two words of the command that opened it. Reference: `scripts/runmeter.md`.
+- `freeze_check.py --ticket FILE`: F10 also reads the plan ending's `unruled:` lines on the ticket, a ruling asked on the ticket counts for the brief's lines, and F11 knows the ticket's ids. When F10 found no `unruled:` line to read it prints `F10 not checked`, so PASS no longer covers a check that read nothing.
+
+### Changed
+- The retro's two proposers have no quota: proposing nothing is a valid result. A proposer that returns nothing at all stops the retro, and so does a consolidator that returns no proposition for what was proposed. With nothing proposed, the retro ends after the consolidation.
+- The retro's replay records a crashed checker as `CRASH`, runs `freeze_check.py` again with `--ticket` when F10 was not checked, and its prompt states the limits its redaction check enforces.
+- README: who writes the code, the size rule, what a plan ending lists, what has been measured, the run meter.
+
+### Fixed
+- `freeze_check.py` crashed on a brief with no §3, §5 or §7. F1 now reports the missing section.
+- `check_pr.py` P5 crashed on a pasted `git log` command with an unbalanced quote. It now fails P5 and re-runs nothing, as it does for a command that holds a NUL byte. The re-run no longer waits on the checker's own input, and a head that holds a backslash fails P5 instead of raising an error.
+- A checker that crashes prints a `CRASH` line and exits 3. It used to exit 1, FAIL's code. A missing `git` or a file that cannot be opened is unusable input (exit 2). Output no longer fails on a console that is not UTF-8.
+- `scripts/size_paths.py` deleted whatever folder it was given as output. It now replaces only a new or empty folder, or its own earlier output with nothing added, and reads the whole skill before it replaces anything.
+- The retro script built paths with a double slash when a folder was given with a trailing or doubled slash, and its own redaction check then dropped the replay.
+- `test_f8_a_rule_read_on_sub_items` built its fixture with a replace that matched nothing. The unsafe-option test of P5 wrote to a path outside its temporary folder.
+- `marketplace.json` still named 0.9.0 after v0.10.0 and v0.10.1, which left one test red on `main`.
+
 ## [0.10.1] - 2026-11-09
 
 ### Fixed

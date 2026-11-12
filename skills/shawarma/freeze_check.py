@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """freeze_check.py — plan step 5's mechanical freeze conditions (the rest stay in plan step 5).
 
-    freeze_check.py <plan.md> [--listing FILE] [--repo DIR] [--written-under X.Y]
+    freeze_check.py <plan.md> [--listing FILE] [--repo DIR] [--ticket FILE] [--written-under X.Y]
     freeze_check.py <ticket.md> [--written-under X.Y]   (trivial: F10 on the latest `## Plan` note)
 
 Prints one line per failure, `FAIL <check-id> <where>: <what>`, then `PASS` or `FAIL (<n>)`.
-Exit 0 on PASS, 1 on FAIL, 2 on unusable input (unreadable file, not a brief, lanes.md missing).
+Exit 0 on PASS, 1 on FAIL, 2 on unusable input (unreadable file, not a brief, lanes.md missing),
+3 when the checker itself crashes (a `CRASH` line and no verdict: a bug in this script, never a
+reading of the record).
 Stdlib only. lanes.md and check_pr.py (the id grammar) are read from this script's own folder.
 Notes go to stderr.
 
@@ -38,7 +40,15 @@ Checks (each is a reading, never a judgement):
      RULING on that line, by a question line `**<id>** … RULING` in an `## Ask` section of the
      same file, or by decisions.md beside the brief. On a ticket (no `## N.` section, a `## Plan`
      note) only F10 runs, on the latest `## Plan` note; F1–F9 and F11 print `not applicable
-     (trivial)`.
+     (trivial)`. With --ticket (house rules may put the plan ending's `unruled:` lines on the
+     ticket, not in the brief) F10 also reads that ticket's latest `## Plan` note, through the
+     `## Ask … · plan-ending` sections right after it, its failures printed as `FAIL F10 ticket
+     line <n>`; an id the ticket's `## Ask` sections label RULING is a RULING on the brief's
+     lines too, and F11 knows the note's `unruled:` ids. A --ticket file with no `## Plan` note
+     is unusable (exit 2); the flag goes with a brief, never with a ticket as the first file; a
+     pre-v0.9 brief does not read it. When F10 found no `unruled:` line to read (none in the
+     brief with no --ticket; none in the brief or the note with it) it prints `F10 not checked:
+     …`: PASS then says nothing about F10.
   F11 with a decisions.md beside the brief: each line dated on or before the freeze (the latest
      `planned`/`refreshed` date of the header) has its id in a §9 row, an `unruled:` line or the
      authority clause (check_pr.py's M1 reading of both files).
@@ -50,6 +60,7 @@ import ast
 import re
 import subprocess
 import sys
+import traceback
 from collections import Counter
 from pathlib import Path
 
@@ -73,7 +84,15 @@ LANES = Path(__file__).resolve().parent / "lanes.md"
 # F10 reads `unruled:` ids with that grammar itself.
 sys.dont_write_bytecode = True  # importing check_pr leaves no __pycache__ (round-10 D12)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import check_pr  # noqa: E402
+try:
+    import check_pr  # noqa: E402
+except Exception as e:  # the id grammar lives there: without it there is no verdict
+    if __name__ != "__main__":
+        raise
+    traceback.print_exc()
+    print(f"CRASH {type(e).__name__}: check_pr.py beside this script cannot be loaded; this is "
+          "no verdict on the brief (exit 3)")
+    sys.exit(3)
 
 
 class Unusable(Exception):
@@ -141,7 +160,7 @@ class Brief:
                 while j < len(self.lines) and not self.lines[j].startswith("## "):
                     j += 1
                 return i + 1, self.lines[i + 1:j]
-        return None, []
+        return 0, []  # a missing section is F1's failure; its readers get no lines, not a crash
 
     def block(self, n, label):
         """Lines of the bold-led block `**label…` inside section n, to the next bold-led line."""
@@ -541,18 +560,28 @@ def unruled_fails(lines, rulings=frozenset()):
     return fails
 
 
-def check_ticket(text, written_under=None):
-    """Trivial mode: F10 on the latest `## Plan` note of a ticket."""
-    young = check_pr.too_young("M1", written_under)
-    if young:
-        return [young.replace("M1", "F10")]
+def ticket_note(text, rulings=frozenset()):
+    """The latest `## Plan` note of a ticket: its F10 failures, the ids and the count of its
+    `unruled:` lines, the ids its `## Ask` sections label RULING, and its first and last line
+    numbers. rulings: ids a decisions.md beside the brief labels RULING."""
     lines = text.splitlines()
     plans = [k for k, line in enumerate(lines) if re.match(r"^##\s+Plan\b", line)]
     if not plans:
         raise Unusable("no `## N.` section and no `## Plan` note — neither a brief nor a ticket")
     a, z = check_pr.plan_note_span(lines, plans[-1])
-    fails = unruled_fails(lines[:z])
-    return [f for f in fails if int(re.search(r"line (\d+)", f).group(1)) > a]
+    fails = [f for f in unruled_fails(lines[:z], rulings)
+             if int(re.search(r"line (\d+)", f).group(1)) > a]
+    inside = [i for k, _line, i in check_pr.unruled_ids(text)[1] if a <= k < z]
+    return {"fails": fails, "ids": {i for i in inside if i}, "lines": len(inside),
+            "asked": ask_rulings(lines[:z]), "span": (a + 1, z)}
+
+
+def check_ticket(text, written_under=None):
+    """Trivial mode: F10 on the latest `## Plan` note of a ticket."""
+    young = check_pr.too_young("M1", written_under)
+    if young:
+        return [young.replace("M1", "F10")]
+    return ticket_note(text)["fails"]
 
 
 def decisions_of(b):
@@ -564,7 +593,8 @@ def decisions_of(b):
         raise Unusable(f"cannot read {p}: {e}") from e
 
 
-def check(b, listing=None, repo=None, written_under=None):
+def check(b, listing=None, repo=None, written_under=None, ticket=None):
+    """ticket: the text of the ticket that holds the plan ending (--ticket), or None."""
     fails = []
     young = check_pr.too_young("M1", written_under or check_pr.header_version(b.header))
     young = young and young.replace("M1", "F10")
@@ -737,11 +767,31 @@ def check(b, listing=None, repo=None, written_under=None):
     if young:
         fails += [young, young.replace("F10", "F11")]
         return fails
-    fails += unruled_fails(b.lines, {i for _k, i, kind in good if kind == "RULING"})
+    rulings = {i for _k, i, kind in good if kind == "RULING"}
+    note = None
+    if ticket is not None:
+        try:
+            note = ticket_note(ticket, rulings)
+        except Unusable:
+            raise Unusable("--ticket: the file holds no `## Plan` note to read (write the plan "
+                           "ending on the ticket, then freeze)") from None
+        rulings |= note["asked"]  # the asks are on the ticket: they label the brief's ids too
+    fails += unruled_fails(b.lines, rulings)
+    in_brief = len(check_pr.unruled_ids(b.text)[1])
+    if note is not None:
+        fails += [f.replace("FAIL F10 line", "FAIL F10 ticket line", 1) for f in note["fails"]]
+        if not in_brief and not note["lines"]:
+            first, last = note["span"]
+            fails.append("F10 not checked: no `unruled:` line in the brief or in the ticket's "
+                         f"latest `## Plan` note (ticket lines {first}-{last})")
+    elif not in_brief:
+        fails.append("F10 not checked: this brief holds no `unruled:` line; when the plan "
+                     "ending's lines are on the ticket, pass --ticket <ticket.md>")
     rec = check_pr.brief_records(b.text)
     dates = re.findall(r"\b(?:planned|refreshed)\s+(\d{4}-\d{2}-\d{2})", b.header)
     frozen = max(dates) if dates else "9999-12-31"
     known = {i for _k, ids, _kind in rec.s9_rows for i in ids} | rec.unruled | rec.authority
+    known |= note["ids"] if note is not None else set()
     for k, i, _kind in good:
         if decisions.splitlines()[k][:10] <= frozen and i not in known:
             fail("F11", f"decisions.md:{k + 1}", f"{i} is dated on or before the freeze "
@@ -750,13 +800,29 @@ def check(b, listing=None, repo=None, written_under=None):
 
 
 def main(argv):
+    for stream in (sys.stdout, sys.stderr):  # a console that is not UTF-8 escapes, never fails
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="backslashreplace")
+    try:
+        return run(argv)
+    except OSError as e:  # a tool (git) or a file that cannot be opened: unusable, not a bug
+        print(f"UNUSABLE: {type(e).__name__}: {e}")
+        return 2
+    except Exception as e:  # a bug in this script, never a reading of the record
+        traceback.print_exc()
+        print(f"CRASH {type(e).__name__}: {e} - freeze_check.py itself failed; this is no "
+              "verdict on the brief (exit 3)".encode("ascii", "backslashreplace").decode())
+        return 3
+
+
+def run(argv):
     args = list(argv)
     if args == ["--fields"]:  # what brief-template §5 and spike q3 point at
         print("§5 " + RULE_FIELDS)
         print("class words: " + ", ".join(CLASS_WORDS))
         return 0
     opts = {}
-    for flag in ("--listing", "--repo", "--written-under"):
+    for flag in ("--listing", "--repo", "--ticket", "--written-under"):
         if flag in args:
             k = args.index(flag)
             if k + 1 >= len(args):
@@ -778,6 +844,10 @@ def main(argv):
             if str(e).startswith("cannot read"):
                 raise
             text = Path(args[0]).read_text(encoding="utf-8")
+            if "--ticket" in opts and re.search(r"(?m)^##\s+Plan\b", text):
+                # the flag hands a brief its ticket; this first file is itself a ticket
+                print(__doc__.split("\n\n")[1], file=sys.stderr)
+                return 2
             fails = check_ticket(text, ver)
             print("F1–F9 and F11 not applicable (trivial)")
             for f in fails:
@@ -791,7 +861,13 @@ def main(argv):
                 listing = Path(opts["--listing"]).read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as e:
                 raise Unusable(f"cannot read listing: {e}")
-        fails = check(b, listing, opts.get("--repo"), ver)
+        ticket = None
+        if "--ticket" in opts:
+            try:
+                ticket = Path(opts["--ticket"]).read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError) as e:
+                raise Unusable(f"cannot read ticket: {e}") from e
+        fails = check(b, listing, opts.get("--repo"), ver, ticket)
     except Unusable as e:
         print(f"UNUSABLE: {e}")
         return 2

@@ -38,7 +38,7 @@ Installed this way, skills are namespaced under the plugin, e.g.
 
 | Skill | What it does |
 |---|---|
-| [`shawarma`](skills/shawarma/SKILL.md) | Plan one settled ticket as a brief whose claims were executed before they were frozen, then run it — executed tests first, one implementer, a review wave — to a PR. The orchestrator owns git and every human gate; `retro` reviews the method itself. Invoked explicitly (`/shawarma plan\|run\|retro`); built for Claude Code — its lanes are subagents, and `retro` runs a Workflow script. |
+| [`shawarma`](skills/shawarma/SKILL.md) | Plan one settled ticket as a brief whose claims were executed before they were frozen, then run it — executed tests first, then the executed sketch, a review wave — to a PR. The orchestrator owns git and every human gate; `retro` reviews the method itself. Invoked explicitly (`/shawarma plan\|run\|retro`); built for Claude Code — its lanes are subagents, and `retro` runs a Workflow script. |
 | [`seven-steps-primer`](skills/seven-steps-primer/SKILL.md) | **Retired.** Replaced by `shawarma`, and to be removed from this repository soon. See [below](#retired-seven-steps-primer). |
 
 ## Shawarma
@@ -50,12 +50,13 @@ explicitly:
   research on everything outside the repo it touches, then a spike: every claim in the
   sketch is executed in a throwaway worktree before the brief is frozen. An attack lane
   tests the sketch. The plan ends with questions for you or with a frozen brief.
-- **`run`** commits the tests first, then one implementer lane writes the code. The full
-  suite runs against the base, a review wave follows, and the last gate runs on live data.
-  The PR carries a Decisions table and a Findings table.
+- **`run`** commits the brief's executed tests first, then its executed sketch. An
+  implementer lane writes only what the brief left as prose. The full suite runs against
+  the base, a review wave follows, and the last gate runs on live data. The PR carries a
+  Decisions table and a Findings table.
 - **`retro`** replays past plans against a draft of the method and scores what changed.
-  The skill changes only at a retro, and a retro must cut at least as many words as it
-  adds.
+  The skill's text changes only at a retro, and no load path grows unless you rule it. Its
+  scripts can be fixed between retros: a failing test first, then a patch version.
 
 Gates come by exception. Your checkpoints are the design interview, the rulings and the
 `run` command, never the PR. Each open question is either a RULING, which waits for your
@@ -106,7 +107,7 @@ to do; the house rules say *how*. Without that file, the skill uses its own defa
    evidence, the executed design with its sources and input table, a frozen contract, the
    tests (each marked red or guard), the acceptance rules with their PASS and FAIL
    readings, the worst impact, the review lanes, and what is out of scope. Every plan
-   ending names the one open default, or says there is none.
+   ending lists each open default, or says there is none.
 
 #### `/shawarma run <ticket>`
 
@@ -117,7 +118,8 @@ Invoking `run` is your go. The run never edits the brief above its amendments ta
 2. **Tests first.** The orchestrator commits the brief's executed tests before any code,
    and checks that the tests that fail are exactly the ones the plan predicted, each for
    the stated reason.
-3. **Wave 1, implement.** One implementer lane writes the code. It stays inside its files,
+3. **Wave 1, implement.** The orchestrator commits the brief's executed sketch as it ran.
+   What the brief left as prose goes to one implementer lane. It stays inside its files,
    reads the base only through `git show`, and stops on any blocker outside them.
 4. **Wave 2, integrate.** Full suite and lint against the base, passed and skipped
    counts both. A new skip or failure is a finding.
@@ -139,7 +141,7 @@ Invoking `run` is your go. The run never edits the brief above its amendments ta
 
 #### `/shawarma retro`
 
-The skill changes only here. `retro` runs
+The skill's text changes only here. `retro` runs
 [`retro-workflow.js`](skills/shawarma/retro-workflow.js) with the Workflow tool. The
 workflow is read-only and ends in propositions, not edits:
 
@@ -166,15 +168,20 @@ you rule it, and the replay, not the count, decides each cut.
 
 ### What has been measured
 
-Nothing yet. Shawarma has no eval suite. The retros are the
-current instrument, and they cannot yet compare one version of the method with another:
-each retro replays the tickets that motivated its own draft, each cell runs once, and the
-rubrics mix trap items with compliance items graded in the method's own words. Two
-measures are planned. A fixed trap bank: past tickets whose defects a real run missed,
-re-run on every draft, so a draft must catch at least what the old text caught. And a
-count of defects found after merge, traced to the PR that shipped them. The open question,
-"does the method beat the bare model?", is deliberately not the target: it has no stopping
-rule.
+Little yet. Shawarma has no eval suite. Since round 7 a retro replays cases from a fixed trap
+bank: six past tickets whose defects a real run missed, run on the installed text and on the
+draft, so a draft must catch at least what the old text caught. A round may run only part of
+the bank: round 10 ran two cases. The bank is weak. Most cells run once, a trap's score moves
+by half a point between identical runs, and it replays planning only. Each retro also counts the defects found after merge and traces them to the
+PR that shipped them. Neither measure has yet shown that one version of the method beats
+another. One bounded check is planned: whether the trap bank can tell the method from no
+method at all. The open question, "does the method beat the bare model?", is deliberately
+not the target: it has no stopping rule.
+
+[`scripts/runmeter.mjs`](scripts/runmeter.mjs) reads Claude Code's session transcripts and
+prints what each session that started lanes cost: each lane's model and effort, minutes,
+tokens and owner turns. A session can hold several runs
+([reference](scripts/runmeter.md)).
 
 ## Retired: seven-steps-primer
 

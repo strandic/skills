@@ -288,14 +288,17 @@ class FreezeCheck(unittest.TestCase):
         self.assertRedGreen("F8", GOOD_BRIEF.replace(" Cannot run: `spill=` absent, read FAIL.", ""))
 
     def test_f8_a_rule_read_on_sub_items(self):
-        good = GOOD_BRIEF.replace(
-            "- **R1 the lid holds.** `python3 tools/gate_lid.py` reads `spill=`. Dataset: the stand-in pot. "
-            "Settle: once. Dry run \\\nwith the fix in: `spill=0`. FAIL reading (base): `spill=3`. "
-            "Cannot run: `spill=` absent, read FAIL.",
-            "- **R1 the lid holds.** `python3 tools/gate_lid.py` reads `spill=`.\n"
-            "  - **Runs:** once.\n  - Dry run: `spill=0`.\n  - FAIL reading: `spill=3`.\n"
-            "  - Dataset: the stand-in pot.\n  - Cannot run: `spill=` absent, read FAIL.")
+        one_line = ("- **R1 the lid holds.** `python3 tools/gate_lid.py` reads `spill=`. Dataset: "
+                    "the stand-in pot. Settle: once. Dry run with the fix in: `spill=0`. FAIL "
+                    "reading (base): `spill=3`. Cannot run: `spill=` absent, read FAIL.")
+        head = "- **R1 the lid holds.** `python3 tools/gate_lid.py` reads `spill=`.\n"
+        subs = ("  - **Runs:** once.\n  - Dry run: `spill=0`.\n  - FAIL reading: `spill=3`.\n"
+                "  - Dataset: the stand-in pot.\n  - Cannot run: `spill=` absent, read FAIL.")
+        good = GOOD_BRIEF.replace(one_line, head + subs)
+        self.assertNotEqual(good, GOOD_BRIEF, "the fixture must differ from the good brief")
         self.assertEqual(ids(run_fc(good), "F8"), [])
+        # the sub-items are what carry the fields: without them the rule fails
+        self.assertTrue(ids(run_fc(GOOD_BRIEF.replace(one_line, head.rstrip("\n"))), "F8"))
 
     def test_f9_a_lesson_tag_listed_fewer_times(self):
         bad = GOOD_BRIEF.replace("- 4 (bread) a timer test ran once → no: no timer here.\n", "")
@@ -481,8 +484,11 @@ class CheckPr(unittest.TestCase):
             self.assertEqual(ids(run_cp(pasted, repo=repo), "P5"), [])
             short = body.replace("```\nempty\n", f"{new}\n```\n")  # short listing, full command
             self.assertEqual(ids(run_cp(short, repo=repo), "P5"), [])
-            unsafe = body.replace("$ git log", "$ git log --output=/tmp/x")
-            self.assertTrue(ids(run_cp(unsafe, repo=repo), "P5"))
+            target = repo / "written-by-git.txt"
+            unsafe = body.replace("$ git log", f"$ git log --output={target}")
+            refused = ids(run_cp(unsafe, repo=repo), "P5")
+            self.assertTrue(refused and "refused to re-run" in refused[0], refused)
+            self.assertFalse(target.exists(), "an unsafe option was run")
 
     def test_p6_a_test_gone_after_the_tests_commit(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1286,6 +1292,459 @@ class ReplayV08(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertIn("questions=1", out)
             self.assertIn("UNPARSED: ", main_out(cp, ["--asks", f])[1])
+
+
+# ---- 0.10.2, script fixes between retros: a crash reads as a crash, a missing section is F1
+# and nothing else breaks, an unbalanced quote is a P5 failure, F10 reads the ticket at the
+# freeze, the replay prompt states the limits its check enforces, no proposer has a quota ------
+
+def main_out_err(mod, argv):
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        code, out = main_out(mod, argv)
+    return code, out, err.getvalue()
+
+
+class MissingSections(unittest.TestCase):
+    def test_f1_each_missing_section_fails_and_nothing_crashes(self):
+        for n in range(1, 10):
+            with self.subTest(section=n):
+                bad = re.sub(rf"(?m)^## {n}\. ", "## ", GOOD_BRIEF, count=1)
+                self.assertNotEqual(bad, GOOD_BRIEF)
+                fails = run_fc(bad)  # §3, §5 and §7 raised a TypeError here
+                self.assertTrue(any(f.startswith(f"FAIL F1 §{n}:") for f in fails), fails)
+
+
+class Crashes(unittest.TestCase):
+    """A checker that crashes prints no verdict and exits 3, never FAIL's exit code."""
+
+    def boom(*_a, **_k):
+        raise RuntimeError("the pot boiled over — and the lid flew")
+
+    def test_a_crash_exits_3_with_no_verdict(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            plan, body = Path(d) / "plan.md", Path(d) / "body.md"
+            plan.write_text(GOOD_BRIEF, encoding="utf-8")
+            body.write_text(GOOD_BODY, encoding="utf-8")
+            ticket = ask_file(d, ASK)
+            for mod, name, argv in ((fc, "check", [str(plan)]),
+                                    (cp, "check", [str(plan), str(body)]),
+                                    (cp, "asks", ["--asks", ticket])):
+                with self.subTest(script=mod.__name__, entry=name), \
+                        mock.patch.object(mod, name, Crashes.boom):
+                    code, out, err = main_out_err(mod, argv)
+                    self.assertEqual(code, 3, out)
+                    self.assertIn("CRASH", out)
+                    self.assertIn("RuntimeError", out)
+                    self.assertNotIn("PASS", out)
+                    self.assertFalse([x for x in out.splitlines() if x.startswith("FAIL")], out)
+                    self.assertIn("Traceback", err)
+                    crash = [x for x in out.splitlines() if x.startswith("CRASH")]
+                    self.assertTrue(crash and crash[0].isascii(), crash)
+
+    def test_a_tool_or_file_that_cannot_be_opened_is_unusable_not_a_crash(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            plan = Path(d) / "plan.md"
+            plan.write_text(GOOD_BRIEF, encoding="utf-8")
+            with mock.patch.object(fc, "check", side_effect=FileNotFoundError(2, "no git")):
+                code, out, _err = main_out_err(fc, [str(plan)])
+        self.assertEqual(code, 2, out)
+        self.assertTrue(out.startswith("UNUSABLE: FileNotFoundError"), out)
+
+    def test_freeze_check_without_check_pr_beside_it_is_a_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            for name in ("freeze_check.py", "lanes.md"):
+                shutil.copy(HERE / name, Path(d) / name)
+            plan = Path(d) / "plan.md"
+            plan.write_text(GOOD_BRIEF, encoding="utf-8")
+            r = subprocess.run([sys.executable, "-B", str(Path(d) / "freeze_check.py"), str(plan)],
+                               capture_output=True, text=True)
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertTrue(r.stdout.startswith("CRASH ") and r.stdout.isascii(), r.stdout)
+
+    def test_output_survives_a_console_that_is_not_utf8(self):
+        env = dict(os.environ, PYTHONIOENCODING="ascii")
+        with tempfile.TemporaryDirectory() as d:
+            ticket = ask_file(d, TICKET)  # trivial mode prints a line holding an en dash
+            for script, argv in (("freeze_check.py", [ticket]),
+                                 ("check_pr.py", ["--asks", ticket])):
+                with self.subTest(script=script):
+                    r = subprocess.run([sys.executable, "-B", str(HERE / script), *argv],
+                                       capture_output=True, text=True, env=env)
+                    self.assertIn(r.returncode, (0, 1), r.stdout + r.stderr)
+                    self.assertRegex(r.stdout, r"(?m)^(PASS|FAIL \(\d+\))$")
+                    self.assertNotIn("Traceback", r.stderr)
+
+    def test_the_docstrings_name_the_crash_exit_code(self):
+        for mod in (fc, cp):
+            self.assertRegex(norm_ws(mod.__doc__), r"3 when the checker itself crashes")
+
+
+class UnbalancedQuote(unittest.TestCase):
+    def test_p5_a_pasted_command_that_does_not_parse_fails_without_a_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            git(repo, "init", "-q")
+            (repo / "src").mkdir()
+            (repo / "src" / "pot.py").write_text("x = 1\n")
+            git(repo, "add", "-A")
+            git(repo, "commit", "-q", "-m", "reviewed")
+            reviewed = git(repo, "rev-parse", "--short", "HEAD")
+            body = GOOD_BODY.replace("REVIEWED", reviewed)
+            self.assertEqual(ids(run_cp(body, repo=repo), "P5"), [])
+            bad = body.replace("$ git log", '$ git log --format="%h')
+            from unittest import mock
+            with mock.patch.object(cp, "git", wraps=cp.git) as spy:
+                fails = ids(run_cp(bad, repo=repo), "P5")  # shlex raised a ValueError here
+            self.assertEqual(len(fails), 1, fails)
+            self.assertIn("does not parse", fails[0])
+            reruns = [c for c in spy.call_args_list if c.args[1:3] == ("log", "--no-ext-diff")]
+            self.assertFalse(reruns, "the command was re-run")
+
+    # with no ticket named, P9 reads NOT RUN: P5 stands alone
+    NO_TICKET = GOOD_BRIEF.replace("Ticket `soup-1` · ", "")
+
+    def repo_and_body(self, d):
+        repo = Path(d)
+        git(repo, "init", "-q")
+        (repo / "src").mkdir()
+        (repo / "src" / "pot.py").write_text("x = 1\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "reviewed")
+        return repo, GOOD_BODY.replace("REVIEWED", git(repo, "rev-parse", "--short", "HEAD"))
+
+    def test_p5_a_head_holding_a_backslash_fails_p5(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, body = self.repo_and_body(d)
+            fails = ids(run_cp(body, repo=repo, head="no\\1such"), "P5")  # a regex template once
+            self.assertTrue(fails and "re-run failed" in fails[0], fails)
+
+    def test_p5_a_nul_byte_in_the_pasted_command_is_refused_and_not_re_run(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            repo, body = self.repo_and_body(d)
+            bad = body.replace("$ git log", "$ git log --grep=a\0b")
+            with mock.patch.object(cp, "git", wraps=cp.git) as spy:
+                fails = ids(run_cp(bad, repo=repo), "P5")
+            self.assertEqual(len(fails), 1, fails)
+            self.assertIn("NUL byte", fails[0])
+            reruns = [c for c in spy.call_args_list if c.args[1:3] == ("log", "--no-ext-diff")]
+            self.assertFalse(reruns, "the command was re-run")
+
+    def test_p5_a_git_that_cannot_run_or_be_read_is_no_verdict_on_the_record(self):
+        from unittest import mock
+        self.assertNotEqual(self.NO_TICKET, GOOD_BRIEF)
+        with tempfile.TemporaryDirectory() as d:
+            repo, body = self.repo_and_body(d)
+            plan, bodyf = repo / "plan.md", repo / "body.md"
+            plan.write_text(self.NO_TICKET, encoding="utf-8")
+            bodyf.write_text(body, encoding="utf-8")
+            argv = [str(plan), str(bodyf), "--repo", str(repo)]
+            self.assertEqual(main_out(cp, argv)[0], 0, "the body passes when git runs")
+            with mock.patch.object(cp.subprocess, "run", side_effect=FileNotFoundError(2, "git")):
+                code, out, _err = main_out_err(cp, argv)
+            self.assertEqual(code, 2, out)  # a missing tool is unusable input
+            self.assertTrue(out.startswith("UNUSABLE"), out)
+            self.assertNotIn("FAIL", out)
+            undecodable = UnicodeDecodeError("utf-8", b"\xe9", 0, 1, "invalid continuation byte")
+            with mock.patch.object(cp, "git", side_effect=undecodable):
+                code, out, _err = main_out_err(cp, argv)
+            self.assertEqual(code, 3, out)  # output the script cannot read: no verdict either
+            self.assertNotIn("FAIL", out)
+
+    def test_git_never_reads_the_checkers_own_input(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as d:
+            repo, _body = self.repo_and_body(d)
+            with mock.patch.object(cp.subprocess, "run", wraps=cp.subprocess.run) as spy:
+                cp.git(repo, "status", "--short")
+            self.assertIs(spy.call_args.kwargs.get("stdin"), subprocess.DEVNULL)
+
+
+class FreezeReadsTheTicket(unittest.TestCase):
+    """House rules may put the plan ending's `unruled:` lines on the ticket: --ticket reads them."""
+    NO_LINE = GOOD_BRIEF.replace("unruled: none\n", "")
+    AS_RULING = PLAN_ENDING_TICKET.replace("unruled: U1 trimming spaces — default not folded",
+                                           "unruled: U1 trimming spaces — RULING, recommend no")
+
+    def freeze(self, brief, ticket=None, decisions=None):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "plan.md"
+            p.write_text(brief, encoding="utf-8")
+            if decisions is not None:
+                (Path(d) / "decisions.md").write_text(decisions, encoding="utf-8")
+            argv = [str(p)] + (["--ticket", ask_file(d, ticket)] if ticket is not None else [])
+            return main_out(fc, argv)
+
+    def test_the_fixtures_differ(self):
+        self.assertNotEqual(self.NO_LINE, GOOD_BRIEF)
+        self.assertNotEqual(self.AS_RULING, PLAN_ENDING_TICKET)
+
+    def test_f10_a_ruling_on_the_tickets_unruled_line_fails_the_freeze(self):
+        code, out = self.freeze(self.NO_LINE, self.AS_RULING)
+        self.assertEqual(code, 1, out)
+        self.assertIn("FAIL F10 ticket line", out)
+        self.assertIn("U1 is a RULING", out)
+
+    def test_f10_reads_the_brief_and_the_ticket(self):
+        code, out = self.freeze(GOOD_BRIEF, self.AS_RULING)
+        self.assertEqual(code, 1, out)
+        self.assertIn("U1 is a RULING", out)
+
+    def test_a_ticket_whose_unruled_lines_are_defaults_passes(self):
+        code, out = self.freeze(self.NO_LINE, PLAN_ENDING_TICKET)
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("F10 not checked", out)
+
+    def test_decisions_md_rulings_reach_the_tickets_ids(self):
+        dec = GOOD_DECISIONS + '2026-10-18 | U1 RULING | not folded | the human: "no"\n'
+        code, out = self.freeze(self.NO_LINE, PLAN_ENDING_TICKET, decisions=dec)
+        self.assertIn("U1 is a RULING", out)
+        self.assertEqual(code, 1, out)
+
+    def test_no_unruled_line_and_no_ticket_says_f10_was_not_checked(self):
+        code, out = self.freeze(self.NO_LINE)
+        self.assertEqual(code, 0, out)
+        self.assertIn("F10 not checked", out)
+        self.assertIn("--ticket", out)
+        self.assertNotIn("F10 not checked", self.freeze(GOOD_BRIEF)[1])
+
+    def test_a_ticket_with_no_plan_note_is_unusable(self):
+        code, out = self.freeze(self.NO_LINE, "# t-0001\n\nNo plan note yet.\n")
+        self.assertEqual(code, 2, out)
+        self.assertIn("UNUSABLE", out)
+
+    def test_the_usage_line_names_the_flag(self):
+        self.assertIn("[--ticket FILE]", fc.__doc__.split("\n\n")[1])
+
+    def test_with_the_flag_and_no_unruled_line_anywhere_f10_says_not_checked(self):
+        bare = PLAN_ENDING_TICKET.replace("unruled: U1 trimming spaces — default not folded\n", "")
+        self.assertNotEqual(bare, PLAN_ENDING_TICKET)
+        code, out = self.freeze(self.NO_LINE, bare)
+        self.assertEqual(code, 0, out)
+        self.assertIn("F10 not checked", out)
+        lines = bare.splitlines()
+        first = max(k for k, line in enumerate(lines) if line.startswith("## Plan")) + 1
+        self.assertIn(f"(ticket lines {first}-{len(lines)})", out)
+
+    def test_f11_knows_an_unruled_id_on_the_ticket(self):
+        dec = GOOD_DECISIONS + "2026-10-17 | U1 DEFAULT | not folded | as recommended\n"
+        code, out = self.freeze(self.NO_LINE, PLAN_ENDING_TICKET, decisions=dec)
+        self.assertNotIn("F11", out)
+        self.assertEqual(code, 0, out)
+        code, out = self.freeze(self.NO_LINE, decisions=dec)  # without the ticket F11 cannot know
+        self.assertIn("FAIL F11", out)
+
+    def test_a_ruling_in_the_tickets_ask_reaches_the_briefs_unruled_line(self):
+        brief = GOOD_BRIEF.replace("unruled: none", "> **What this is about:** the spoon.\n\n"
+                                   "unruled: U1 the spoon — default wood")
+        asked = PLAN_ENDING_TICKET.replace(
+            "## Plan (2026-01-01)", "## Ask 2026-01-01 · interview\n\n> **What this is about:** "
+            "spaces.\n\n**U1** trim spaces too? RULING, recommend no.\n\n## Plan (2026-01-01)")
+        self.assertNotEqual(asked, PLAN_ENDING_TICKET)
+        self.assertEqual(self.freeze(brief)[0], 0, "alone, the brief's line reads as a default")
+        code, out = self.freeze(brief, asked)
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^FAIL F10 line \d+: U1 is a RULING")
+
+    def test_the_briefs_own_unruled_lines_are_still_read_with_the_flag(self):
+        brief = GOOD_BRIEF.replace("unruled: none", "unruled: E2 the spoon — default wood")
+        code, out = self.freeze(brief, PLAN_ENDING_TICKET)
+        self.assertEqual(code, 1, out)
+        self.assertRegex(out, r"(?m)^FAIL F10 line \d+: unruled E2 has no")
+
+    def test_an_unreadable_ticket_file_is_unusable(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "plan.md"
+            p.write_text(GOOD_BRIEF, encoding="utf-8")
+            code, out = main_out(fc, [str(p), "--ticket", str(Path(d) / "missing.md")])
+        self.assertEqual(code, 2, out)
+        self.assertIn("UNUSABLE", out)
+
+    def test_the_flag_goes_with_a_brief_not_with_a_ticket(self):
+        with tempfile.TemporaryDirectory() as d:
+            t = ask_file(d, TICKET)
+            code, out, err = main_out_err(fc, [t, "--ticket", t])
+        self.assertEqual(code, 2, out)
+        self.assertIn("--ticket", err)
+        with tempfile.TemporaryDirectory() as d:
+            neither = ask_file(d, "# notes\n\nNothing planned here.\n", "notes.md")
+            code, out, _err = main_out_err(fc, [neither, "--ticket", ask_file(d, TICKET)])
+        self.assertEqual(code, 2, out)
+        self.assertIn("UNUSABLE", out)
+
+
+class RetroWorkflowLimits(unittest.TestCase):
+    JS = HERE / "retro-workflow.js"
+
+    def js(self):
+        return self.JS.read_text(encoding="utf-8")
+
+    def test_the_replay_prompt_states_every_limit_its_check_enforces(self):
+        js = self.js()
+        prompt = norm_ws(js[js.index("You replay the method's own checkers"):
+                            js.index("label: 'replay:checkers'")])
+        for limit in ("In a host-only run", "at most 300 characters", "no less-than sign",
+                      "Nothing you return, the pasted commands included",
+                      "a URL, a double slash, a percent sign or a backslash-u escape",
+                      "With any extra repo given, a candidate carries the rule id and the method "
+                      "line alone", "Set report_path to the word none",
+                      "recorded with the verdict \\`CRASH\\` alone", "is no refusal"):
+            self.assertIn(limit, prompt)
+        # the limits the code enforces, so the two cannot drift apart unseen
+        self.assertIn("x.length <= 300 && !x.includes('<')", js)
+        self.assertIn(r"/%[0-9a-f]{2}|\\u[0-9a-f]{4}|https?:|\/\//", js)
+        self.assertIn("/^(PASS|CRASH|((P|F|A|M)", js)
+
+    def test_no_proposer_has_a_quota(self):
+        js = self.js()
+        lenses = [line for line in js.splitlines() if re.match(r"\s+(lean|rigor): '", line)]
+        self.assertEqual(len(lenses), 2)
+        for line in lenses:
+            self.assertIsNone(re.search(r"\d", line), "a lens names a number")
+            self.assertIn("Proposing nothing is a valid result.", line)
+
+    def test_check_replay_keeps_plain_words_and_drops_brackets_and_long_fields(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        probe = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const a = src.indexOf('const checkReplay = r => {'), z = src.indexOf('\nconst replayChecked');
+if (a < 0 || z < 0) { console.log('checkReplay not found'); process.exit(2) }
+const make = new Function('A', src.slice(a, z) + '\nreturn checkReplay');
+const run = (repos, c) => {
+  const out = make({ repos, outDir: '/out' })({ records: [{ repo: 'host', record: '#12',
+    checker: 'check_pr', verdict: 'P7' }], candidates: [c], skipped_repos: [] });
+  console.log(out.fail ? 'DROPPED: ' + out.fail : 'kept ' + out.candidates.length);
+};
+const cand = extra => Object.assign({ repo: 'host', record: '#12', refusal: 'P7',
+  why_allowed: 'run.md:10 says a base reading names its commit',
+  generic_fixture: 'a Verification row whose reading names the base with no commit' }, extra);
+run([], cand({}));
+run([], cand({ generic_fixture: 'a row holding <id>' }));
+run([], cand({ why_allowed: 'x'.repeat(301) }));
+run([], cand({ generic_fixture: 'a path such as /x%0A' }));
+run([], cand({ refusal: 'CRASH' }));
+run(['/other/repo-two'], cand({}));
+run(['/other/repo-two'],
+  cand({ refusal: 'P7', why_allowed: 'run.md:10', generic_fixture: undefined }));
+run(['/other/repo-two'],
+  cand({ refusal: 'CRASH', why_allowed: 'none', generic_fixture: undefined }));
+run(['/other/repo-two'],
+  cand({ refusal: 'P7', why_allowed: 'none', generic_fixture: undefined }));
+const crashed = make({ repos: [], outDir: '/out' })({ records: [{ repo: 'host', record: '#12',
+  checker: 'freeze_check', verdict: 'CRASH' }], candidates: [], skipped_repos: [] });
+console.log(crashed.fail ? 'DROPPED: ' + crashed.fail
+  : 'kept verdict ' + crashed.records[0].verdict);
+"""
+        r = subprocess.run([node, "-e", probe, str(self.JS)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        over = "DROPPED: a host candidate field is over 300 chars or holds <"
+        free = ("DROPPED: a candidate carries free text where rule ids and a method line are "
+                "required")
+        self.assertEqual(r.stdout.splitlines(),
+                         ["kept 1", over, over, "DROPPED: a URL, // or escape sequence appears",
+                          "kept 1", free, "kept 1", "kept 1", free, "kept verdict CRASH"])
+
+    def test_the_script_runs_end_to_end_with_fake_agents(self):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node not installed")
+        harness = r"""
+const fs = require('fs');
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+const src = fs.readFileSync(process.argv[1], 'utf8').replace(/^export const meta/m, 'const meta');
+const wf = new AsyncFunction('args', 'agent', 'parallel', 'pipeline', 'phase', 'log', src);
+const ARGS = { repo: '/h/repo/', skillDir: '/h//skill/', lessons: '/h/repo/docs/lessons.md',
+  since: '2026-10-01', outDir: '/h/repo/docs/retros/2026-11-11-x/',
+  scratchDir: '/private/tmp/retro.abc123/', repos: ['/other/repo-two/'] };
+const PROP = n => ({ title: 'p' + n, problem: 'x', evidence_refs: ['#1'], change: 'y',
+  where: 'run.md', cost: '0' });
+const CPROP = n => ({ id: 'P' + n, title: 'p' + n, problem: 'x', evidence: ['#1'],
+  proposed_wording: 'w', where: 'run.md', expected_benefit: 'b', cost: '0' });
+const DISP = ['t-0001', '#1', 't-0009'].map(id => ({ id, disposition: 'audited', where: 'e' }));
+const REC = verdict => ({ records: [{ repo: 'host', record: '#1', checker: 'freeze_check',
+  command: 'x', verdict }], candidates: [], skipped_repos: [], report_path: 'none' });
+const NONE = { propositions: [] };
+const EMPTY = { propositions: [], dispositions: DISP, report_path: 'x' };
+const FOUND = { findings: [], report_path: 'x' };
+const AUDIT = { corrections: [], extra_observations: [], report_path: 'x' };
+async function scenario(name, over) {
+  const calls = [], prompts = {};
+  const canned = Object.assign({
+    'inputs:generate': { runs: [{ id: 't-0001', source: 'git log' }, { id: '#1', source: 'gh' }],
+      items: [{ id: 't-0009' }], extra_repos: [], report_path: 'x' },
+    'evidence:older runs': AUDIT, 'evidence:newer runs': AUDIT, 'replay:checkers': REC('PASS'),
+    'research:orchestration': FOUND, 'research:spec-and-tests': FOUND,
+    'research:gates-and-review': FOUND,
+    'propose:lean': { propositions: [PROP(1)], deletions: [] },
+    'propose:rigor': { propositions: [PROP(2)] },
+    'consolidate': { propositions: [CPROP(1), CPROP(2)], dispositions: DISP, report_path: 'x' },
+    'test:replay': { results: [] }, 'argue:lean critic': { critiques: [] },
+    'argue:rigor critic': { critiques: [] }, 'argue:cold reader': { critiques: [] },
+    'verify:citations': { checks: [] },
+  }, over || {});
+  const agent = async (prompt, opts) => {
+    calls.push(opts.label);
+    prompts[opts.label] = prompt;
+    return canned[opts.label] === undefined ? null : canned[opts.label];
+  };
+  const parallel = async thunks => Promise.all(thunks.map(async t => {
+    try { return await t() } catch (e) { return null }
+  }));
+  const noPipeline = async () => { throw new Error('pipeline not used') };
+  const out = await wf(ARGS, agent, parallel, noPipeline, () => {}, () => {});
+  const at = calls.indexOf('consolidate');
+  console.log([name, out.stopped ? 'STOPPED ' + out.stopped : 'returned',
+    'after-consolidate=' + (at < 0 ? -1 : calls.length - at - 1),
+    'no_propositions=' + (out.no_propositions === true),
+    'counts=' + JSON.stringify(out.proposal_counts || null),
+    'double-slash=' + Object.values(prompts).some(p => /[^:]\/\//.test(p)),
+    'keys=' + (out.no_propositions ? Object.keys(out).sort().join(',') : '-')].join(' | '));
+}
+(async () => {
+  await scenario('normal');
+  await scenario('both empty',
+    { 'propose:lean': NONE, 'propose:rigor': NONE, 'consolidate': EMPTY });
+  await scenario('a proposer died', { 'propose:rigor': undefined });
+  await scenario('a checker crashed', { 'replay:checkers': REC('CRASH') });
+  await scenario('propositions lost', { 'consolidate': EMPTY });
+  await scenario('no proposition list',
+    { 'consolidate': { dispositions: DISP, report_path: 'x' } });
+  await scenario('deletions lost', { 'propose:lean': { propositions: [], deletions: ['a rule'] },
+    'propose:rigor': NONE, 'consolidate': EMPTY });
+})().catch(e => { console.log('THREW ' + e.name + ': ' + e.message); process.exit(1) });
+"""
+        r = subprocess.run([node, "-e", harness, str(self.JS)], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        got = [line.split(" | ") for line in r.stdout.splitlines()]
+        keys = ("checkerReplay,consolidated,evidence,inputs,no_propositions,outDir,proposal_counts,"
+                "research_counts,research_not_found")
+        one = 'counts={"lean":1,"rigor":1,"deletions":0}'
+        self.assertEqual(got, [
+            ["normal", "returned", "after-consolidate=5", "no_propositions=false", one,
+             "double-slash=false", "keys=-"],
+            ["both empty", "returned", "after-consolidate=0", "no_propositions=true",
+             'counts={"lean":0,"rigor":0,"deletions":0}', "double-slash=false", "keys=" + keys],
+            ["a proposer died", "STOPPED a proposer returned nothing", "after-consolidate=-1",
+             "no_propositions=false", "counts=null", "double-slash=false", "keys=-"],
+            ["a checker crashed", "returned", "after-consolidate=5", "no_propositions=false", one,
+             "double-slash=false", "keys=-"],
+            ["propositions lost",
+             "STOPPED the consolidator returned no proposition for what the proposers returned",
+             "after-consolidate=0", "no_propositions=false", one, "double-slash=false", "keys=-"],
+            ["no proposition list", "STOPPED the consolidator returned no proposition list",
+             "after-consolidate=0", "no_propositions=false", "counts=null", "double-slash=false",
+             "keys=-"],
+            ["deletions lost",
+             "STOPPED the consolidator returned no proposition for what the proposers returned",
+             "after-consolidate=0", "no_propositions=false",
+             'counts={"lean":0,"rigor":0,"deletions":1}', "double-slash=false", "keys=-"],
+        ])
 
 
 if __name__ == "__main__":
