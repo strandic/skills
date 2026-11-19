@@ -14,6 +14,7 @@ import { resolve, join, sep } from 'node:path';
 import { homedir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 
 export const USAGE = 'node scripts/leakscan.mjs (--staged | --message <file> | --range <revs> | --pre-push <remote> | --history | --tree | --files <file>...) [--terms <file>] [--show]';
 
@@ -25,14 +26,17 @@ const MODES = ['--staged', '--message', '--range', '--pre-push', '--history', '-
 
 export class Unusable extends Error {}
 
-/** Lower case, with spaces, dots, dashes and underscores dropped. */
-export const squash = s => s.toLowerCase().replace(/[\s._-]+/g, '');
+/** The text as it is compared: no NUL byte (UTF-16 text read as bytes holds one after each letter), one form for each letter. */
+export const norm = s => (s.includes('\0') ? s.replace(/\0/g, '') : s).normalize('NFKC');
+
+/** Lower case, with everything dropped that is no letter and no digit. A URL escape such as %20 counts as a separator. */
+export const squash = s => norm(s).toLowerCase().replace(/%[0-9a-f]{2}/g, ' ').replace(/[^\p{L}\p{N}]+/gu, '');
 
 /** The list's lines as terms. `repo:` lines are returned unread; loadRepos() reads them. */
 export function parseTerms(text, file) {
   const list = [];
   text.split(/\r?\n/).forEach((raw, i) => {
-    const s = raw.trim();
+    const s = raw.replace(/^\uFEFF/, '').trim().normalize('NFKC');
     if (!s || s.startsWith('#')) return;
     const line = i + 1;
     if (s.startsWith('re:')) {
@@ -54,10 +58,10 @@ export function parseTerms(text, file) {
   return list;
 }
 
-function git(cwd, args, { input, allow = [0] } = {}) {
-  const r = spawnSync('git', args, { cwd, input, encoding: 'latin1', maxBuffer: 1 << 30 });
+function git(cwd, args, { input, allow = [0], buffer = false } = {}) {
+  const r = spawnSync('git', args, { cwd, input, encoding: buffer ? undefined : 'utf8', maxBuffer: 1 << 30 });
   if (r.error) throw new Unusable(`git ${args[0]}: ${r.error.message}`);
-  if (!allow.includes(r.status)) throw new Unusable(`git ${args.join(' ')} failed: ${(r.stderr || '').trim().split('\n')[0]}`);
+  if (!allow.includes(r.status)) throw new Unusable(`git ${args.join(' ')} failed: ${String(r.stderr || '').trim().split('\n')[0]}`);
   return r.stdout;
 }
 
@@ -66,6 +70,7 @@ export function loadRepos(list, file) {
   for (const t of list) {
     if (t.kind !== 'repo') continue;
     const dir = t.path.startsWith('~') ? join(homedir(), t.path.slice(1)) : t.path;
+    t.dir = dir;
     if (!existsSync(dir)) throw new Unusable(`${file}:${t.line}: the repo: folder does not exist`);
     const r = spawnSync('git', ['rev-list', '--all'], { cwd: dir, encoding: 'utf8', maxBuffer: 1 << 30 });
     if (r.error || r.status !== 0) throw new Unusable(`${file}:${t.line}: the repo: folder is not a git repository`);
@@ -82,7 +87,8 @@ export function loadRepos(list, file) {
 }
 
 /** The terms that one line of text holds. */
-export function matchLine(text, list) {
+export function matchLine(raw, list) {
+  const text = norm(raw);
   const hits = [];
   let lower = null;
   let squashed = null;
@@ -160,8 +166,12 @@ function add(items, more) {
   for (const m of more) items.push(m);
 }
 
-const DIFF = ['--text', '-U0', '--no-color', '--no-ext-diff', '--no-textconv'];
-const pathItems = (out, prefix = '') => out.split('\0').filter(Boolean).map(p => ({ where: `${prefix}path ${p}`, line: 0, text: p }));
+const DIFF = ['--text', '-U0', '--no-color', '--no-ext-diff', '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/'];
+// A path, a ref name and an identity are items with line 0. `secret` marks an item whose place is itself the text,
+// so that the place is printed only with --show.
+const pathItems = (out, prefix = '') => out.split('\0').filter(Boolean).map(p => ({ where: `${prefix}path`, line: 0, text: p, secret: true }));
+const refItem = name => ({ where: 'ref name', line: 0, text: name, secret: true });
+const textItems = (text, where) => text.split('\n').map((t, i) => ({ where, line: i + 1, text: t }));
 
 function stagedItems(cwd) {
   const items = addedLines(git(cwd, ['diff', '--cached', ...DIFF]));
@@ -174,66 +184,163 @@ function stagedItems(cwd) {
 }
 
 function messageItems(file) {
-  if (!existsSync(file)) throw new Unusable(`${file}: no such message file`);
+  if (!existsSync(file) || !statSync(file).isFile()) throw new Unusable(`${file}: no such message file`);
   const items = [];
   let n = 0;
-  for (const l of readFileSync(file, 'latin1').split('\n')) {
+  for (const l of readFileSync(file, 'utf8').split('\n')) {
     n += 1;
     // A scissors line ends the message: what follows is the diff that `git commit -v` shows.
-    if (/^# -{24} >8 -{24}$/.test(l)) break;
-    if (!l.startsWith('#')) items.push({ where: 'message', line: n, text: l });
+    if (/^. -{24} >8 -{24}$/.test(l)) break;
+    // A comment line is read too: git keeps it with -m, with another comment character and with some cleanup modes.
+    items.push({ where: 'message', line: n, text: l });
   }
   return items;
 }
 
+/** What the commits hold: identities, messages, added lines and paths. Two git processes for the whole list. */
 function commitItems(cwd, ids) {
   const items = [];
-  for (const id of ids) {
-    const short = id.slice(0, 10);
-    const head = git(cwd, ['show', '-s', '--format=%an <%ae>%n%cn <%ce>%n%B', id]).split('\n');
-    items.push({ where: `${short} identity`, line: 0, text: head[0] }, { where: `${short} identity`, line: 0, text: head[1] });
-    head.slice(2).forEach((text, i) => items.push({ where: `${short} message`, line: i + 1, text }));
-    // -m: a merge is read against each parent, so nothing a merge adds is missed.
-    add(items, addedLines(git(cwd, ['diff-tree', '-p', '--root', '-m', '--no-renames', ...DIFF, id]), `${short} `));
-    add(items, pathItems(git(cwd, ['diff-tree', '-r', '--root', '-m', '--no-commit-id', '--name-only', '-z', '--no-renames', '--diff-filter=AMCR', id]), `${short} `));
+  if (!ids.length) return items;
+  const input = ids.join('\n') + '\n';
+  // The mark separates the commits in git's output. It is random, so no file and no message can hold it.
+  const mark = `leakscan-${randomBytes(12).toString('hex')}`;
+  const walk = ['log', '--no-walk=unsorted', '--stdin', '-m', '--root', '--no-renames'];
+  const out = git(cwd, [...walk, '-p', ...DIFF, `--format=${mark}%H%n%an <%ae>%n%cn <%ce>%n%B${mark}end`], { input });
+  for (const chunk of out.split(new RegExp(`^${mark}(?=[0-9a-f]{40,64}\\n)`, 'm')).slice(1)) {
+    const end = chunk.indexOf(`${mark}end`);
+    if (end < 0) throw new Unusable('git log gave a commit this scan cannot read');
+    const head = chunk.slice(0, end).split('\n');
+    const short = head[0].slice(0, 10);
+    items.push({ where: `${short} identity`, line: 0, text: head[1] ?? '' }, { where: `${short} identity`, line: 0, text: head[2] ?? '' });
+    head.slice(3).forEach((text, i) => items.push({ where: `${short} message`, line: i + 1, text }));
+    add(items, addedLines(chunk.slice(end), `${short} `));
+  }
+  const names = git(cwd, [...walk, '--name-only', '-z', '--diff-filter=AMCRT', `--format=${mark}%H`], { input });
+  for (const chunk of names.split(mark).slice(1)) {
+    const nl = chunk.search(/[\n\0]/);
+    add(items, pathItems(nl < 0 ? '' : chunk.slice(nl + 1).replace(/\n/g, '\0'), `${chunk.slice(0, 10)} `));
   }
   return items;
 }
 
 const revList = (cwd, args) => git(cwd, ['rev-list', ...args]).split('\n').filter(Boolean);
+const objectType = (cwd, id) => {
+  const r = spawnSync('git', ['cat-file', '-t', id], { cwd, encoding: 'utf8' });
+  return r.status === 0 ? r.stdout.trim() : null;
+};
 
-function prePushIds(cwd, remote, stdin) {
-  const ids = new Set();
-  for (const l of stdin.split('\n')) {
-    const f = l.trim().split(/\s+/);
-    if (f.length < 4) continue;
-    const [, local, , theirs] = f;
-    if (/^0+$/.test(local)) continue;
-    const args = /^0+$/.test(theirs) ? [local, '--not', `--remotes=${remote}`] : [`${theirs}..${local}`];
-    for (const id of revList(cwd, args)) ids.add(id);
-  }
-  return [...ids];
-}
-
-function treeItems(top) {
+/** The contents of blobs, read with one git process. `entries` is a list of `{ id, name }`. */
+function blobItems(cwd, entries) {
   const items = [];
-  const files = git(top, ['ls-files', '-z']).split('\0').filter(Boolean);
-  for (const f of files) {
-    items.push({ where: `path ${f}`, line: 0, text: f });
-    add(items, fileItems(join(top, f), f));
+  if (!entries.length) return items;
+  const out = git(cwd, ['cat-file', '--batch'], { input: entries.map(e => e.id).join('\n') + '\n', buffer: true });
+  let at = 0;
+  for (const e of entries) {
+    const nl = out.indexOf(10, at);
+    if (nl < 0) throw new Unusable(`git cat-file gave no answer for ${e.name}`);
+    const head = out.toString('utf8', at, nl).split(' ');
+    if (head[1] !== 'blob') throw new Unusable(`${e.name}: not a file git can read (${head.slice(1).join(' ')})`);
+    const size = Number(head[2]);
+    add(items, textItems(out.toString('utf8', nl + 1, nl + 1 + size), e.name));
+    at = nl + 1 + size + 1;
   }
   return items;
 }
 
-function fileItems(file, name = file) {
-  let st;
-  try {
-    st = statSync(file);
-  } catch {
-    return [];
+function treeEntries(cwd, args) {
+  // "<mode> <type> <id>\t<path>" for ls-tree, "<mode> <id> <stage>\t<path>" for ls-files -s.
+  return git(cwd, args).split('\0').filter(Boolean).map(l => {
+    const [meta, name] = [l.slice(0, l.indexOf('\t')), l.slice(l.indexOf('\t') + 1)];
+    const f = meta.split(' ');
+    return { mode: f[0], id: f.find(x => /^[0-9a-f]{40,64}$/.test(x)), name };
+  });
+}
+
+/**
+ * What one pushed or listed object holds besides commits: a tag's tagger and message, and the content of a tag
+ * that points at a file or a folder. Returns the commit to walk from, or null.
+ */
+function peel(cwd, id, items, label) {
+  let at = id;
+  for (let depth = 0; depth < 20; depth += 1) {
+    const type = objectType(cwd, at);
+    if (type === 'commit') return at;
+    if (type === 'tag') {
+      const body = git(cwd, ['cat-file', 'tag', at]);
+      add(items, textItems(body.replace(/^(tagger .*) \d+ [+-]\d{4}$/m, '$1'), `${label} tag`));
+      const m = /^object ([0-9a-f]+)$/m.exec(body);
+      if (!m) throw new Unusable(`${label}: a tag this scan cannot read`);
+      at = m[1];
+    } else if (type === 'blob') {
+      add(items, blobItems(cwd, [{ id: at, name: `${label} file` }]));
+      return null;
+    } else if (type === 'tree') {
+      const entries = treeEntries(cwd, ['ls-tree', '-r', '-z', at]).filter(e => e.mode !== '160000');
+      for (const e of entries) items.push({ where: `${label} path`, line: 0, text: e.name, secret: true });
+      add(items, blobItems(cwd, entries.map(e => ({ id: e.id, name: `${label} ${e.name}` }))));
+      return null;
+    } else {
+      throw new Unusable(`${label}: object ${at.slice(0, 10)} is not in this repository`);
+    }
   }
-  if (!st.isFile()) return [];
-  return readFileSync(file, 'latin1').split('\n').map((text, i) => ({ where: name, line: i + 1, text }));
+  throw new Unusable(`${label}: tags nested too deep`);
+}
+
+/** True when the remote's tracking refs describe the place a push to it goes: a named remote with one address. */
+function tracksPushTarget(cwd, remote) {
+  const get = key => spawnSync('git', ['config', '--get-all', key], { cwd, encoding: 'utf8' }).stdout.trim();
+  return /^[\w.-]+$/.test(remote) && get(`remote.${remote}.url`).split('\n').filter(Boolean).length === 1 && !get(`remote.${remote}.pushurl`);
+}
+
+function prePushItems(cwd, remote, stdin) {
+  const items = [];
+  const starts = [];
+  const known = [];
+  for (const l of stdin.split('\n')) {
+    const f = l.trim().split(/\s+/);
+    if (f.length < 4) continue;
+    const [localRef, local, remoteRef, theirs] = f;
+    items.push(refItem(remoteRef));
+    if (/^0+$/.test(local)) continue;
+    items.push(refItem(localRef));
+    const commit = peel(cwd, local, items, remoteRef.replace(/^refs\/[^/]+\//, ''));
+    if (commit) starts.push(commit);
+    // What the other side holds at this ref is not sent again, when this repository knows the object.
+    if (!/^0+$/.test(theirs) && objectType(cwd, theirs)) known.push(theirs);
+  }
+  if (!starts.length) return items;
+  const not = known.map(k => `^${k}`);
+  // The tracking refs of a named remote with one address say what that remote holds. For a bare address, or a
+  // remote that is fetched from one place and pushed to another, nothing is assumed and every commit is read.
+  const args = tracksPushTarget(cwd, remote) ? [...starts, ...not, '--not', `--remotes=${remote}`] : [...starts, ...not];
+  add(items, commitItems(cwd, revList(cwd, args)));
+  return items;
+}
+
+function historyItems(cwd) {
+  const items = [];
+  for (const l of git(cwd, ['for-each-ref', '--format=%(objecttype) %(objectname) %(refname)']).split('\n').filter(Boolean)) {
+    const [type, id, ...name] = l.split(' ');
+    items.push(refItem(name.join(' ')));
+    if (type !== 'commit') peel(cwd, id, items, name.join(' ').replace(/^refs\/[^/]+\//, ''));
+  }
+  add(items, commitItems(cwd, revList(cwd, ['--all'])));
+  return items;
+}
+
+/** Every tracked file as the index holds it. A link is read as the text it points to; a submodule is a path only. */
+function treeItems(top) {
+  const entries = treeEntries(top, ['ls-files', '-s', '-z']);
+  const items = entries.map(e => ({ where: 'path', line: 0, text: e.name, secret: true }));
+  add(items, blobItems(top, entries.filter(e => e.mode !== '160000').map(e => ({ id: e.id, name: e.name }))));
+  return items;
+}
+
+function fileItems(cwd, f) {
+  const p = resolve(cwd, f);
+  if (!existsSync(p)) throw new Unusable(`${f}: no such file`);
+  if (!statSync(p).isFile()) throw new Unusable(`${f}: not a file (name each file of a folder)`);
+  return [{ where: 'file name', line: 0, text: f, secret: true }, ...textItems(readFileSync(p, 'utf8'), f)];
 }
 
 export function parseArgs(argv) {
@@ -274,44 +381,45 @@ export function main(argv, io = {}) {
     const o = parseArgs(argv);
     const top = git(cwd, ['rev-parse', '--show-toplevel']).trim();
     const file = resolve(cwd, o.terms || env.LEAKSCAN_TERMS || join(homedir(), DEFAULT_TERMS));
-    if (!existsSync(file)) throw new Unusable(`no list of terms at ${file} (give --terms or set LEAKSCAN_TERMS)`);
+    if (!existsSync(file) || !statSync(file).isFile()) throw new Unusable(`no list of terms at ${file} (give --terms or set LEAKSCAN_TERMS)`);
     if (inside(realpathSync(file), realpathSync(top))) throw new Unusable('the list of terms is inside the repository: keep it outside, or it gets published');
     const list = loadRepos(parseTerms(readFileSync(file, 'utf8'), file), file);
-    // A repo: line that names this repository would flag every commit id of its own.
-    for (const t of list) if (t.kind === 'repo' && realpathSync(t.path.startsWith('~') ? join(homedir(), t.path.slice(1)) : t.path) === realpathSync(top)) t.heads = null;
+    // A repo: line that names this repository, or a worktree of it, would flag every commit id of its own.
+    const common = dir => {
+      const r = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: dir, encoding: 'utf8' });
+      return r.status === 0 ? realpathSync(r.stdout.trim()) : null;
+    };
+    const own = common(cwd);
+    for (const t of list) if (t.kind === 'repo' && common(t.dir) === own) t.heads = null;
 
     let items;
     if (o.mode === '--staged') items = stagedItems(cwd);
     else if (o.mode === '--message') items = messageItems(resolve(cwd, o.value));
     else if (o.mode === '--range') items = commitItems(cwd, revList(cwd, o.value.split(/\s+/).filter(Boolean)));
-    else if (o.mode === '--history') items = commitItems(cwd, revList(cwd, ['--all']));
-    else if (o.mode === '--pre-push') items = commitItems(cwd, prePushIds(cwd, o.value, io.stdin ?? readFileSync(0, 'utf8')));
+    else if (o.mode === '--history') items = historyItems(cwd);
+    else if (o.mode === '--pre-push') items = prePushItems(cwd, o.value, io.stdin ?? readFileSync(0, 'utf8'));
     else if (o.mode === '--tree') items = treeItems(top);
     else {
       items = [];
-      for (const f of o.files) {
-        const p = resolve(cwd, f);
-        if (!existsSync(p)) throw new Unusable(`${f}: no such file`);
-        items.push({ where: `path ${f}`, line: 0, text: f });
-        add(items, fileItems(p, f));
-      }
+      for (const f of o.files) add(items, fileItems(cwd, f));
     }
 
-    const hits = scan(items, list);
-    if (!hits.length) return 0;
     const seen = new Set();
-    for (const h of hits) {
-      const place = h.line ? `${h.where}:${h.line}` : h.where;
-      const line = `${place}: term of line ${h.term.line} of the list${o.show ? ` (${h.found})` : ''}`;
-      if (!seen.has(line)) out(line);
-      seen.add(line);
+    for (const it of items) {
+      for (const h of matchLine(it.text, list)) {
+        const place = it.secret && o.show ? `${it.where} ${it.text}` : it.line ? `${it.where}:${it.line}` : it.where;
+        const line = `${place}: term of line ${h.term.line} of the list${o.show ? ` (${h.found})` : ''}`;
+        if (!seen.has(line)) out(line);
+        seen.add(line);
+      }
     }
-    err(`leakscan: ${seen.size} hit(s). The list is ${file}. Run again with --show to print what matched.`);
+    if (!seen.size) return 0;
+    err(`leakscan: ${seen.size} hit(s). The list is ${file}. Run again with --show to print the term and the place in full.`);
     return 1;
   } catch (e) {
-    if (!(e instanceof Unusable)) throw e;
-    err(`leakscan: ${e.message}`);
-    err(`usage: ${USAGE}`);
+    // Any failure is "the scan could not run", never "a term was found" and never a pass.
+    err(`leakscan: ${e instanceof Unusable ? e.message : `stopped on an error (${e && e.message})`}`);
+    if (e instanceof Unusable) err(`usage: ${USAGE}`);
     return 2;
   }
 }
