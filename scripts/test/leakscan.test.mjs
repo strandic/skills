@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, rmSync, symlinkSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -161,16 +161,19 @@ test('--staged reads the identity the commit would carry', () => {
   }
 });
 
-test('--message reads a commit message file and skips its comment lines', () => {
+test('--message reads a commit message file, its comment lines too, up to a scissors line', () => {
   const dir = repo();
   const list = terms('re:\\bACME-\\d+\\b\n');
   const msg = join(tmp(), 'MSG');
-  writeFileSync(msg, 'fix the thing\n\n# ACME-1 in a comment line, which git drops\n');
+  writeFileSync(msg, 'fix the thing\n\n# ------------------------ >8 ------------------------\ndiff --git a/x b/x\n-ACME-3 in the diff that commit -v shows\n');
   assert.equal(run(['--message', msg, '--terms', list], { cwd: dir }).code, 0);
-  writeFileSync(msg, 'fix the thing (ACME-12)\n');
+  // git keeps a line that starts with # when the message comes from -m, so the line is read.
+  writeFileSync(msg, 'fix the thing\n\n#ACME-1 follow-up\n');
+  assert.equal(run(['--message', msg, '--terms', list], { cwd: dir }).code, 1);
+  writeFileSync(msg, '# a comment\nfix the thing (ACME-12)\n');
   const r = run(['--message', msg, '--terms', list], { cwd: dir });
   assert.equal(r.code, 1);
-  assert.match(r.out, /message:1/);
+  assert.match(r.out, /message:2/);
 });
 
 test('--range reads each commit: its added lines, its paths, its message and its identity', () => {
@@ -321,6 +324,233 @@ test('the script run as a program gives the same exit codes', () => {
 test('scan() returns hits with the place, the line and the list line', () => {
   const list = parseTerms('Acme Corp\n', '/x/t');
   assert.deepEqual(scan([{ where: 'a.md', line: 4, text: 'acme corp' }, { where: 'a.md', line: 5, text: 'fine' }], list).map(h => [h.where, h.line, h.term.line]), [['a.md', 4, 1]]);
+});
+
+
+// ---- what the review of 2026-11-19 found ----
+
+test('a term with an accent is found, in a file, a staged change and a message', () => {
+  const dir = repo();
+  const list = terms('Café Acme\n');
+  const f = join(tmp(), 'd.md');
+  writeFileSync(f, 'chez café acme hier\n');
+  assert.equal(run(['--files', f, '--terms', list], { cwd: dir }).code, 1);
+  writeFileSync(join(dir, 'n.md'), 'chez CAFÉ-ACME\n');
+  git(dir, 'add', '-A');
+  assert.equal(run(['--staged', '--terms', list], { cwd: dir }).code, 1);
+  writeFileSync(f, 'pour Café Acme\n');
+  assert.equal(run(['--message', f, '--terms', list], { cwd: dir }).code, 1, 'the accent written as a separate mark');
+});
+
+test('a plain term is found through the separators people really write', () => {
+  const list = parseTerms('Acme Corp\nAcme Co\n', '/x/t');
+  for (const line of ['acme corp', 'acme–corp', 'acme/corp', "acme'corp", "Acme Corp's", 'acme%20corp', 'acme+corp', 'acme, corp', 'acme & corp'.replace(' & ', '&'), 'me@acme-corp.example', 'AcmeCo']) {
+    assert.ok(matchLine(line, list).length >= 1, line);
+  }
+  assert.equal(matchLine('acme and corp', list).length, 0);
+});
+
+test('a file in UTF-16 is read', () => {
+  const dir = repo();
+  const f = join(tmp(), 'd.txt');
+  writeFileSync(f, Buffer.from('﻿see acme corp and ACME-12\n', 'utf16le'));
+  const r = run(['--files', f, '--show', '--terms', terms('Acme Corp\nre:\\bACME-\\d+\\b\n')], { cwd: dir });
+  assert.equal(r.code, 1);
+  assert.match(r.out, /line 1 of the list/);
+  assert.match(r.out, /line 2 of the list/);
+});
+
+// A repository with a bare remote, and what a pre-push hook would be given for one ref.
+function pushed() {
+  const remote = tmp();
+  git(remote, 'init', '-q', '--bare');
+  const dir = repo();
+  git(dir, 'remote', 'add', 'origin', remote);
+  git(dir, 'push', '-q', 'origin', 'main');
+  git(dir, 'fetch', '-q', 'origin');
+  return { dir, remote, zero: '0'.repeat(40) };
+}
+
+test('a tag is read: its message, its tagger, and a file or a folder it points at', () => {
+  const { dir, zero } = pushed();
+  const list = terms('Acme Corp\n');
+  git(dir, 'tag', '-a', 'v1', '-m', 'release for acme corp');
+  const tag = git(dir, 'rev-parse', 'refs/tags/v1');
+  const push = (ref, id) => run(['--pre-push', 'origin', '--terms', list], { cwd: dir, stdin: `${ref} ${id} ${ref} ${zero}\n` });
+  const r = push('refs/tags/v1', tag);
+  assert.equal(r.code, 1);
+  assert.match(r.out, /v1 tag/);
+  assert.equal(run(['--history', '--terms', list], { cwd: dir }).code, 1);
+  git(dir, 'tag', '-d', 'v1');
+  assert.equal(run(['--history', '--terms', list], { cwd: dir }).code, 0);
+  const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: 'acme corp in a file\n', encoding: 'utf8' }).trim();
+  git(dir, 'tag', 'b1', blob);
+  assert.equal(push('refs/tags/b1', blob).code, 1);
+  assert.equal(run(['--history', '--terms', list], { cwd: dir }).code, 1);
+  git(dir, 'tag', '-d', 'b1');
+  writeFileSync(join(dir, 'tf.md'), 'acme corp in a folder\n');
+  git(dir, 'add', '-A');
+  const tree = git(dir, 'write-tree');
+  git(dir, 'reset', '-q', '--hard');
+  git(dir, 'tag', 't1', tree);
+  assert.equal(push('refs/tags/t1', tree).code, 1);
+});
+
+test('the name of a pushed branch or tag is read, and so is every ref name in --history', () => {
+  const { dir, zero } = pushed();
+  const list = terms('Acme Corp\n');
+  const head = git(dir, 'rev-parse', 'HEAD');
+  const r = run(['--pre-push', 'origin', '--terms', list], { cwd: dir, stdin: `refs/heads/topic ${head} refs/heads/acme-corp-pilot ${zero}\n` });
+  assert.equal(r.code, 1);
+  assert.match(r.out, /ref name/);
+  assert.ok(!/acme/i.test(r.out), 'the name is not printed without --show');
+  git(dir, 'branch', 'acme-corp-pilot');
+  assert.equal(run(['--history', '--terms', list], { cwd: dir }).code, 1);
+});
+
+test('a push reads every commit when the tracking refs do not describe where it goes', () => {
+  const { dir, remote, zero } = pushed();
+  const list = terms('Acme Corp\n');
+  // The commit is known to origin's tracking refs, as when it was fetched from a private place.
+  writeFileSync(join(dir, 'a.md'), 'acme corp\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'private work');
+  const id = git(dir, 'rev-parse', 'HEAD');
+  git(dir, 'update-ref', 'refs/remotes/origin/feat', id);
+  const line = `refs/heads/feat ${id} refs/heads/feat ${zero}\n`;
+  assert.equal(run(['--pre-push', 'origin', '--terms', list], { cwd: dir, stdin: line }).code, 0, 'one address: the tracking refs are trusted');
+  git(dir, 'config', 'remote.origin.pushurl', join(remote, '..', 'elsewhere.git'));
+  assert.equal(run(['--pre-push', 'origin', '--terms', list], { cwd: dir, stdin: line }).code, 1, 'pushed to another address than it is fetched from');
+  git(dir, 'config', '--unset', 'remote.origin.pushurl');
+  assert.equal(run(['--pre-push', remote, '--terms', list], { cwd: dir, stdin: line }).code, 1, 'pushed to a bare address');
+});
+
+test('a forced push over a commit this repository does not hold is read, not refused as unusable', () => {
+  const { dir } = pushed();
+  const list = terms('Acme Corp\n');
+  writeFileSync(join(dir, 'a.md'), 'fine\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'mine');
+  const id = git(dir, 'rev-parse', 'HEAD');
+  assert.equal(run(['--pre-push', 'origin', '--terms', list], { cwd: dir, stdin: `refs/heads/main ${id} refs/heads/main ${'1234567890'.repeat(4)}\n` }).code, 0);
+});
+
+test('--range reads the identity, a path with clean content, and what a merge adds', () => {
+  const dir = repo();
+  const base = git(dir, 'rev-parse', 'HEAD');
+  mkdirSync(join(dir, 'acme-corp'));
+  writeFileSync(join(dir, 'acme-corp', 'x.md'), 'fine\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'a path');
+  const pathHit = run(['--range', `${base}..HEAD`, '--terms', terms('Acme Corp\n')], { cwd: dir });
+  assert.equal(pathHit.code, 1);
+  assert.match(pathHit.out, /path/);
+  assert.equal(run(['--range', `${base}..HEAD`, '--terms', terms('re:@example\\.invalid\n')], { cwd: dir }).code, 1, 'the identity');
+  // A merge whose resolution adds a line that neither side holds.
+  git(dir, 'checkout', '-q', '-b', 'side', base);
+  writeFileSync(join(dir, 's.md'), 'side\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'side');
+  git(dir, 'checkout', '-q', 'main');
+  git(dir, 'merge', '-q', '--no-commit', '--no-ff', 'side');
+  writeFileSync(join(dir, 'm.md'), 'widgetco only in the merge\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'merge');
+  const m = run(['--range', 'HEAD^1..HEAD', '--terms', terms('widgetco\n')], { cwd: dir });
+  assert.equal(m.code, 1);
+  assert.match(m.out, /m\.md:1/);
+});
+
+test('--tree reads what is tracked: a link, a file missing from the folder, a name with an accent, a path', () => {
+  const dir = repo({ 'café.txt': 'acme corp\n' });
+  const list = terms('Acme Corp\n');
+  assert.match(run(['--tree', '--terms', list], { cwd: dir }).out, /café\.txt:1/);
+  const d2 = repo({ 'gone.md': 'acme corp\n' });
+  rmSync(join(d2, 'gone.md'));
+  assert.equal(run(['--tree', '--terms', list], { cwd: d2 }).code, 1);
+  const d3 = repo();
+  symlinkSync('acme corp target', join(d3, 'lnk'));
+  git(d3, 'add', '-A');
+  assert.equal(run(['--tree', '--terms', list], { cwd: d3 }).code, 1);
+  const d4 = repo({ 'acme-corp/a.md': 'fine\n' });
+  const r = run(['--tree', '--terms', list], { cwd: d4 });
+  assert.equal(r.code, 1);
+  assert.ok(!/acme/i.test(r.out), 'a path that holds the term is not printed without --show');
+  assert.match(run(['--tree', '--show', '--terms', list], { cwd: d4 }).out, /acme-corp\/a\.md/);
+});
+
+test('--files reads the name of the file, and refuses a folder', () => {
+  const dir = repo();
+  const list = terms('Acme Corp\n');
+  const d = tmp();
+  writeFileSync(join(d, 'acme-corp.md'), 'fine\n');
+  assert.equal(run(['--files', join(d, 'acme-corp.md'), '--terms', list], { cwd: dir }).code, 1);
+  assert.equal(run(['--files', d, '--terms', list], { cwd: dir }).code, 2);
+});
+
+test('--staged reads the committer as well as the author', () => {
+  const dir = repo();
+  writeFileSync(join(dir, 'a.md'), 'fine\n');
+  git(dir, 'add', '-A');
+  const saved = process.env.GIT_COMMITTER_EMAIL;
+  process.env.GIT_COMMITTER_EMAIL = 'me@acme.example';
+  try {
+    assert.equal(run(['--staged', '--terms', terms('re:@acme\\.example\n')], { cwd: dir }).code, 1);
+  } finally {
+    process.env.GIT_COMMITTER_EMAIL = saved;
+  }
+});
+
+test('--terms wins over LEAKSCAN_TERMS, and a list that is a folder is unusable', () => {
+  const dir = repo();
+  const f = join(tmp(), 'd.md');
+  writeFileSync(f, 'acme corp\n');
+  const code = main(['--files', f, '--terms', terms('widgetco\n')], { cwd: dir, stdin: '', out: () => {}, err: () => {}, env: { LEAKSCAN_TERMS: terms('Acme Corp\n') } });
+  assert.equal(code, 0);
+  assert.equal(run(['--files', f, '--terms', tmp()], { cwd: dir }).code, 2);
+});
+
+test('a repo: line that names the scanned repository is skipped from a worktree of it too', () => {
+  const dir = repo();
+  const id = git(dir, 'rev-parse', 'HEAD');
+  const wt = join(tmp(), 'wt');
+  git(dir, 'worktree', 'add', '-q', wt, '-b', 'side');
+  const f = join(tmp(), 'd.md');
+  writeFileSync(f, `follow-up to ${id.slice(0, 9)}\n`);
+  assert.equal(run(['--files', f, '--terms', terms(`repo:${dir}\nwidgetco\n`)], { cwd: wt }).code, 0);
+});
+
+test('a repository in a folder with an accent in its name is scanned', () => {
+  const dir = join(tmp(), 'été');
+  mkdirSync(dir);
+  git(dir, 'init', '-q', '-b', 'main');
+  writeFileSync(join(dir, 'a.md'), 'acme corp\n');
+  git(dir, 'add', '-A');
+  assert.equal(run(['--staged', '--terms', terms('Acme Corp\n')], { cwd: dir }).code, 1);
+  assert.equal(run(['--tree', '--terms', terms('Acme Corp\n')], { cwd: dir }).code, 1);
+});
+
+test('hooks copied outside the repository work in a worktree of a branch that has no scripts folder', () => {
+  const home = tmp();
+  mkdirSync(join(home, 'hooks'));
+  writeFileSync(join(home, 'leakscan.mjs'), readFileSync(SCRIPT));
+  for (const h of ['pre-commit', 'commit-msg', 'pre-push']) {
+    writeFileSync(join(home, 'hooks', h), readFileSync(join(HOOKS, h)));
+    chmodSync(join(home, 'hooks', h), 0o755);
+  }
+  const dir = repo();
+  git(dir, 'config', 'core.hooksPath', join(home, 'hooks'));
+  const wt = join(tmp(), 'wt');
+  git(dir, 'worktree', 'add', '-q', wt, '-b', 'old');
+  const env = { ...process.env, LEAKSCAN_TERMS: terms('Acme Corp\n') };
+  writeFileSync(join(wt, 'a.md'), 'acme corp\n');
+  spawnSync('git', ['add', '-A'], { cwd: wt, env });
+  assert.notEqual(spawnSync('git', ['commit', '-q', '-m', 'bad'], { cwd: wt, env }).status, 0);
+  // A partial commit uses a temporary index: the hook must read that one.
+  writeFileSync(join(wt, 'b.md'), 'fine\n');
+  spawnSync('git', ['add', 'b.md'], { cwd: wt, env });
+  assert.equal(spawnSync('git', ['commit', '-q', '-m', 'only b', '--only', 'b.md'], { cwd: wt, env }).status, 0);
+  assert.notEqual(spawnSync('git', ['commit', '-q', '-m', 'only a', '--only', 'a.md'], { cwd: wt, env }).status, 0);
 });
 
 const DOC = readFileSync(new URL('../leakscan.md', import.meta.url), 'utf8');
