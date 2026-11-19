@@ -1,0 +1,3 @@
+#!/bin/sh
+# Refuses a commit whose staged change holds a listed term. Reference: scripts/leakscan.md.
+exec node "$(dirname "$0")/../leakscan.mjs" --staged
