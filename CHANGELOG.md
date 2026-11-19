@@ -9,6 +9,9 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+### Added
+- `scripts/leakscan.mjs` refuses a commit or a push that holds a term from a private list kept outside the repository. It reads added lines, file paths, commit messages and identities, and it can also scan the files as they are and the whole history. `scripts/hooks/` holds the three git hooks that call it. Reference: `scripts/leakscan.md`.
+
 ## [0.10.2] - 2026-11-12
 
 Script fixes between retros, and one new script. The owner ruled on 2026-11-11 that the skill's
