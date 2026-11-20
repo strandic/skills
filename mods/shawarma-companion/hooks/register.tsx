@@ -25,6 +25,8 @@ const claimsAtom = atom({ plugin: 'shawarma-companion', key: 'claims' } as const
 let lastClaims: readonly string[] = []
 /** The session id the store last held these claims for: a `/clear` changes the id, so the next claim writes again. */
 let storedFor: string | null = null
+/** How many trees the last write that landed for `storedFor` held (lane 3a F6). */
+let storedCount = 0
 /**
  * The session id whose stored claims were read in (Q4). Set only once that read
  * succeeded: until then the store is not written for that id, so a failed read
@@ -167,6 +169,13 @@ async function within<T>($: EngineInterface, work: Promise<T>): Promise<Raced<T>
   return out
 }
 
+/** Lane 3a F7: `work`'s value, raced against RUN_MS; a rejection or no answer in time throws. */
+async function bounded<T>($: EngineInterface, work: Promise<T>): Promise<T> {
+  const out = await within($, work)
+  if (out.kind === 'ok') return out.value
+  throw new Error(out.kind === 'late' ? `no answer in ${RUN_MS} ms` : 'call failed')
+}
+
 /** `argv` in `cwd`, or null when it rejects, runs past RUN_MS, or its stdout was cut. */
 async function run($: EngineInterface, argv: readonly string[], cwd: string): Promise<{ exitCode: number; stdout: string } | null> {
   const out = await within($, $.process.run(argv, { cwd, timeoutMs: RUN_MS }))
@@ -195,7 +204,9 @@ let isBandOn = false
  * stored claims for that id were read in. A failed call claims less, never throws.
  */
 async function claim($: EngineInterface, trees: Trees, found: readonly Found[], isSub = false): Promise<Set<string>> {
-  const id = await $.session.id().catch(() => null)
+  // F8: an id that is not a non-empty string is no id (no shared `claims:undefined` key).
+  const asked0 = await bounded($, $.session.id()).catch(() => null)
+  const id = typeof asked0 === 'string' && asked0 !== '' ? asked0 : null
   if (id !== null && id !== restoredFor) {
     await restore($, id).then(() => { restoredFor = id }, (err: unknown) =>
       $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
@@ -204,7 +215,7 @@ async function claim($: EngineInterface, trees: Trees, found: readonly Found[], 
   const before = held.size
   // B7f: a subagent's hook reads its own cwd: with no main cwd known yet, the root alone.
   const cwd = mainCwd ?? (isSub ? null : await $.session.cwd().catch(() => null))
-  const root = await $.session.root().catch(() => null)
+  const root = await bounded($, $.session.root()).catch(() => null)
   // S1: the engine gives the cwd and the root as real paths (probed): placed as written, else against each root's real path (B7a).
   for (const path of [cwd, root]) {
     const tree = path === null ? null : byReal(trees, path) ?? ownTree(path, trees.roots)
@@ -235,13 +246,19 @@ async function claim($: EngineInterface, trees: Trees, found: readonly Found[], 
     if (spans.some(span => one.at >= span.from - WINDOW_SLACK_MS && one.at <= span.to + WINDOW_SLACK_MS)) held.add(one.root)
   }
   lastSeen = new Set(found.map(pathOf))
-  if (held.size === before && (id === null || id === storedFor)) return held
+  // F6: the entry is rewritten until a write holding every claim has landed (writes may land out of order).
+  if (held.size === before && (id === null || (id === storedFor && storedCount === lastClaims.length))) return held
   const all = await update($, claimsAtom, prev => [...new Set([...(prev ?? []), ...held])])
   lastClaims = [...new Set([...lastClaims, ...all])]
-  if (id !== null && id === restoredFor) {
+  // F8: a session that claimed no tree writes no entry.
+  if (id !== null && id === restoredFor && lastClaims.length > 0) {
     const now = await $.clock.now()
-    await $.store.set(claimKey(id), { trees: [...lastClaims], at: now }).then(() => { storedFor = id }, (err: unknown) =>
-      $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
+    const trees = [...lastClaims]
+    // The write that lands last is what the store holds: its size, so a smaller one landing late is written again.
+    await bounded($, $.store.set(claimKey(id), { trees, at: now })).then(() => {
+      storedFor = id
+      storedCount = trees.length
+    }, (err: unknown) => $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
   }
   return new Set(lastClaims)
 }
@@ -263,16 +280,19 @@ function byReal(trees: Trees, path: string): string | null {
  */
 async function restore($: EngineInterface, id: string): Promise<void> {
   const now = await $.clock.now()
-  const mine = parseClaimed(await $.store.get(claimKey(id)))
+  const mine = parseClaimed(await bounded($, $.store.get(claimKey(id))))
   if (mine !== null) {
     const all = await update($, claimsAtom, prev => [...new Set([...(prev ?? []), ...lastClaims, ...mine.trees])])
     lastClaims = all
   }
-  const keys = (await $.store.keys().catch(() => [] as string[])).filter(key => key.startsWith('claims:') && key !== claimKey(id))
+  // F8: a key list of another shape reads as none.
+  const listed = await bounded($, $.store.keys()).catch(() => [] as unknown)
+  const keys = (Array.isArray(listed) ? listed : []).filter((key): key is string =>
+    typeof key === 'string' && key.startsWith('claims:') && key !== claimKey(id))
   for (const key of keys.slice(0, MAX_PRUNE)) {
-    const entry = parseClaimed(await $.store.get(key).catch(() => undefined))
+    const entry = parseClaimed(await bounded($, $.store.get(key)).catch(() => undefined))
     if (entry === null || now - entry.at > CLAIM_TTL_MS || entry.at > now + CLAIM_TTL_MS) {
-      await $.store.delete(key).catch(() => undefined)
+      await bounded($, $.store.delete(key)).catch(() => undefined)
     }
   }
 }
@@ -477,9 +497,11 @@ async function rowOf($: EngineInterface, list: Lister, found: { root: string; ti
   return { ...base, title: title ?? dirName, step: parsed.step, planDir: dir, planAt, decisionsAt, decisions }
 }
 
-/** The trees scanned: the own tree first, at most MAX_TREES (Q6); how many were left out. */
+/** The trees scanned: the own tree first, then the claimed trees (lane 3a F4), at most MAX_TREES (Q6); how many were left out. */
 function scanned(trees: Trees): { roots: string[]; left: number } {
-  const all = trees.own === null ? trees.roots : [trees.own, ...trees.roots.filter(root => root !== trees.own)]
+  const claimed = new Set(lastClaims)
+  const rest = trees.roots.filter(root => root !== trees.own)
+  const all = [...(trees.own === null ? [] : [trees.own]), ...rest.filter(root => claimed.has(root)), ...rest.filter(root => !claimed.has(root))]
   return { roots: all.slice(0, MAX_TREES), left: Math.max(0, all.length - MAX_TREES) }
 }
 
@@ -640,11 +662,12 @@ export const register: Register = (on, options) => {
     if (!WRITERS.has(e.tool)) return next(e)
     // The hook's own cwd: a subagent's in a subagent's call (d.ts `$.session.cwd`), for its relative paths.
     const cwd = await $.session.cwd().catch(() => null)
-    const from = await $.clock.now()
-    const result = await next(e)
-    const to = await $.clock.now()
-    remember(windows, [{ from, to }], MAX_WINDOWS, () => false)
-    remember(turnWindows, [{ from, to }], MAX_TURN, () => false)
+    // Lane 3a F1, F2: the span is open while the call runs, so a refresh during it (the 15 s check, a parallel
+    // call) already counts a marker the call writes.
+    const span = { from: await $.clock.now(), to: Number.POSITIVE_INFINITY }
+    remember(windows, [span], MAX_WINDOWS, () => false)
+    remember(turnWindows, [span], MAX_TURN, () => false)
+    const result = await next(e).finally(async () => { span.to = await $.clock.now() })
     const isMain = (e as { agentId?: unknown }).agentId === undefined
     if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
     // Q3: a file tool's path (relative to the cwd read before the call) or a Bash call's changed files claim their trees.
