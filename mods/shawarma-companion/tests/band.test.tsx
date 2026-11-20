@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
+import * as model from '../hooks/model'
 
 import { clean, clockTime, isInside, isStaleAt, order, ownTree, parentOf, parseDecisions, parseGitdir, parseMarker, parseWorktrees, redSet, resolvePath, rowText } from '../hooks/model'
 
@@ -2689,8 +2690,12 @@ describe('s6qg session-scoped rows', () => {
   test('S30 Q4 prune: at most 100 other keys examined per id; an entry dated past now + 30 days deleted', { options: ON }, async ($, on) => {
     const now = STARTED + 120_000
     const day = 24 * 3600 * 1000
-    const store = new Map<string, unknown>([['claims:future', { trees: [ROOT], at: now + 31 * day }]])
-    for (let i = 0; i < 150; i++) store.set(`claims:old-${String(i).padStart(3, '0')}`, { trees: [ROOT], at: now - 31 * day })
+    // skills-bnbu Q2: the pass starts at pruneStart('sess-1', 151) = 6; the future entry sits at 50, inside it from 0 or 6.
+    const store = new Map<string, unknown>()
+    for (let i = 0; i < 150; i++) {
+      if (i === 50) store.set('claims:future', { trees: [ROOT], at: now + 31 * day })
+      store.set(`claims:old-${String(i).padStart(3, '0')}`, { trees: [ROOT], at: now - 31 * day })
+    }
     world(on, two(), ROOT, [], new Set(), { claimed: [], store })
     await bash($, 'true')
     expect(store.has('claims:future')).toBe(false)
@@ -3066,4 +3071,119 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
     expect({ advances, others }).toEqual({ advances: 1, others: 100 })
   })
 
+})
+
+describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped, sessions start apart (Q2)', () => {
+  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
+  const T0 = STARTED + 120_000
+  const DAY = 24 * 3600 * 1000
+  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
+  const never = () => new Promise<never>(() => undefined)
+  /** Engine seconds until `work` settles, advancing 1 s at a time (at most 400). */
+  const held = async (clock: any, work: Promise<unknown>): Promise<number> => {
+    let done = false
+    void work.then(() => { done = true }, () => { done = true })
+    let seconds = 0
+    await settle(5)
+    while (!done && seconds < 400) { await clock.advance(1_000); seconds += 1; await settle(5) }
+    return seconds
+  }
+  const left = (store: Map<string, unknown>, prefix: string) => [...store.keys()].filter(k => k.startsWith(prefix)).length
+
+  // Hand count: the own read, then reads asked at 0, ms, 2ms… after it while under 2 000 ms: 4 at 500 ms, 2 at 1 900 ms.
+  for (const [ms, reads] of [[500, 5], [1_900, 3]] as const) {
+    test(`U1 every store.get answers in ${ms} ms, 100 fresh other entries: the first Bash call is held 4 s or less, ${reads} reads asked`, { options: ON }, async ($, on) => {
+      const store = new Map<string, unknown>()
+      for (let i = 0; i < 100; i++) store.set(`claims:o${i}`, { trees: ['/other'], at: T0 - 1000 })
+      // Each read answers `ms` of engine clock after it was asked; the loop below releases it.
+      let t = 0
+      let asked = 0
+      const pending: { due: number; go: () => void }[] = []
+      const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+        hold: { 'store.get': () => new Promise<undefined>(r => { asked++; pending.push({ due: t + ms, go: () => r(undefined) }) }) } })
+      let done = false
+      void bash($, 'true').then(() => { done = true }, () => { done = true })
+      await settle(5)
+      while (!done && t < 10_000) {
+        await clock.advance(100)
+        t += 100
+        for (const one of pending.filter(p => p.due <= t)) { pending.splice(pending.indexOf(one), 1); one.go() }
+        await settle(3)
+      }
+      await settle(5)
+      expect({ heldMs: t <= 4_000 ? 'at most 4000' : t, asked, others: left(store, 'claims:o') }).toEqual({ heldMs: 'at most 4000', asked: reads, others: 100 })
+    })
+  }
+
+  test('U2 store.delete never answers, 100 expired other entries: the first Bash call is held 2 s or less, 2 reads asked', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    for (let i = 0; i < 100; i++) store.set(`claims:o${i}`, { trees: ['/other'], at: T0 - 31 * DAY })
+    let gets = 0
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+      hold: { 'store.delete': () => never(), 'store.get': () => { gets += 1; return undefined } } })
+    const seconds = await held(clock, bash($, 'true'))
+    await settle(5)
+    // Hand count: the own read, then one other read whose delete hangs until the deadline ends the pass.
+    expect({ atMost2: seconds <= 2, gets }).toEqual({ atMost2: true, gets: 2 })
+  })
+
+  test('U3 the first-inserted other entry\'s read rejects: it is kept, and the 50 expired entries after it are deleted', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>([['claims:bad', { trees: ['/other'], at: T0 - 31 * DAY }]])
+    for (let i = 0; i < 50; i++) store.set(`claims:old-${i}`, { trees: ['/other'], at: T0 - 31 * DAY })
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+      hold: { 'store.get': (e: any) => (e.key === 'claims:bad' ? Promise.reject(new Error('unreadable')) : undefined) } })
+    await bash($, 'true')
+    expect({ bad: store.has('claims:bad'), old: left(store, 'claims:old-') }).toEqual({ bad: true, old: 0 })
+  })
+
+  test('U4 the first-inserted other entry\'s read never answers: three session ids in turn still delete expired entries', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>([['claims:hang', { trees: ['/other'], at: T0 - 31 * DAY }]])
+    for (let i = 0; i < 150; i++) store.set(`claims:old-${String(i).padStart(3, '0')}`, { trees: ['/other'], at: T0 - 31 * DAY })
+    let id = 'a'
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store, id: () => id,
+      hold: { 'store.get': (e: any) => (e.key === 'claims:hang' ? never() : undefined) } })
+    const seen: number[] = []
+    for (const next of ['a', 'b', 'c']) {
+      id = next
+      await held(clock, bash($, 'true'))
+      seen.push(left(store, 'claims:old-'))
+    }
+    expect({ seen, hang: store.has('claims:hang') }).toEqual({ seen: [50, 16, 0], hang: true })
+  })
+
+  test('U6 a listed entry whose read answers none: kept (not deleted as malformed)', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>([['claims:live', { trees: ['/other'], at: T0 - 1000 }], ['claims:old', { trees: ['/other'], at: T0 - 31 * DAY }]])
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+      hold: { 'store.get': (e: any) => (e.key === 'claims:live' ? Promise.resolve({ value: undefined }) : undefined) } })
+    await bash($, 'true')
+    expect({ live: store.has('claims:live'), old: store.has('claims:old') }).toEqual({ live: true, old: false })
+  })
+
+  test('U7 session start, every store.get answering in 1900 ms, 100 fresh other entries: held 4 s or less, 3 reads asked', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    for (let i = 0; i < 100; i++) store.set(`claims:o${i}`, { trees: ['/other'], at: T0 - 1000 })
+    let t = 0
+    let asked = 0
+    const pending: { due: number; go: () => void }[] = []
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+      hold: { 'store.get': () => new Promise<undefined>(r => { asked++; pending.push({ due: t + 1_900, go: () => r(undefined) }) }) } })
+    let done = false
+    void $.session.start({ source: 'startup', cwd: ROOT } as any).then(() => { done = true }, () => { done = true })
+    await settle(5)
+    while (!done && t < 10_000) {
+      await clock.advance(100)
+      t += 100
+      for (const one of pending.filter(p => p.due <= t)) { pending.splice(pending.indexOf(one), 1); one.go() }
+      await settle(3)
+    }
+    await settle(5)
+    expect({ heldMs: t <= 4_000 ? 'at most 4000' : t, asked, others: left(store, 'claims:o') }).toEqual({ heldMs: 'at most 4000', asked: 3, others: 100 })
+  })
+
+  test('U5 pruneStart: FNV-1a of the id, mod the key count; 0 for no keys', () => {
+    const start = (model as any).pruneStart as ((id: string, n: number) => number) | undefined
+    expect(typeof start).toBe('function')
+    expect([start!('sess-1', 151), start!('sess-1', 51), start!('a', 152), start!('', 5), start!('sess-1', 1), start!('x', 0)])
+      .toEqual([6, 26, 36, 1, 0, 0])
+  })
 })
