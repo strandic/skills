@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, Register, Timer } from 'claude-code'
 
 import type { Snapshot } from '../types'
 import {
-  CLAIM_TTL_MS, MARKER_PREFIX, changedFiles, claimKey, clean, lines, order, ownTree, parseClaimed, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
+  CLAIM_TTL_MS, MARKER_PREFIX, changedFiles, claimKey, pruneStart, clean, lines, order, ownTree, parseClaimed, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
   MAX_ROWS, MAX_TREES, isInside, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
 } from './model'
 
@@ -287,9 +287,8 @@ function byReal(trees: Trees, path: string): string | null {
 }
 
 /**
- * Q4: the claims stored for `id` (a `--resume`) read in, and at most MAX_PRUNE
- * other `claims:` entries examined: one untouched for 30 days, dated in the
- * future, or malformed, deleted. Throws when the read of `id`'s entry fails.
+ * Q4: the claims stored for `id` (a `--resume`) read in, then the other
+ * `claims:` entries pruned (`prune`). Throws when the read of `id`'s entry fails.
  */
 async function restore($: EngineInterface, id: string): Promise<void> {
   const now = await $.clock.now()
@@ -298,18 +297,45 @@ async function restore($: EngineInterface, id: string): Promise<void> {
     const all = await update($, claimsAtom, prev => [...new Set([...(prev ?? []), ...lastClaims, ...mine.trees])])
     lastClaims = all
   }
-  // F8: a key list of another shape reads as none.
-  const listed = await bounded($, $.store.keys()).catch(() => [] as unknown)
-  const keys = (Array.isArray(listed) ? listed : []).filter((key): key is string =>
-    typeof key === 'string' && key.startsWith('claims:') && key !== claimKey(id))
-  for (const key of keys.slice(0, MAX_PRUNE)) {
-    // N3: only an entry read in time is judged; a read that fails or runs late deletes nothing and ends this pass.
-    const read = await within($, $.store.get(key))
-    if (read.kind !== 'ok') break
-    const entry = parseClaimed(read.value)
-    if (entry === null || now - entry.at > CLAIM_TTL_MS || entry.at > now + CLAIM_TTL_MS) {
-      await bounded($, $.store.delete(key)).catch(() => undefined)
+  await prune($, id, now)
+}
+
+/**
+ * Q4, skills-bnbu Q1, Q2: at most MAX_PRUNE other `claims:` entries examined,
+ * from `pruneStart(id)`, wrapping: one untouched for 30 days, dated in the
+ * future, or malformed, deleted. The whole pass (key list, reads, deletes)
+ * ends RUN_MS after it starts, when the engine's timer fires; a read that
+ * fails or answers none skips its entry; a call still running at the deadline
+ * ends the pass, and a delete given up on may still land. Never throws.
+ */
+async function prune($: EngineInterface, id: string, now: number): Promise<void> {
+  let timer: Timer | null = null
+  const deadline = new Promise<Raced<never>>(resolve => { timer = $.clock.after(RUN_MS, () => resolve({ kind: 'late' })) })
+  const race = <T,>(work: Promise<T>): Promise<Raced<T>> => Promise.race([
+    work.then((value): Raced<T> => ({ kind: 'ok', value }), (): Raced<T> => ({ kind: 'failed' })),
+    deadline,
+  ]).catch((): Raced<T> => ({ kind: 'failed' }))
+  try {
+    // F8: a key list of another shape reads as none.
+    const listed = await race($.store.keys())
+    if (listed.kind !== 'ok' || !Array.isArray(listed.value)) return
+    const keys = listed.value.filter((key): key is string =>
+      typeof key === 'string' && key.startsWith('claims:') && key !== claimKey(id))
+    const start = pruneStart(id, keys.length)
+    for (let i = 0; i < Math.min(keys.length, MAX_PRUNE); i++) {
+      const key = keys[(start + i) % keys.length] as string
+      // Only an entry read in time is judged; a failed read skips it (6y0d), a late one ends the pass.
+      const read = await race($.store.get(key))
+      if (read.kind === 'late') return
+      // A key listed but unset reads as `undefined`: nothing to delete, and a fault answering none spares a live entry.
+      if (read.kind === 'failed' || read.value === undefined) continue
+      const entry = parseClaimed(read.value)
+      if (entry === null || now - entry.at > CLAIM_TTL_MS || entry.at > now + CLAIM_TTL_MS) {
+        if ((await race($.store.delete(key))).kind === 'late') return
+      }
     }
+  } finally {
+    ;(timer as Timer | null)?.cancel()
   }
 }
 
