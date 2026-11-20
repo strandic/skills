@@ -11,10 +11,10 @@ index a471d5b..9d1becb 100644
    "author": { "name": "Strandic" },
    "types": "./types/index.d.ts",
 diff --git a/mods/shawarma-companion/CHANGELOG.md b/mods/shawarma-companion/CHANGELOG.md
-index f3ee491..8f461c9 100644
+index f3ee491..302e151 100644
 --- a/mods/shawarma-companion/CHANGELOG.md
 +++ b/mods/shawarma-companion/CHANGELOG.md
-@@ -5,6 +5,17 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
+@@ -5,6 +5,18 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
  
  The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
  
@@ -24,6 +24,7 @@ index f3ee491..8f461c9 100644
 +
 +### Fixed
 +- One failed read during the 15-second check no longer empties the row until the next tool call. A row whose files fail to read reads `shawarma: <ticket>: could not be read`, and the check reads it again every 15 seconds until it works (skills-cm2l).
++- One failed listing of a plan folder during the 15-second check no longer leaves `plan dir not readable` until the next tool call: each check updates such a row in full, asking the folder's real path before listing it (skills-cm2l).
 +- A check that fails as a whole now clears the more-row's counts too, and the check keeps running, so the rows come back once the error clears (skills-0wsk).
 +
 +### Removed
@@ -33,16 +34,17 @@ index f3ee491..8f461c9 100644
  
  Each session shows full rows only for the worktrees it works in (skills-s6qg).
 diff --git a/mods/shawarma-companion/README.md b/mods/shawarma-companion/README.md
-index 25e99d1..2366d04 100644
+index 25e99d1..57b518c 100644
 --- a/mods/shawarma-companion/README.md
 +++ b/mods/shawarma-companion/README.md
 @@ -72,11 +72,13 @@ Three parts can be added at the end when they apply:
  
  If a marker is malformed, its row reads only `shawarma: <ticket>: malformed marker`, with its label in front when it has one. The pane adds the marker's path.
  
+-The plan folder must be inside the marker's own tree: the tree root or a folder under it. The mod checks this in two steps. First it checks the path as written, after `.` and `..` are resolved. A path outside the tree as written counts as outside, and the mod makes no file call at it. Then it asks where the folder really is, with links followed, and checks that real path against the tree's real path. So a folder in the tree that links to a folder outside it counts as outside. To ask, the mod follows a link inside the tree to where it points. So that call can reach outside the tree, for example a slow network mount. The same holds for the pane's own real-path check and the 15-second check's question whether a folder exists. The mod finds each tree's real path once per turn. It asks for the folder's real path once each time the marker changes, and keeps the answer. It drops that answer when the folder is later found missing or unreadable, and asks again. If no real path comes back, the folder counts as outside, and the mod asks again at the next update. If no answer comes within 2 seconds, the folder counts as outside until the turn ends. So a call that never answers costs 2 seconds once per turn for each such folder or tree root, and once more after the marker is rewritten. If the mod cannot ask, for example because the folder does not exist, it lists and reads nothing in that folder for that update, and asks again at the next one. The row then says `plan dir not readable` when the folder exists, and `plan dir not found` when it does not. While the row says that, the 15-second check lists and reads nothing in that folder. The pane first asks where the folder really is. Outside the tree, it shows the `plan dir outside its tree` line. With no answer, it shows the plan as missing, and reads nothing there. Only when it finds the folder inside does the pane list and read it. The 15-second check only asks whether the folder exists, and an update runs when that changes. Some limits follow. A marker path that names the tree through a different spelling counts as outside: an absolute path through a link, such as `/tmp/…` on macOS where the tree is under `/private/tmp/…`, or a path in a different letter case on a disk that ignores case. A real path in the marker can count as outside too, when git names the tree through a link. The markers the shawarma skill writes today are relative, so these cases do not come up with them. A link changed later, while the marker stays the same, is seen only when the marker is rewritten. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
 +If the marker, `plan.md` or `decisions.md` fails to read, the row reads only `shawarma: <ticket>: could not be read`, with its label in front when it has one. It shows nothing it read before, since that may be out of date. The 15-second check reads it again each time, for as long as the read fails, and the full row comes back at the first check after the read works again. The pane adds the marker's path.
 +
- The plan folder must be inside the marker's own tree: the tree root or a folder under it. The mod checks this in two steps. First it checks the path as written, after `.` and `..` are resolved. A path outside the tree as written counts as outside, and the mod makes no file call at it. Then it asks where the folder really is, with links followed, and checks that real path against the tree's real path. So a folder in the tree that links to a folder outside it counts as outside. To ask, the mod follows a link inside the tree to where it points. So that call can reach outside the tree, for example a slow network mount. The same holds for the pane's own real-path check and the 15-second check's question whether a folder exists. The mod finds each tree's real path once per turn. It asks for the folder's real path once each time the marker changes, and keeps the answer. It drops that answer when the folder is later found missing or unreadable, and asks again. If no real path comes back, the folder counts as outside, and the mod asks again at the next update. If no answer comes within 2 seconds, the folder counts as outside until the turn ends. So a call that never answers costs 2 seconds once per turn for each such folder or tree root, and once more after the marker is rewritten. If the mod cannot ask, for example because the folder does not exist, it lists and reads nothing in that folder for that update, and asks again at the next one. The row then says `plan dir not readable` when the folder exists, and `plan dir not found` when it does not. While the row says that, the 15-second check lists and reads nothing in that folder. The pane first asks where the folder really is. Outside the tree, it shows the `plan dir outside its tree` line. With no answer, it shows the plan as missing, and reads nothing there. Only when it finds the folder inside does the pane list and read it. The 15-second check only asks whether the folder exists, and an update runs when that changes. Some limits follow. A marker path that names the tree through a different spelling counts as outside: an absolute path through a link, such as `/tmp/…` on macOS where the tree is under `/private/tmp/…`, or a path in a different letter case on a disk that ignores case. A real path in the marker can count as outside too, when git names the tree through a link. The markers the shawarma skill writes today are relative, so these cases do not come up with them. A link changed later, while the marker stays the same, is seen only when the marker is rewritten. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
++The plan folder must be inside the marker's own tree: the tree root or a folder under it. The mod checks this in two steps. First it checks the path as written, after `.` and `..` are resolved. A path outside the tree as written counts as outside, and the mod makes no file call at it. Then it asks where the folder really is, with links followed, and checks that real path against the tree's real path. So a folder in the tree that links to a folder outside it counts as outside. To ask, the mod follows a link inside the tree to where it points. So that call can reach outside the tree, for example a slow network mount. The same holds for the pane's own real-path check and the 15-second check's question whether a folder exists. The mod finds each tree's real path once per turn. It asks for the folder's real path once each time the marker changes, and keeps the answer. It drops that answer when the folder is later found missing or unreadable, and asks again. If no real path comes back, the folder counts as outside, and the mod asks again at the next update. If no answer comes within 2 seconds, the folder counts as outside until the turn ends. So a call that never answers costs 2 seconds once per turn for each such folder or tree root, and once more after the marker is rewritten. If the mod cannot ask, for example because the folder does not exist, it lists and reads nothing in that folder for that update, and asks again at the next one. The row then says `plan dir not readable` when the folder exists, and `plan dir not found` when it does not. While the row says `plan dir not found`, the 15-second check lists and reads nothing in that folder. While it says `plan dir not readable`, each 15-second check runs a full update of the row: it asks where the folder really is first, as above, and lists it only when that is inside. The pane first asks where the folder really is. Outside the tree, it shows the `plan dir outside its tree` line. With no answer, it shows the plan as missing, and reads nothing there. Only when it finds the folder inside does the pane list and read it. For a `plan dir not found` row, the 15-second check only asks whether the folder exists, and an update runs when that changes. Some limits follow. A marker path that names the tree through a different spelling counts as outside: an absolute path through a link, such as `/tmp/…` on macOS where the tree is under `/private/tmp/…`, or a path in a different letter case on a disk that ignores case. A real path in the marker can count as outside too, when git names the tree through a link. The markers the shawarma skill writes today are relative, so these cases do not come up with them. A link changed later, while the marker stays the same, is seen only when the marker is rewritten. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
  
  No row runs wider than the window. The ticket follows the labels. In a window narrower than about 40 columns the labels can push the ticket out of view. The title is cut first, then the problem text, then the end of the line. Characters that could reorder the text on screen are drawn as spaces.
  
@@ -67,7 +69,7 @@ index 25e99d1..2366d04 100644
  - `No shawarma marker in the last scan.`
  
 diff --git a/mods/shawarma-companion/hooks/register.tsx b/mods/shawarma-companion/hooks/register.tsx
-index 76bba35..12581a8 100644
+index 76bba35..0921d9d 100644
 --- a/mods/shawarma-companion/hooks/register.tsx
 +++ b/mods/shawarma-companion/hooks/register.tsx
 @@ -101,16 +101,15 @@ let lastListed: string | null = null
@@ -174,12 +176,13 @@ index 76bba35..12581a8 100644
    if (lastTrees === null) return refresh($)
    const trees = lastTrees
    const list = lister($)
-@@ -626,9 +644,16 @@ async function stale($: EngineInterface): Promise<void> {
+@@ -626,9 +644,17 @@ async function stale($: EngineInterface): Promise<void> {
    let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
    for (const row of rows) {
      if (isChanged) break
-+    // cm2l Q2: a row that could not be read is read again each pass, for as long as it fails.
-+    if (row.problem === UNREAD) {
++    // cm2l Q2: a row that could not be read is read again each pass, for as long as it fails; so is a plan dir that did
++    // not list (Q4): the refresh asks its real path first, as at any update, then lists it.
++    if (row.problem === UNREAD || row.problem?.startsWith('plan dir not readable') === true) {
 +      isChanged = true
 +      continue
 +    }
@@ -192,7 +195,7 @@ index 76bba35..12581a8 100644
        continue
      }
      const entries = await list(row.planDir)
-@@ -777,9 +802,7 @@ export const register: Register = (on, options) => {
+@@ -777,9 +803,7 @@ export const register: Register = (on, options) => {
      if (rows.length === 0) {
        const hidden = await read($, hiddenAtom)
        const more = moreText(hidden.markers, hidden.trees, hidden.others ?? 0)
@@ -203,7 +206,7 @@ index 76bba35..12581a8 100644
        const away = hidden.otherTickets ?? []
        return <Text dimColor>{clean(away.length === 0 ? line : `${line}\nIn other worktrees: ${away.map(one => clean(one)).join(', ')}`, true)}</Text>
 diff --git a/mods/shawarma-companion/tests/band.test.tsx b/mods/shawarma-companion/tests/band.test.tsx
-index 4adf08c..9d342bb 100644
+index 4adf08c..4901ea7 100644
 --- a/mods/shawarma-companion/tests/band.test.tsx
 +++ b/mods/shawarma-companion/tests/band.test.tsx
 @@ -1607,7 +1607,8 @@ describe('lane 3a round 3 fixes', () => {
@@ -260,7 +263,29 @@ index 4adf08c..9d342bb 100644
    })
  })
  
-@@ -3067,3 +3070,167 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
+@@ -2307,7 +2310,7 @@ describe('review round 5 (R5, mutants)', () => {
+     expect(await band($)).toEqual(['h-1 — p · run W1 · since 14:00 · 0 decisions'])
+   })
+ 
+-  test('N11 a not-readable row: the 15 s check asks whether it exists and starts no refresh (no read)', { options: ON }, async ($, on) => {
++  test('N11 a not-readable row: the 15 s check starts a refresh, real path asked before the list (cm2l Q4)', { options: ON }, async ($, on) => {
+     const log: string[] = []
+     const clock = world(on, new Map([markerAt(ROOT, 'u-1', 'docs/plans/later\nrun W1\n', STARTED + 5), [`${LATER}/plan.md`, { text: '# u-1\n', mtimeMs: 1 }]]),
+       ROOT, log, new Set([`list ${LATER}`]), { trees: [ROOT] })
+@@ -2315,7 +2318,11 @@ describe('review round 5 (R5, mutants)', () => {
+     expect(await band($)).toEqual([`u-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
+     const n0 = log.length
+     await clock.advance(15_000)
+-    expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([])
++    const pass = log.slice(n0)
++    expect(pass.filter(line => line.startsWith('read '))).toEqual([`read ${ROOT}/.shawarma/active-u-1`])
++    expect(pass.filter(line => line.endsWith(LATER) || line.endsWith(`${LATER} resolve`)))
++      .toEqual([`stat ${LATER} resolve`, `list ${LATER}`, `exists ${LATER}`])
++    expect(await band($)).toEqual([`u-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
+   })
+ 
+   test('N22 a not-readable folder made listable through a link out: the 15 s check does not list it', { options: ON }, async ($, on) => {
+@@ -3067,3 +3074,181 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
    })
  
  })
@@ -417,6 +442,20 @@ index 4adf08c..9d342bb 100644
 +      expect((log.length - n0) / 4).toBe(1 + 20)
 +    })
 +  }
++
++  test('C10 the plan dir fails to list once in the check: the full row within 15 s (Q4, lane A1+)', { options: ON }, async ($, on) => {
++    const fail = new Set<string>()
++    const files = new Map([plan, dec(1, 1)])
++    const clock = world(on, files, ROOT, [], fail)
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    files.set(...dec(2, 2))
++    fail.add(`list ${DIR}`)
++    await clock.advance(15_000)
++    expect(await bandText($)).toMatch(/· plan dir not readable: \/repo\/docs\/plans\/2026-10-16-skills-x-thing$/)
++    fail.clear()
++    await clock.advance(15_000)
++    expect(await bandText($)).toBe('skills-x — the thing · run W1 · since 14:01 · 2 decisions')
++  })
 +
 +  test('G1 a refresh that fails with no check running starts none', { options: ON }, async ($, on) => {
 +    const log: string[] = []
