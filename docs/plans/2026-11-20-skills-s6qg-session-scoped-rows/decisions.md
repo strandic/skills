@@ -12,3 +12,4 @@
 2026-11-20 | D8 DEFAULT | Accept the rare residual foldings: >50 link-spelled worktrees, >4096 distinct folders in one turn, file times >2 s behind the engine clock, a link and its target both listed, one failed real-path stat at discovery | Owner: "Go with reco". Each executed in attack round 3.
 2026-11-20 | D9 DEFAULT | A line break in the drawn row's own ticket still opens a Markdown line in the pane (pre-existing on the base): a new bean, not folded in | Owner: "Go with reco".
 2026-11-20 | D10 DEFAULT | Hot reload mid-sequence, two claims interleaved (m16) and a clock jumping back are NOT RUN in the kit; the run's adversarial lane retries them | Owner: "Go with reco".
+2026-11-20 | W1-1 DEFAULT | S25, S29, S32 read the store null-safely so each red reaches its own assertion on the base; expectations unchanged | Run wave 1: three reds threw before their assertion (TypeError, SyntaxError) because the base writes no store entry.
