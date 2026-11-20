@@ -39,7 +39,7 @@ Checks (each is a reading, never a judgement):
      in its `## ` section; its id is no RULING (`unruled:` holds DEFAULTs only): not labelled
      RULING on that line, by a question line `**<id>** … RULING` in an `## Ask` section of the
      same file, or by decisions.md beside the brief. On a ticket (no `## N.` section, a `## Plan`
-     note) only F10 runs, on the latest `## Plan` note; F1–F9 and F11 print `not applicable
+     note) only F10 runs, on the latest `## Plan` note; F1–F9 and F11–F13 print `not applicable
      (trivial)`. With --ticket (house rules may put the plan ending's `unruled:` lines on the
      ticket, not in the brief) F10 also reads that ticket's latest `## Plan` note, through the
      `## Ask … · plan-ending` sections right after it, its failures printed as `FAIL F10 ticket
@@ -51,10 +51,21 @@ Checks (each is a reading, never a judgement):
      …`: PASS then says nothing about F10.
   F11 with a decisions.md beside the brief: each line dated on or before the freeze (the latest
      `planned`/`refreshed` date of the header) has its id in a §9 row, an `unruled:` line or the
-     authority clause (check_pr.py's M1 reading of both files).
+     authority clause (check_pr.py's M1 reading of both files; in that clause `DF1 to DF6` is a
+     range, as `DF1–DF6` is).
+  F12 a §5 rule whose backticked command runs a test runner (pytest, unittest, jest, `npm test`,
+     `go test`, `node --test`, …) and compares a test count with `=`, `==` or `:` to a literal
+     (`passed=42`, `ran: 42`, `Ran 42 tests`, `42 passed`) fails, each such comparison, whatever
+     floor (`ran ≥ 42`, `>=`) the rule holds elsewhere; a count in its dry-run, FAIL or
+     cannot-run reading is an observed value and passes when the rule holds a floor. `failed: 0`
+     is no test count.
+  F13 the words "before merge" (or "before merging", "before the merge") appear nowhere outside
+     §5: a condition to meet before merge is a §5 rule. Quoted text is not read: the header's
+     pasted `Lessons read:` listing, fenced blocks, a table's `verbatim quote` column.
 
 Format versions (check_pr.py's docstring): a header naming `skill … 0.8.x`, or --written-under
-0.8, prints `F10 not applicable (pre-v0.9 format)` and the same for F11.
+0.8, prints `F10 not applicable (pre-v0.9 format)` and the same for F11; a format before 0.11
+prints `F12 not applicable (pre-v0.11 format)` and the same for F13.
 """
 import ast
 import re
@@ -593,6 +604,114 @@ def decisions_of(b):
         raise Unusable(f"cannot read {p}: {e}") from e
 
 
+SINCE = {"F12": (0, 11), "F13": (0, 11)}  # the format each younger check came with (docstring)
+
+
+def too_young(cid, ver):
+    """`<id> not applicable (pre-vX.Y format)` when the brief's format is older than the check."""
+    since = SINCE[cid]
+    if ver and ver < since:
+        return f"{cid} not applicable (pre-v{since[0]}.{since[1]} format)"
+    return None
+
+
+def gate_rules(b):
+    """(lineno, id, text) of each §5 rule: a list item opening with a bold id, its deeper
+    sub-items joined to it."""
+    start, s5 = b.section(5)
+    its = items(list(enumerate(s5, start)))
+    out = []
+    for k, (ln, ind, t) in enumerate(its):
+        m = re.match(r"^\*\*([A-Z]\d+)\b", t)
+        if not m:
+            continue
+        for _ln2, ind2, t2 in its[k + 1:]:  # the rule's sub-items belong to it
+            if ind2 <= ind:
+                break
+            t += " " + t2
+        out.append((ln, m.group(1), t))
+    return out
+
+
+# A test runner in a backticked command; a count of tests compared exactly; a floor on a count.
+RUNNER = re.compile(
+    r"\b(?:pytest|unittest|nose2|tox|jest|vitest|mocha|rspec|phpunit|ctest)\b"
+    r"|\b(?:npm|yarn|pnpm|bun|deno|go|cargo|dotnet|mix|gradle|mvn|make)\s+(?:run\s+)?test\b"
+    r"|\bnode\s+--test\b|\bmanage\.py\s+test\b|\bbin/rails\s+test\b|\btest_\w+\.py\b", re.I)
+COUNT_WORDS = r"(?:ran|passed|passes|tests?|collected|total)"
+EXACT_COUNT = re.compile(rf"\b{COUNT_WORDS}\s*(?:==?|:)\s*\d+|\b\d+\s+(?:passed|tests?)\b", re.I)
+FLOOR = re.compile(rf"\b{COUNT_WORDS}\s*(?:≥|>=)\s*(?:\d+|<)|\bat least\s+\d+\s+tests?\b", re.I)
+# The fields of a rule that hold an observed reading, not a comparison: a count there is exempt.
+OBSERVED = re.compile(r"(?i:dry[- ]run|cannot[- ]run|can't run|not run)|\bFAIL\b")
+COMPARED = re.compile(r"(?i:\breads?\b|\bdataset\b|\bsettle\b|\bexpected\b|\bthreshold\b)|\bPASS\b")
+
+
+def exact_count_fails(b):
+    """F12: a §5 rule over a test suite reads a floor (`ran ≥ <n>`), never an exact count. Each
+    exact count fails, whatever floor the rule holds elsewhere. One in the dry-run, FAIL or
+    cannot-run reading is an observed value and passes when the rule holds a floor; without one,
+    the dry-run value is the PASS the rule compares to, so it fails too."""
+    fails = []
+    for ln, rid, t in gate_rules(b):
+        if not any(RUNNER.search(c) for c in re.findall(r"`([^`]+)`", t)):
+            continue
+        floor = FLOOR.search(t)
+        for m in EXACT_COUNT.finditer(t):
+            before = t[:m.start()]
+            last = max(((x.start(), kind) for kind, pat in (("observed", OBSERVED),
+                                                             ("compared", COMPARED))
+                        for x in pat.finditer(before)), default=(-1, "compared"))
+            if floor and last[1] == "observed":
+                continue
+            fails.append(f"FAIL F12 line {ln + 1} ({rid}): a test-suite rule compares a count "
+                         f"with = ({m.group(0)!r}); read `failed: 0` and `ran ≥ N`, N the ran count "
+                         "on the sketch tree, with ran printed (adding tests then needs no §9 row)")
+    return fails
+
+
+BEFORE_MERGE = re.compile(r"\bbefore\s+(?:the\s+)?merg(?:e|ing)\b", re.I)
+
+
+def quoted_text(b):
+    """{lineno: text} of each brief line with the text it quotes blanked: the header's pasted
+    `Lessons read:` listing, fenced blocks, and the `verbatim quote` column of a table."""
+    first = b.heads[0][0]
+    out, fenced, quote_col, lessons = {}, False, None, False
+    for k, line in enumerate(b.lines):
+        if k < first:
+            if "Lessons read:" in line:
+                lessons = True
+                line = line.split("Lessons read:", 1)[0]
+            elif lessons:
+                continue
+        if line.strip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
+        if line.lstrip().startswith("|"):
+            c = split_row(line)
+            low = [norm(x.lower()) for x in c]
+            if "verbatim quote" in low:
+                quote_col = low.index("verbatim quote")
+            elif quote_col is not None and quote_col < len(c):
+                line = " | ".join(x for j, x in enumerate(c) if j != quote_col)
+        else:
+            quote_col = None
+        out[k] = line
+    return out
+
+
+def before_merge_fails(b):
+    """F13: "before merge" outside §5: such a condition is a §5 rule. Quoted text is not read."""
+    a, s5 = b.section(5)
+    inside = range(a, a + len(s5)) if s5 else range(0)
+    return [f"FAIL F13 line {k + 1}: \"{m.group(0)}\" outside §5; a condition to meet before "
+            f"merge is a §5 rule: {norm(line)[:70]!r}"
+            for k, line in quoted_text(b).items()
+            if k not in inside and (m := BEFORE_MERGE.search(line))]
+
+
 def check(b, listing=None, repo=None, written_under=None, ticket=None):
     """ticket: the text of the ticket that holds the plan ending (--ticket), or None."""
     fails = []
@@ -716,17 +835,8 @@ def check(b, listing=None, repo=None, written_under=None, ticket=None):
                 fail("F7", where, what)
 
     # F8
-    start, s5 = b.section(5)
     f8 = False
-    its = items(list(enumerate(s5, start)))
-    for k, (ln, ind, t) in enumerate(its):
-        m = re.match(r"^\*\*([A-Z]\d+)\b", t)
-        if not m:
-            continue
-        for _ln2, ind2, t2 in its[k + 1:]:  # the rule's sub-items belong to it
-            if ind2 <= ind:
-                break
-            t += " " + t2
+    for ln, rid, t in gate_rules(b):
         missing = [name for name, ok in (
             ("command", re.search(r"`[^`]+`", t)),
             ("settle clause", re.search(r"settle|\b(?:read|reads|run|runs)\b[:*\s]*(?:once|twice)\b",
@@ -737,9 +847,18 @@ def check(b, listing=None, repo=None, written_under=None, ticket=None):
             ("cannot-run reading", re.search(r"cannot run|can't run|not run|skip|trace", t, re.I))) if not ok]
         if missing:
             f8 = True
-            fail("F8", f"line {ln + 1} ({m.group(1)})", "missing " + ", ".join(missing))
+            fail("F8", f"line {ln + 1} ({rid})", "missing " + ", ".join(missing))
     if f8:
         fails.append("     F8 fields (`--fields`): " + RULE_FIELDS)
+
+    # F12, F13 (v0.11)
+    ver = written_under or check_pr.header_version(b.header)
+    for cid, reading in (("F12", exact_count_fails), ("F13", before_merge_fails)):
+        old = too_young(cid, ver)
+        if old:
+            fails.append(old)
+        else:
+            fails += reading(b)
 
     # F9
     if listing is not None:
@@ -849,7 +968,7 @@ def run(argv):
                 print(__doc__.split("\n\n")[1], file=sys.stderr)
                 return 2
             fails = check_ticket(text, ver)
-            print("F1–F9 and F11 not applicable (trivial)")
+            print("F1–F9 and F11–F13 not applicable (trivial)")
             for f in fails:
                 print(f)
             n = sum(1 for f in fails if f.startswith("FAIL"))
