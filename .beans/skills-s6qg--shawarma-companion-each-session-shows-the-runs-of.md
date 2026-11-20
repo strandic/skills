@@ -50,3 +50,16 @@ Out of scope: the marker recording the session that wrote it (needs a skill-text
 Spike in `.worktrees/s6qg-spike` (patch `docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/sketch/sketch.patch`): `claude plugin test` → `256 pass` / `0 fail`; on the base modules → `186 pass` / `67 fail` of 253 (round-3 suite, before S42–S44); tsc exit 0; validate passed. Three attack rounds (`reports/attack*/report.md`); 31 of 32 mutants killed, m16 (two claims interleaved) `NOT RUN (the test kit does not interleave)`.
 
 - **Q5 RULING — the time-window claim.** Probe P3: Bash's changed-files list is empty for writes outside the session's working tree, so a marker written by Bash from the main checkout into a worktree (shawarma's Wave 0) claims nothing by Q3's sources. The drafted fix (any marker whose time falls in one of the session's calls) claims every concurrent session within the first call (attack round 3, C3: 3 of 3 sessions claimed, executed). Spiked fix: only a marker absent from the previous listing (S23, S35 claimed; S42 another session's rewrite not claimed, executed). Touches ruling Q3, whose recorded reason ("can only fail towards claiming less (today's behaviour)") is wrong under Q1.
+
+## Plan: brief frozen (2026-11-20)
+
+Brief `docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/plan.md`, sketch beside it (`sketch/sketch.patch`, 7 files, +805 −74). Rulings Q1–Q5 and defaults D2–D10 in its `decisions.md`; Q5 (owner: "Go with reco"): only a marker absent from the previous listing and dated within 2 s of one of the session's own calls claims its tree.
+
+- `freeze_check.py plan.md --repo . --listing <(grep -n '^- Lesson (' docs/plans/lessons.md)` → `PASS`
+- `claude plugin test` on the sketch → `256 pass` / `0 fail`; on the base modules → `187 pass` / `69 fail` of 256
+- mutants: 31 of 32 killed; m16 (two claims interleaved) `NOT RUN (the test kit does not interleave two claims)`
+- round-3 population re-run on the final sketch (three concurrent sessions, 30 min): 0 of 3 claimed
+- G4 stand-in on the real engine (2.1.329): `claims:<session>` = `["R", "R/.worktrees/wt"]`; base mod: no entry
+- follow-ups: P6 (EnterWorktree and `/clear` in an interactive session, the owner's); bean `skills-enjt` (pane ticket line break, D9); retro: session id in the marker
+
+unruled: none
