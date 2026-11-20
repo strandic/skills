@@ -9,8 +9,20 @@ bigbrain vault under `docs/retros/`.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-20
+
 ### Added
 - `scripts/leakscan.mjs` refuses a commit or a push that holds a term from a private list kept outside the repository. It reads added lines, file paths, commit messages and identities, and it can also scan the files as they are and the whole history. `scripts/hooks/` holds the three git hooks that call it. Reference: `scripts/leakscan.md`.
+
+### Changed
+- Shawarma text (round 11): a test-suite gate rule reads `failed: 0` and a ran count at or above N, the ran count on the sketch tree pasted in §5, and is exempt from the floor-and-margin form; a trivial go cites run step 3's full suite and lint readings; a TICKET row names another ticket and opens with `file:line`; each review round after the second is a RULING that gives the earlier rounds' counts; a later commit or rebase re-runs the gate and check_pr and pastes a `git range-diff` (a `git diff` from the old head when there was no rebase), each hunk reviewed or its commit left under Unreviewed; an ask letters its options; a RULING line in `decisions.md` opens its decision with the letter chosen and carries `reco <letter>` and, when it undoes a ruling, `reverses <id>`, which the retro reads; an explicit answer to a DEFAULT, `go` included, makes it a RULING.
+- The retro script lists runs from `plan(<ticket>)` commits on every branch and every PR, each marked merged, open or abandoned; it lists merged PRs that no plan or trivial note covers, as `bump` or `other`; it splits the runs between its two auditors by one date rule; it takes row counts from `check_pr.py --counts`. The lessons file is context, never the run list. Its checker replay passes `--written-under` with the skill version in force at the merge for a trivial note, so an older note reads the newer rules as not applicable.
+- `check_pr.py` checks more, on records written under 0.11 or later. P11: a `default` §9 row may not change a gate rule, and a file a gate command runs that changed since the freeze needs a RULING (a file §3 names is the planned change and is not diffed; added tests are not a change). P12: every gate rule has a Verification row that reads PASS, the rule's own dry-run value, or a value that meets the rule's comparisons (`ran 44` against `ran ≥ 40`); any other reading needs a RULING that quotes it. P13: a TICKET row opens with `file:line` and names another ticket. P14: Verification names the head it was read on, and it must be the PR head. P15: a new failure at the head needs a Findings row that names it. P16: a change to `decisions.md` or §9 after the merge fails. M1 needs each RULING line's decision to open with the letter chosen and to carry `reco <letter>` (`-` for none), checks that `reverses <id>` names an earlier line, and checks that each run-time id has a Decisions row with the same label. New options: `--counts` and `--merged`.
+- `check_pr.py` id grammar: `X1 to Xn` is a range in the brief's `authority:` clause; a trivial note's ticket id comes from its `# <id> <title>` first line; an id that starts a line of the note counts as known; `## Plan (<date>, trivial)` and `## Plan (<date>): trivial` headings parse; of two `## Plan` notes, the latest is read.
+- `freeze_check.py`: F12 a test-suite gate rule uses a floor (`ran ≥ n`), not an exact count; F13 the words "before merge" outside §5 fail (pasted lessons, fenced blocks and verbatim quotes are not read); F11 reads `DF1 to DF6` in the authority clause as a range.
+
+### Removed
+- `check_pr.py --asks`, its checks A0, A2 and A3, and the Ask convention they read. The retro script no longer reads a stop with no `## Ask` heading as a correction.
 
 ## [0.10.2] - 2026-11-12
 

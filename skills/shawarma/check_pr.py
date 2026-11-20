@@ -2,9 +2,9 @@
 """check_pr.py — the PR body's skeleton and its mechanical checks (run step 6).
 
     check_pr.py --skeleton
+    check_pr.py --counts <body.md>
     check_pr.py <plan.md | ticket.md> <body.md> [--repo DIR] [--tests-commit SHA] [--head REF]
-                [--base REF] [--written-under X.Y]
-    check_pr.py --asks [--repo DIR] [--written-under X.Y] <ticket.md> [<ticket.md> ...]
+                [--base REF] [--merged SHA] [--written-under X.Y]
 
 Checking prints one line per failure, `FAIL <check-id> <where>: <what>`, then `PASS` or
 `FAIL (<n>)`; exit 0 on PASS, 1 on FAIL, 2 on unusable input, 3 when the checker itself crashes
@@ -12,15 +12,20 @@ Checking prints one line per failure, `FAIL <check-id> <where>: <what>`, then `P
 only; git is read-only.
 HTML comments in the body (the skeleton's) are not read.
 
-Empty inputs: a ticket given to --asks may not be empty (0 lines: `FAIL A0`); a tests commit
-touching no Python test file reads `P6 NOT RUN`, never a silent pass. A brief or ticket with no
-plan ending is unusable (exit 2).
+--counts prints a body's Decisions and Findings rows per label (`Decisions: RULING=1 DEFAULT=2`,
+`Findings: APPLY=0 DECLINE=1 TICKET=1 RULING=0`, `other=<n>` for a label outside the set), or
+`<section>: no table` when the section is absent or holds no table, never 0. Exit 0.
+
+Empty inputs: a tests commit touching no Python test file reads `P6 NOT RUN`, never a silent
+pass; a check that needs a commit it cannot find (P11, P13, P14, P16) reads `<id> NOT RUN (why)`.
+A brief or ticket with no plan ending is unusable (exit 2).
 
 Format versions: a record is read under the format it was written in. A brief's header names it
 (`skill … 0.8.0`); a ticket names none, so a replay passes `--written-under 0.8`. Checks younger
-than the record's format print `<id> not applicable (pre-v<X.Y> format)`: P4 on a ticket, P7, M1,
-A2 and an unreadable bold line in an ask since v0.9; P10 and A3 since v0.10. With no version
-named the record is read as current.
+than the record's format print `<id> not applicable (pre-v<X.Y> format)`: P4 on a ticket, P7 and
+M1 since v0.9; P10 since v0.10; P11–P16 and M1's reco, reverses and body-row readings since
+v0.11. The id grammar's readings below hold for every format (they only remove refusals). With
+no version named the record is read as current.
 
   P1 the first line links the plan ending (names the brief or plan and a commit); the sections
      What · Verification · Unreviewed since the last lane · [Decisions] · [Findings] · Follow-up
@@ -44,28 +49,71 @@ named the record is read as current.
   P8 ids are unique: no §5 rule id (`**R1**`) is also a §9 id, and no §9 id has two rows.
   M1 with a decisions.md beside the brief: each line opening with a date reads
      `<date> | <id> RULING|DEFAULT | <decision> | <why>`, one id per line, each id once (other
-     lines — a heading, a format note — are not entries); every §9 id and `unruled:` id is a line
-     there, of the same kind (§9: `default` in "whose ruling" is DEFAULT, `pending` or
-     `ruled in <id>` is a stop row and not mirrored, anything else RULING; `unruled:` is
-     DEFAULT); a line's id outside both is an id the header's `authority:` clause names (a
-     plan-time ruling, written before §9 existed). A RULING line whose answer — its quoted
-     words, or the whole why cell when nothing is quoted — is only the run invocation
-     (`/shawarma run t-0001`) fails: the go never answers a RULING.
+     lines — a heading, a format note — are not entries); a RULING line's decision cell opens with the letter
+     chosen (`-` for none) and carries `reco <letter>` (`-` for none) and, when it undoes an earlier ruling, `reverses <id>`, anywhere in
+     its decision or why cell; a `reverses <id>` names an id an earlier line of the file records
+     (`reverses` followed by a word that is no id is prose, not the field).
+     Every §9 id and `unruled:` id is a line there, of the same kind (§9: `default` in "whose
+     ruling" is DEFAULT, `pending` or `ruled in <id>` is a stop row and not mirrored, anything
+     else RULING; `unruled:` is DEFAULT); a line's id outside both is an id the header's
+     `authority:` clause names (a plan-time ruling, written before §9 existed). Each run-time
+     line (a §9 or `unruled:` id; the authority clause's ids are exempt) has a row in the body's
+     Decisions table with the same label (a row's range `D1–D18` is read id by id). A RULING
+     line whose answer — its quoted words, or the whole why cell when nothing is quoted — is
+     only the run invocation (`/shawarma run t-0001`) fails: the go never answers a RULING.
   P9 with --repo: every commit in --base..--head (default base: the merge base with `main`,
      `master` or `origin/HEAD`) touching a path outside `docs/`, `.beans/` and `*.md` has a
      `plan(<ticket>)` commit among its ancestors (the plan ending precedes the code).
   P10 a "Known limit" line of the body (or, for a heading, its section) names a ticket: a
      backticked `<x>-<y>`, `#<n>`, a word `<x>-<y>` whose tail holds a digit, or a word with the
      plan's ticket prefix.
+  P11 a §9 row whose "whose ruling" cell reads `default` may not change a §5 rule: its was → now
+     cell fails when it quotes a backticked span of a §5 rule (its command, an expected value),
+     or names a §5 rule id with one of the words command, expected, threshold, dataset, slice,
+     settle. A row naming the rule for its reading or who runs it passes; the section cell is
+     not read. With --repo: each file a §5 rule's backticked command names (a path, or the
+     module after `-m` as `<module>.py`) that exists at the freeze commit (the commit the body's
+     first line names), that §3's table does not name (the contract's own change), and that
+     differs at --head needs a §9 RULING row naming that rule id; a test file whose diff only
+     adds lines raises ran above the suite rule's N, not a change.
+  P12 each §5 rule id is named in the reading cell of a Verification table row; a row whose
+     result cell is not exactly `PASS`, nor the rule's own PASS token (the backticked value after
+     its "PASS", "dry run" or "dry-run reading"), nor a reading that meets every comparison the
+     rule states before its dry-run reading (`failed: 0` and `ran ≥ 40` read by
+     `failed: 0, ran 44`, a field per comparison) needs a §9 RULING row naming the id and
+     quoting that result. (In
+     P11 and P12 a RULING row names the id in a cell other than "whose ruling", which names
+     where the ruling came from.)
+  P13 each TICKET Findings row's finding cell opens with `file:line` (`file:-` when no single
+     line), after an optional (plan) or (review) tag, and the row names a ticket (P10's forms)
+     other than the plan's own. With --repo, a row whose line is inside a hunk of
+     <base>...<head> (P9's base), or whose file §3 names, also names a Decisions RULING or
+     DEFAULT id.
+  P14 Verification names the head its readings were taken on (`head <sha>`); with --repo each
+     such SHA is --head's commit (else a stale reading).
+  P15 a Verification table row whose reading names a suite, tests or lint, and whose result
+     reads more failures (`<n> failed|failures|errors|findings`) in its `head` clause than in
+     its `base` clauses, or names a test (`test_x`, `x_test`) failing only in a head clause,
+     needs a Findings row naming that test, or for a count a Findings row whose finding cell
+     says lint (a lint row) or suite or test (a suite row) and a failure word (fail…, error,
+     finding, warning) or the head's count. Clauses split at `;`, `·`, `,` and ` and ` outside
+     parentheses and backticks; a clause with no `base` or `head` word reads the side before it.
+  P16 with --repo: a commit touching decisions.md or the brief's §9 whose committer date is after
+     the PR's merge commit fails. The merge commit is --merged, else the first merge commit
+     after --head on --base when --head is merged into it (--head itself on a fast-forward);
+     with neither known P16 reads NOT RUN.
 
 Trivial mode: when the first file has no `## 9.` section it is read as the ticket. Its plan
-ending is the latest `## Plan` note (house rules: the ticket's `## Plan (<date>)` heading); P4
-reads a DEFAULT row's id from that note's `unruled:` lines, a RULING row's from those lines or an
-id the ticket writes in bold (its rulings). P6, P8 and M1 need §9 and print
-`<id> not applicable (trivial)`.
+ending is the latest `## Plan` note (house rules: the ticket's `## Plan (<date>)` heading, which
+may carry a suffix: `## Plan (<date>, trivial)`, `## Plan (<date>): trivial`); P4 reads a
+DEFAULT row's id from that note's `unruled:` lines, a RULING row's from those lines, an id the
+note writes as a line's first word (a list marker aside) or an id the ticket writes in bold (its
+rulings); an id only in running text stays unknown. The ticket id is the first word of a first
+line `# <id> <title>` (a committed note), else a `# <id>` line, else the file name up to `--`.
+P6, P8, P11, P12, P16 and M1 need §9 and print `<id> not applicable (trivial)`.
 
-Id grammar (P4, P8, M1, --asks and `unruled:` read exactly this; L a capital, l a lowercase
-letter, D digits):
+Id grammar (P4, P8, M1 and `unruled:` read exactly this; L a capital, l a lowercase letter, D
+digits):
   head        L or LL, then optionally D and optionally l + optional D   Q1 D5 PD1 RB1 RV1a W3r2
   head-tail   a head, `-`, a tail: LL? D? l? · l D? · D                  A-B3 R-A R-1 D-3 RR1-a
                                                                        W1-b W1-1 W0-R1 W3-D12
@@ -84,24 +132,8 @@ letter, D digits):
               the far end is never read as an id of its own; at most 100 ids. Markup on each
               end is read when both ends carry the same (`**D1**–**D29**`, `` `D1`–`D3` ``);
               mismatched markup (`**D1**–D3`) or other letters (`**D1**–**Q3**`) is no range.
-
-Ask convention (a house convention; --asks counts it): every message that hands the turn to the
-ticket owner puts its ask on the ticket, under a level-2 heading
-
-    ## Ask <YYYY-MM-DD> · <kind>
-
-where kind is one of interview, plan-paused, plan-ending, ruling, pr-open, gate, and each
-question is a line starting `**<id>**` (the grammar above; a list item `- **<id>**` too), with a
-`> **What this is about:**` blockquote above it in its section. `--asks` prints, per file, the
-asks, the questions and the asks by kind; `UNPARSED: <file>:<n>: <line>` for an `## Ask` heading
-or a bold-led line in an ask it cannot read (exit 1); FAIL A2 for a question with no blockquote
-above it; UNPARSED (A3) for a `## Plan (<date>)` with no `## Ask <date> · plan-ending` or a
-`## Built (<date>)` with no `## Ask <date> · pr-open` (an undated heading: any ask of that kind).
-With --repo it also counts the asks and answers in git: an ask is keyed on (ticket, the `## Ask`
-heading its `ask(<ticket>)` commit adds), so a re-commit counts once (an ask commit adding no
-heading is the previous ask while no answer came between); an answer is `rule(<ticket>): <ids>`
-(a scrap `rule(<ticket>): <id> — scrap`); an older `chore(beans): <ticket> — ruling <id>` is read
-as one with a deprecation note. It prints the minutes from each ask to the next answer.
+              In the header's `authority:` clause only, `X1 to Xn` with the same one or two
+              letters is a range too (`Q1 to Q5`, `DF1 to DF6`); elsewhere `to` is a word.
 """
 import re
 import shlex
@@ -126,7 +158,6 @@ REASONS = ("unreachable", "pre-existing", "out-of-scope", "style", "superseded",
 SECTIONS = ["What", "Verification", "Unreviewed since the last lane", "Decisions", "Findings",
             "Follow-up"]
 OPTIONAL = {"Decisions", "Findings"}
-ASK_KINDS = ("interview", "plan-paused", "plan-ending", "ruling", "pr-open", "gate")
 # The id grammar of the docstring, as patterns; test_checks.py holds one case per form.
 _TAIL = r"(?:[A-Z]{1,2}\d*[a-z]?|[a-z]\d*|\d+)"
 _HEAD_D = r"[A-Z]{1,2}\d+(?:[a-z]\d*)?"  # a head holding digits
@@ -138,9 +169,14 @@ RANGE_RE = re.compile(r"(?<![\w-])(?P<mk>\*\*|`|)(?P<pre>(?:[A-Z]{1,2}\d+(?:[a-z
                       r"(?P<let>[A-Z]{1,2})(?P<a>\d+)(?P=mk)\s*(?P<sep>–|—|\.\.|-)\s*(?P=mk)"
                       r"(?P<far>(?:(?P=pre))?(?:(?P=let))?)(?P<z>\d+)(?P=mk)(?![\w-])")
 WHAT_ABOUT = re.compile(r"^\s*>\s*(?:\*\*)?What this is about:")
-CURRENT = (0, 10)  # the format this checker writes; a record names its own (docstring)
-SINCE = {"P4t": (0, 9), "P7": (0, 9), "M1": (0, 9), "A2": (0, 9), "A1": (0, 9),
-         "P10": (0, 10), "A3": (0, 10)}  # P4t: P4 on a ticket; A1: a bold line in an ask
+# `X1 to Xn` (same letters, same markup on each end): a range in the authority clause only
+TO_RANGE = re.compile(r"(?<![\w-])(?P<mk>\*\*|`|)(?P<let>[A-Z]{1,2})(?P<a>\d+)(?P=mk)\s+to\s+"
+                      r"(?P=mk)(?P=let)(?P<z>\d+)(?P=mk)(?![\w-])")
+CURRENT = (0, 11)  # the format this checker writes; a record names its own (docstring)
+SINCE = {"P4t": (0, 9), "P7": (0, 9), "M1": (0, 9), "P10": (0, 10), "M1r": (0, 11),
+         "P11": (0, 11), "P12": (0, 11), "P13": (0, 11), "P14": (0, 11), "P15": (0, 11),
+         "P16": (0, 11)}  # P4t: P4 on a ticket; M1r: M1's reco, reverses and body rows
+SHOWN = {"P4t": "P4", "M1r": "M1 (reco, reverses, the body's rows)"}
 RUN_ONLY = re.compile(r"/?[\w:.-]*\s*\brun\s+[\w.-]+")  # `/shawarma run t-0001`
 DOCS_PATH = re.compile(r"^(?:docs/|\.beans/)|\.md$")
 
@@ -161,7 +197,8 @@ def too_young(check_id, ver):
     """`<id> not applicable (pre-vX.Y format)` when the check is younger than ver, else None."""
     since = SINCE.get(check_id)
     if ver and since and ver < since:
-        return f"{check_id.rstrip('t')} not applicable (pre-v{since[0]}.{since[1]} format)"
+        return (f"{SHOWN.get(check_id, check_id)} not applicable "
+                f"(pre-v{since[0]}.{since[1]} format)")
     return None
 
 SKELETON = f"""Plan ending: [brief commit <sha>](<link>) · ticket `<id>` · brief `<path>`
@@ -180,7 +217,9 @@ link to its record. These comments are not read by the checker; delete them. -->
 ## Verification
 
 <!-- Suite and lint against the base, each §5 rule and each lane reading, all taken on the PR
-head. A reading that says "base" names the base commit's SHA in its row (P7). -->
+head. A reading that says "base" names the base commit's SHA in its row (P7); the head they
+were taken on is named, `head <sha>` (P14). Each §5 rule has its row, reading PASS or quoted by
+a §9 RULING (P12); a new failure at the head has a Findings row (P15). -->
 
 | reading | command | result |
 |---|---|---|
@@ -213,7 +252,8 @@ only. Drop the section, key included, when there is no row. -->
 ## Findings
 
 <!-- Written only here. Every finding has a row, tagged (plan) or (review); a DECLINE names
-exactly one reason. Drop the section, key included, when there is no row. -->
+exactly one reason. A TICKET row opens with `file:line` (`file:-` when no single line) and names
+a ticket other than the plan's (P13). Drop the section, key included, when there is no row. -->
 
 {FINDINGS_KEY}
 
@@ -358,13 +398,17 @@ def table(lines):
 # ---- the brief's records ------------------------------------------------------------------
 
 class Records:
-    """What a plan ending records: the ids P4, P8 and M1 read."""
+    """What a plan ending records: the ids P4, P8 and M1 read, and the §3 / §5 / §9 text the
+    v0.11 checks read."""
 
     def __init__(self):
         self.trivial = False
         self.s9_ids, self.whose_ids, self.plan_ids, self.unruled = set(), set(), set(), set()
-        self.bold_ids = set()  # trivial: ids the ticket writes in bold (its rulings)
+        self.bold_ids = set()  # trivial: ids the ticket writes in bold or leading a note line
         self.s9_text, self.s9_rows, self.s5_ids, self.authority = "", [], set(), set()
+        self.s9_cells = []  # [(lineno, cells, kind)] of §9's table
+        self.s5_rules = {}  # {rule id: the rule's text, its indented lines included}
+        self.s3_files = set()  # the files §3's table names
         self.version, self.ticket = None, None  # the header's skill version; `Ticket `<id>``
 
     def known(self, label):
@@ -389,6 +433,14 @@ def plan_note_span(lines, k0):
     return a, z
 
 
+def authority_ids(clause):
+    """The ids of the header's `authority:` clause: running text, plus `X1 to Xn` ranges."""
+    def dash(m):
+        mk, let = m.group("mk"), m.group("let")
+        return f"{mk}{let}{m.group('a')}{mk}–{mk}{let}{m.group('z')}{mk}"
+    return ids_in(TO_RANGE.sub(dash, clause))
+
+
 def brief_records(plan_text):
     lines = plan_text.splitlines()
     r = Records()
@@ -409,6 +461,7 @@ def brief_records(plan_text):
             if re.match(r"^\W*(pending|ruled in)\b", whose, re.I):
                 kind = "stop"  # a stop row: its decision is the row it names
             r.s9_rows.append((k, row_ids, kind))
+            r.s9_cells.append((k, c, kind))
             if len(c) > 2:
                 r.whose_ids |= ids_in(c[2])
         last_row = max([k for k, _ in rows], default=nine[0])
@@ -416,16 +469,30 @@ def brief_records(plan_text):
     five = [k for k, x in enumerate(lines) if re.match(r"^## 5\.", x)]
     if five:
         a, z = section_of(lines, five[0])
+        cur = None
         for line in lines[a + 1:z]:
             m = re.match(r"^\s*[-*]\s+\*\*([^*\s]+)", line)
             if m and slot_id(m.group(1)):
-                r.s5_ids.add(slot_id(m.group(1)))
+                cur = slot_id(m.group(1))
+                r.s5_ids.add(cur)
+                r.s5_rules[cur] = line
+            elif cur and line[:1] in (" ", "\t") and line.strip():
+                r.s5_rules[cur] += "\n" + line  # a sub-item or a wrapped line of the rule
+            elif line.strip():
+                cur = None
+    three = [k for k, x in enumerate(lines) if re.match(r"^## 3\.", x)]
+    if three:
+        a, z = section_of(lines, three[0])
+        _head, rows = table(list(enumerate(lines[a + 1:z], a + 1)))
+        for _k, c in rows:
+            got = re.findall(r"`([^`\s]+)`", c[0]) or ([c[0]] if c[0] and " " not in c[0] else [])
+            r.s3_files |= set(got)
     header = "\n".join(lines[1:first])
     r.version = header_version(header)
     m = re.search(r"\bTicket\s+`([^`]+)`", header)
     r.ticket = m.group(1) if m else None
     m = re.search(r"authority:(.*?)(?:·\s*planned|$)", header, re.S)
-    r.authority = ids_in(m.group(1)) if m else set()
+    r.authority = authority_ids(m.group(1)) if m else set()
     r.plan_ids = set(r.authority)
     for bold in re.findall(r"\*\*([^*]+)\*\*", ending):
         r.plan_ids |= ids_in(bold.split()[0]) if bold.split() else set()
@@ -448,6 +515,11 @@ def ticket_records(ticket_text):
         i = slot_id(bold.split()[0]) if bold.split() else None
         if i:
             r.bold_ids.add(i)
+    for line in lines[a + 1:z]:  # an id the note writes as a line's first word
+        words = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", line).split()
+        tok = words[0].strip("*`").rstrip(":,;.").strip("*`") if words else ""
+        if ID_RE.fullmatch(tok):
+            r.bold_ids.add(tok)
     return r
 
 
@@ -470,6 +542,7 @@ def run_only(line):
     """A decisions.md line whose answer is only the run invocation: its quoted words (`"…"`,
     `“…”`, `` `…` ``) are all `/shawarma run <t>`, or its why cell is, when nothing is quoted."""
     why = line.split(" | ", 3)[3] if line.count(" | ") >= 3 else ""
+    why = re.sub(r"(?<![\w-])(?:reco|reverses)\s+\S+", "", why).strip(" ·;,")  # M1's fields
     quoted = re.findall(r'"([^"]*)"|“([^”]*)”|`([^`]*)`', why)
     quoted = [next(x for x in q if x) for q in quoted if any(q)]
     if quoted:
@@ -494,6 +567,29 @@ def git(repo, *args):
     return r.stdout
 
 
+def git_try(repo, *args):
+    """git's output, or None when it exits non-zero (a ref or a path that is not there)."""
+    r = subprocess.run(["git", "-C", str(repo), "--no-pager", *args], capture_output=True,
+                       text=True, stdin=subprocess.DEVNULL)
+    return None if r.returncode else r.stdout
+
+
+def commit_of(repo, ref):
+    """The full SHA of ref's commit, or None."""
+    out = git_try(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}") if ref else None
+    return out.strip() if out else None
+
+
+def default_base(repo, head):
+    """P9's default base: the merge base of head with `main`, `master` or `origin/HEAD`."""
+    for ref in ("main", "master", "origin/HEAD"):
+        r = subprocess.run(["git", "-C", str(repo), "merge-base", head, ref],
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            return r.stdout.strip()
+    return None
+
+
 def hashes(lines):
     out = []
     for l in lines:
@@ -513,13 +609,8 @@ def plan_ancestry(repo, head, base, tid):
     if not tid:
         return [], ["P9 NOT RUN (no ticket id: the brief's `Ticket `<id>`` or the ticket file)"]
     if base is None:
-        for ref in ("main", "master", "origin/HEAD"):
-            r = subprocess.run(["git", "-C", str(repo), "merge-base", head, ref],
-                               capture_output=True, text=True)
-            if r.returncode == 0:
-                base = r.stdout.strip()
-                break
-        else:
+        base = default_base(repo, head)
+        if base is None:
             return [], ["P9 NOT RUN (no base: pass --base)"]
     names = ticket_names(tid)
     plans = [h for h, _, s in (x.partition("\t") for x in
@@ -543,11 +634,18 @@ def plan_ancestry(repo, head, base, tid):
 TICKET_WORD = r"(?<![\w-])[a-z][a-z0-9]*-(?=[a-z0-9]*\d)[a-z0-9]+(?![\w-])"
 
 
-def known_limit_fails(blines, tid):
-    """P10: a "Known limit" line (a heading: its section) naming no ticket."""
+def ticket_pats(tid):
+    """P10's forms of a ticket name: a backticked `<x>-<y>`, `#<n>`, a word `<x>-<y>` whose
+    tail holds a digit, a word with the plan's ticket prefix."""
     pats = [r"`[A-Za-z][\w.]*-\w+`", r"(?<![\w&])#\d+\b", TICKET_WORD]
     if tid and "-" in tid:
         pats.append(r"(?<![\w-])" + re.escape(tid.rsplit("-", 1)[0]) + r"-\w+")
+    return pats
+
+
+def known_limit_fails(blines, tid):
+    """P10: a "Known limit" line (a heading: its section) naming no ticket."""
+    pats = ticket_pats(tid)
     fails, fenced = [], False
     for k, line in enumerate(blines):
         if line.strip().startswith("```"):
@@ -566,14 +664,351 @@ def known_limit_fails(blines, tid):
     return fails
 
 
+# ---- the v0.11 readings ----------------------------------------------------------------------
+
+FIELD_WORDS = re.compile(r"\b(?:command|expected|threshold|dataset|slice|settle)\b", re.I)
+HEAD_SHA = re.compile(r"(?<![\w-])head\b\W{1,4}((?=[0-9a-f]*\d)[0-9a-f]{7,40})(?![\w-])", re.I)
+FIRST_SHA = re.compile(r"(?<![\w-])((?=[0-9a-f]*\d)[0-9a-f]{7,40})(?![\w-])")
+FILE_LINE = re.compile(r"^\s*(?:\((?:plan|review)\)\s*)?`?(?P<file>[\w./-]+):(?P<line>\d+|-)`?"
+                       r"(?![\w-])")
+FAILS_RE = re.compile(r"(\d+)\s+(?:failed|failures?|errors?|findings?)\b", re.I)
+TEST_NAME = re.compile(r"(?<![\w-])(test_\w+|\w+_test)(?![\w-])")
+TEST_FILE = re.compile(r"(?:^|/)(?:tests?/|test_[^/]*$|[^/]*_test\.\w+$|[^/]*\.test\.\w+$)")
+
+
+def spans(text):
+    """The backticked spans of a text."""
+    return set(re.findall(r"`([^`]+)`", text))
+
+
+def names_id(cells, i):
+    """Whether row cells name id i (running text, ranges, or a bare id slot)."""
+    text = " ".join(cells)
+    return i in ids_in(text) or i in {slot_id(w) for w in re.split(r"[\s|,;()]+", text) if w}
+
+
+def pass_tokens(rule):
+    """A §5 rule's own PASS tokens: the backticked value after its "PASS" or "dry run" (or
+    "dry-run reading", the field's name)."""
+    return set(re.findall(r"\b(?:PASS|dry[- ]run)\b[^`\n]*?`([^`]+)`", rule, re.I))
+
+
+# A rule's own comparisons: `<field> ≥ <n>` (a floor) or `<field>: <value>` / `<field>=<value>`,
+# read in the rule's text before its dry-run, FAIL and cannot-run readings (observed values).
+COMPARISON = re.compile(r"`([A-Za-z][\w.-]*)\s*(≥|>=|==|=|:)\s*([\w.-]+)`")
+OBSERVED = re.compile(r"(?i:dry[- ]run|cannot[- ]run|can't run|not run|\bdataset\b|\bsettle\b)"
+                      r"|\bFAIL\b")
+
+
+def meets_rule(rule, got):
+    """Whether a result meets every comparison the rule states (a ran above its floor), or None
+    when the rule states none."""
+    m = OBSERVED.search(rule)
+    comps = COMPARISON.findall(rule[:m.start()] if m else rule)
+    if not comps:
+        return None
+    for field, op, want in comps:
+        seen = re.search(rf"(?<![\w-]){re.escape(field)}\s*(?:==|=|:)?\s*([\w.-]+)", got, re.I)
+        if not seen:
+            return False
+        have = seen.group(1)
+        if op in ("≥", ">="):
+            if not (have.isdigit() and want.isdigit() and int(have) >= int(want)):
+                return False
+        elif have.lower() != want.lower():
+            return False
+    return True
+
+
+def gate_files(rule):
+    """The paths a §5 rule's backticked commands name, and `<module>.py` after `-m`."""
+    out = set()
+    for span in spans(rule):
+        try:
+            toks = shlex.split(span)
+        except ValueError:
+            continue
+        for k, t in enumerate(toks):
+            if k and toks[k - 1] == "-m" and re.fullmatch(r"[\w.]+", t):
+                out.add(t.replace(".", "/") + ".py")
+            elif "/" in t or re.search(r"\.[A-Za-z]\w*$", t):
+                out.add(t)
+    return out
+
+
+def table_rows(ls):
+    """[(lineno, cells)] of every table row in lines, fenced blocks, headers and rules skipped."""
+    rows, fenced = [], False
+    for k, line in ls:
+        if line.strip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced or not line.lstrip().startswith("|") or \
+                re.fullmatch(r"\s*\|?[\s:|-]+\|?\s*", line):
+            continue
+        c = split_row(line)
+        if [norm(x.lower()) for x in c][:1] in (["reading"], ["finding"], ["decision"]):
+            continue
+        rows.append((k, c))
+    return rows
+
+
+def ruled(rec, i, quoting=None):
+    """Whether a §9 RULING row names id i (and, when given, quotes that text) outside its "whose
+    ruling" cell, which names where the ruling came from."""
+    plain = norm((quoting or "").replace("`", ""))
+    own = [[c[0]] + c[3:] for _k, c, kind in rec.s9_cells if kind == "RULING"]
+    return any(names_id(c, i) and
+               (quoting is None or (plain and plain in norm(" ".join(c).replace("`", ""))))
+               for c in own)
+
+
+def default_gate_fails(rec):
+    """P11 on §9's default rows: none may change a §5 rule."""
+    fails = []
+    rule_spans = {i: spans(t) for i, t in rec.s5_rules.items()}
+    for k, c, kind in rec.s9_cells:
+        if kind != "DEFAULT" or len(c) < 5:
+            continue
+        cell = c[4]
+        hit = {i for i, sp in rule_spans.items() if spans(cell) & sp}
+        if FIELD_WORDS.search(cell):
+            hit |= {i for i in rec.s5_ids if names_id([cell], i)}
+        if hit:
+            fails.append(f"FAIL P11 brief line {k + 1}: default row {c[0]!r} changes §5 "
+                         f"{', '.join(sorted(hit))} ({norm(cell)[:60]!r}); a gate change is a "
+                         "RULING")
+    return fails
+
+
+def in_s3(rec, f):
+    """Whether §3's table names file f (the contract's own change)."""
+    return any(f == x or f.endswith("/" + x) or x.endswith("/" + f) for x in rec.s3_files)
+
+
+def gate_change_fails(repo, rec, head, freeze):
+    """P11 with --repo: (fails, notes) for the files §5 rules run, freeze commit to head."""
+    at, now = commit_of(repo, freeze), commit_of(repo, head)
+    if not at or not now:
+        return [], [f"P11 NOT RUN on files (no commit {freeze if not at else head!r} in --repo: "
+                    "the body's first line names the freeze commit)"]
+    fails = []
+    for rid, text in sorted(rec.s5_rules.items()):
+        files = sorted(f for f in gate_files(text) if not in_s3(rec, f)
+                       and git_try(repo, "cat-file", "-e", f"{at}:{f}") is not None)
+        if not files:
+            continue
+        stat = git_try(repo, "diff", "--numstat", "--no-ext-diff", "--no-textconv", at, now, "--",
+                       *files) or ""
+        for line in stat.splitlines():
+            _add, dele, path = (line.split("\t", 2) + ["", ""])[:3]
+            if TEST_FILE.search(path) and dele == "0":
+                continue  # tests added: the suite's floor rising is no change
+            if not ruled(rec, rid):
+                fails.append(f"FAIL P11 {path}: changed since the freeze {at[:8]} and §5 {rid} "
+                             f"runs it; no §9 RULING row names {rid}")
+    return fails, []
+
+
+def gate_reading_fails(rec, vrows):
+    """P12: each §5 rule's Verification row reads PASS, or a §9 RULING quotes its reading."""
+    fails = []
+    for rid in sorted(rec.s5_ids):
+        mine = [(k, c) for k, c in vrows if names_id([c[0]], rid)]
+        if not mine:
+            fails.append(f"FAIL P12 Verification: §5 {rid} has no row (a reading cell naming "
+                         f"{rid})")
+        rule = rec.s5_rules.get(rid, "")
+        toks = pass_tokens(rule)
+        for k, c in mine:
+            got = c[-1].replace("*", "").strip().strip("`").strip()
+            if got == "PASS" or got in toks or meets_rule(rule, got) or ruled(rec, rid, got):
+                continue
+            fails.append(f"FAIL P12 line {k + 1}: §5 {rid} reads {got[:40]!r}, not PASS, and no "
+                         f"§9 RULING row names {rid} quoting it")
+    return fails
+
+
+def head_fails(vlines, repo, head, notes):
+    """P14: Verification names the head its readings were taken on; with --repo, it is head."""
+    shas, fenced = [], False
+    for k, line in vlines:
+        if line.strip().startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            shas += [(k, m.group(1)) for m in HEAD_SHA.finditer(line)]
+    if not shas:
+        return ["FAIL P14 Verification: names no head SHA its readings were taken on "
+                "(`head <sha>`)"]
+    if not repo:
+        return []
+    full = commit_of(repo, head)
+    if not full:
+        notes.append(f"P14 NOT RUN (--head {head!r} is no commit of --repo)")
+        return []
+    return [f"FAIL P14 line {k + 1}: a stale reading: Verification read head {sha}, --head is "
+            f"{full[:12]}" for k, sha in shas if not full.startswith(sha.lower())]
+
+
+def new_failure_fails(vrows, frows):
+    """P15: a suite or lint row failing more at the head than at the base needs a Findings row."""
+    fails, ftext = [], [" ".join(c) for _k, c, _lab in frows]
+    fcells = [c[0] for _k, c, _lab in frows]
+    for k, c in vrows:
+        kind = re.search(r"\b(lint|suite|tests?)\b", c[0], re.I)
+        if not kind:
+            continue
+        counts, tests, seen = {"base": 0, "head": 0}, {"base": set(), "head": set()}, set()
+        failing, side = set(), None
+        for seg in clauses(c[-1]):
+            m = re.search(r"\b(base|head)\b", seg, re.I)
+            if m:
+                side = m.group(1).lower()
+            if side is None:
+                continue  # a clause before any side word reads neither
+            n = [int(x) for x in FAILS_RE.findall(seg)]
+            if n:
+                counts[side] += sum(n)
+                seen.add(side)
+            if n or re.search(r"\bfail", seg, re.I):
+                failing.add(side)
+            if side in failing:
+                tests[side] |= set(TEST_NAME.findall(seg))
+        new = sorted(tests["head"] - tests["base"])
+        for t in new:
+            if not any(t in x for x in ftext):
+                fails.append(f"FAIL P15 line {k + 1}: {t} fails at the head only and no Findings "
+                             "row names it")
+        if seen == {"base", "head"} and counts["head"] > counts["base"] and not new:
+            word = r"\blint\b" if kind.group(1).lower() == "lint" else r"\b(?:suite|tests?)\b"
+            failure = rf"\b(?:fail\w*|errors?|findings?|warnings?|{counts['head']})\b"
+            if not any(re.search(word, x, re.I) and re.search(failure, x, re.I)
+                       for x in fcells):
+                fails.append(f"FAIL P15 line {k + 1}: {counts['head']} failure(s) at the head, "
+                             f"{counts['base']} at the base, and no Findings row for them")
+    return fails
+
+
+def clauses(text):
+    """A result cell's clauses: split at `;`, `·`, `,` and ` and `, outside parentheses and
+    backticks (a list of failing tests stays in its clause)."""
+    out, cur, depth, code = [], "", 0, False
+    k = 0
+    while k < len(text):
+        ch = text[k]
+        if ch == "`":
+            code = not code
+        elif not code and ch in "([":
+            depth += 1
+        elif not code and ch in ")]":
+            depth = max(depth - 1, 0)
+        if not code and depth == 0 and (ch in ";·," or text.startswith(" and ", k)):
+            out.append(cur)
+            cur = ""
+            k += 5 if ch == " " else 1
+            continue
+        cur += ch
+        k += 1
+    return out + [cur]
+
+
+def added_hunks(diff):
+    """{path: [(first, end)]} of the new-side line ranges of a `git diff -U0`."""
+    out, f = {}, None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            f = line[6:] if line.startswith("+++ b/") else None
+        elif f and (m := re.match(r"^@@ -\S+ \+(\d+)(?:,(\d+))? @@", line)):
+            a, n = int(m.group(1)), int(m.group(2) or 1)
+            out.setdefault(f, []).append((a, a + max(n, 1)))
+    return out
+
+
+def ticket_row_fails(frows, tid, rec, decision_ids, repo, head, base, notes):
+    """P13 on the TICKET Findings rows."""
+    fails, hunks = [], None
+    own = {x.lower() for x in ticket_names(tid)} if tid else set()
+    tickets = [(k, c) for k, c, lab in frows if lab == "TICKET"]
+    if repo and tickets:
+        b = base or default_base(repo, head)
+        out = git_try(repo, "diff", "-U0", "--no-ext-diff", "--no-textconv",
+                      f"{b}...{head}") if b else None
+        if out is None:
+            notes.append("P13 NOT RUN on the PR's hunks (no base: pass --base)")
+        else:
+            hunks = added_hunks(out)
+    for k, c in tickets:
+        m = FILE_LINE.match(c[0])
+        if not m:
+            fails.append(f"FAIL P13 line {k + 1}: a TICKET finding opens with no `file:line` "
+                         f"(`file:-` when no single line): {norm(c[0])[:50]!r}")
+        rest = " ".join([c[0][m.end():] if m else c[0]] + c[1:])
+        found = {x.group(0).strip("`").lower() for p in ticket_pats(tid)
+                 for x in re.finditer(p, rest)}
+        if not found:
+            fails.append(f"FAIL P13 line {k + 1}: a TICKET row names no ticket")
+        elif not found - own:
+            fails.append(f"FAIL P13 line {k + 1}: a TICKET row names only the plan's own ticket "
+                         f"{tid}")
+        if repo and m:
+            f, ln = m.group("file"), m.group("line")
+            in_hunk = hunks is not None and ln != "-" and any(
+                a <= int(ln) < z for a, z in hunks.get(f, []))
+            s3 = in_s3(rec, f)
+            if (in_hunk or s3) and not ids_in(" ".join(c)) & decision_ids:
+                where = "a line the PR changes" if in_hunk else "a file §3 names"
+                fails.append(f"FAIL P13 line {k + 1}: a TICKET on {where} ({f}:{ln}) names no "
+                             "Decisions RULING or DEFAULT id")
+    return fails
+
+
+def post_merge_fails(repo, head, base, merged, plan_path):
+    """P16: (fails, notes) for commits touching decisions.md or §9 after the merge commit."""
+    top = git_try(repo, "rev-parse", "--show-toplevel")
+    try:
+        rel = Path(plan_path).resolve().relative_to(Path(top.strip()).resolve())
+    except (AttributeError, TypeError, ValueError):
+        return [], ["P16 NOT RUN (the brief is not inside --repo)"]
+    if merged:
+        at = commit_of(repo, merged)
+        if not at:
+            return [], [f"P16 NOT RUN (--merged {merged!r} is no commit of --repo)"]
+    elif base and commit_of(repo, head) and subprocess.run(
+            ["git", "-C", str(repo), "merge-base", "--is-ancestor", head, base],
+            capture_output=True).returncode == 0:
+        out = (git_try(repo, "rev-list", "--ancestry-path", "--merges", "--reverse",
+                       f"{head}..{base}") or "").split()
+        at = out[0] if out else commit_of(repo, head)
+    else:
+        return [], ["P16 NOT RUN (no merge commit known: pass --merged <sha>, or --base when "
+                    "--head is merged into it)"]
+    when = int(git(repo, "log", "-1", "--format=%ct", at).strip())
+    brief, dec = rel.as_posix(), (rel.parent / "decisions.md").as_posix()
+    fails = []
+    for line in git(repo, "log", "--all", "--format=%H %ct", "--", brief, dec).splitlines():
+        sha, ct = line.split()
+        if int(ct) <= when:
+            continue
+        paths = (git_try(repo, "diff", "--name-only", f"{sha}^", sha) or "").split()
+        if dec in paths:
+            fails.append(f"FAIL P16 {sha[:8]}: touches {dec} after the merge {at[:8]}")
+        elif brief in paths:
+            old, new = (git_try(repo, "show", f"{x}:{brief}") for x in (f"{sha}^", sha))
+            if brief_records(old or "").s9_text != brief_records(new or "").s9_text:
+                fails.append(f"FAIL P16 {sha[:8]}: changes the brief's §9 after the merge "
+                             f"{at[:8]}")
+    return fails, []
+
+
 # ---- the checks -----------------------------------------------------------------------------
 
 def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=None,
-          notes=None, base=None, ticket=None, written_under=None):
+          notes=None, base=None, ticket=None, written_under=None, merged=None, plan_path=None):
     """FAIL lines for a body against its plan ending (a brief, or a ticket: trivial mode).
     decisions: a decisions.md's text beside the brief (M1); notes: a list that receives the
     `not applicable (…)` and `NOT RUN` lines; base: P9's base ref; ticket: the ticket id (a
-    brief's header names it otherwise); written_under: the record's format, (major, minor)."""
+    brief's header names it otherwise); written_under: the record's format, (major, minor);
+    merged: the PR's merge commit (P16); plan_path: the brief's file, for P16 with repo."""
     fails = []
     notes = [] if notes is None else notes
 
@@ -604,8 +1039,11 @@ def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=
     ver = written_under or rec.version
     ticket = ticket or rec.ticket
     young = {c: too_young(c, ver) for c in SINCE}
-    notes += [young[c] for c in ("P4t", "P7", "M1", "P10") if young[c]
-              and (c != "P4t" or rec.trivial) and (c != "M1" or not rec.trivial)]
+    brief_only = ("M1", "M1r", "P11", "P12") + (("P16",) if repo else ())
+    notes += [young[c] for c in ("P4t", "P7", "M1", "P10", "M1r", "P11", "P12", "P13", "P14",
+                                 "P15", "P16") if young[c] and (c != "P4t" or rec.trivial)
+              and (c not in brief_only or not rec.trivial) and (c != "P16" or repo)]
+    drows, frows = [], []  # [(lineno, named ids, label)], [(lineno, cells, label)]
 
     for name in ("Decisions", "Findings"):
         if name not in by:
@@ -632,6 +1070,10 @@ def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=
             c = c + [""] * (4 - len(c))
             lab_cell = c[1].replace("*", "").replace("`", "").strip()
             lab = (lab_cell.split() or [""])[0]
+            if name == "Findings":
+                frows.append((k, c, lab))
+            else:
+                drows.append((k, ids_in(c[0]) | ids_in(c[2]) | ({lead_id(c[0])} - {None}), lab))
             if lab not in LABELS[name]:
                 fail("P3", f"line {k + 1}", f"{name} label {lab_cell!r} not in "
                      f"{sorted(LABELS[name])}")
@@ -750,9 +1192,34 @@ def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=
     if not young["P10"]:
         fails += known_limit_fails(blines, ticket)
 
+    # P13, P14, P15
+    vlines = by.get("Verification", (0, []))[1]
+    vrows = table_rows(vlines)
+    decision_ids = {i for _k, named, lab in drows if lab in ("RULING", "DEFAULT") for i in named}
+    if not young["P13"]:
+        fails += ticket_row_fails(frows, ticket, rec, decision_ids, repo, head, base, notes)
+    if not young["P14"]:
+        fails += head_fails(vlines, repo, head, notes)
+    if not young["P15"]:
+        fails += new_failure_fails(vrows, frows)
+
     if rec.trivial:
-        notes += [f"{c} not applicable (trivial)" for c in ("P6", "P8", "M1")]
+        notes += [f"{c} not applicable (trivial)" for c in ("P6", "P8", "M1", "P11", "P12", "P16")]
         return fails
+
+    # P11, P12
+    if not young["P11"]:
+        fails += default_gate_fails(rec)
+        if repo:
+            m = FIRST_SHA.search(first)
+            if m:
+                f11, n11 = gate_change_fails(repo, rec, head, m.group(1))
+                fails += f11
+                notes += n11
+            else:
+                notes.append("P11 NOT RUN on files (the body's first line names no commit)")
+    if not young["P12"]:
+        fails += gate_reading_fails(rec, vrows)
 
     # P8
     for i in sorted(rec.s5_ids & rec.s9_ids):
@@ -792,6 +1259,30 @@ def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=
         for i in sorted(set(dkind) - set(want) - rec.authority):
             fail("M1", "decisions.md", f"{i} is in no §9 row, `unruled:` line or authority "
                  "clause")
+        if not young["M1r"]:
+            for k, i, kind in good:
+                rest = dlines[k].split(" | ", 2)[2]
+                if kind == "RULING" and not re.search(r"(?<![\w-])reco\s+(?:[A-Z]|-)(?![\w-])",
+                                                      rest):
+                    fail("M1", f"decisions.md:{k + 1}", f"{i} RULING carries no `reco <letter>` "
+                         "(the option recommended, `-` for none)")
+                if kind == "RULING" and not re.match(r"\s*(?:[A-Z]|-)(?![\w-])", rest):
+                    fail("M1", f"decisions.md:{k + 1}", f"{i} RULING's decision does not open "
+                         "with the letter chosen (`-` for none)")
+                for m in re.finditer(r"(?<![\w-])reverses\s+(\S+)", rest):
+                    j = slot_id(m.group(1))
+                    if j is None:
+                        continue  # `reverses the plan's order`: words, not the field
+                    if j not in {i2 for k2, i2, _kind in good if k2 < k}:
+                        fail("M1", f"decisions.md:{k + 1}", f"{i} reverses {m.group(1)!r}, which "
+                             "no earlier line of the file records")
+            for i in sorted(set(dkind) & set(want)):  # run-time ids: the body's rows
+                labs = {lab for _k, named, lab in drows if i in named}
+                if not labs:
+                    fail("M1", "body", f"{i} ({dkind[i]} in decisions.md) has no Decisions row")
+                elif dkind[i] not in labs:
+                    fail("M1", "body", f"{i} is {dkind[i]} in decisions.md, "
+                         f"{'/'.join(sorted(labs))} in the Decisions table")
 
     # P6
     if repo and tests_commit:
@@ -810,111 +1301,44 @@ def check(plan_text, body, repo=None, tests_commit=None, head="HEAD", decisions=
         for t in sorted(before - now):
             if not re.search(r"(?<!\w)" + re.escape(t) + r"(?!\w)", s9_text):
                 fail("P6", tests_commit[:7], f"{t} is gone at {head} and §9 does not name it")
+
+    # P16
+    if repo and not young["P16"]:
+        f16, n16 = post_merge_fails(repo, head, base, merged, plan_path)
+        fails += f16
+        notes += n16
     return fails
 
 
 def ticket_id(path, text):
-    """The ticket's id: its `# <id>` line, else the file name up to `--`."""
+    """The ticket's id: the first word of a first line `# <id> <title>` (a committed note), else
+    a `# <id>` line, else the file name up to `--`."""
+    m = re.match(r"#\s+([A-Za-z][\w.]*-[A-Za-z0-9]+)[:,.]?\s+\S", text.split("\n", 1)[0])
+    if m:
+        return m.group(1)
     m = re.search(r"^#\s+(\S+)\s*$", text, re.M)
     return m.group(1) if m else Path(path).name.split("--")[0].removesuffix(".md")
 
 
-def ask_waits(repo, tid):
-    """(asks, rules, [minutes from each ask to the next answer], notes) from git log. An ask is
-    keyed on the `## Ask` heading its commit adds; an answer is a `rule(<t>)` commit, or an older
-    `chore(beans): <t> — ruling <id>` one (read, with a deprecation note)."""
-    names = ticket_names(tid)
-    log = git(repo, "log", "--reverse", "--format=%H%x09%ct%x09%s")
-    seq, notes, seen = [], [], set()
-    for line in log.splitlines():
-        sha, t, subj = line.split("\t", 2)
-        m = re.match(r"^(ask|rule)\(([^)]+)\)", subj)
-        old = re.match(r"^chore\(beans\):\s+(?:scrap\s+)?(\S+)\b.*\bruling\b", subj)
-        if m and m.group(2) in names and m.group(1) == "ask":
-            added = {x[1:].strip() for x in git(repo, "show", "--format=", "-U0", sha).splitlines()
-                     if re.match(r"^\+##\s+Ask\b", x)}
-            if added - seen:
-                pass
-            elif added or (seq and seq[-1][0] == "ask"):
-                continue  # the same ask, committed again before any answer
-            seen |= added
-            seq.append(("ask", int(t)))
-        elif m and m.group(2) in names:
-            seq.append(("rule", int(t)))
-        elif old and old.group(1) in names:
-            seq.append(("rule", int(t)))
-            notes.append(f"note: {sha[:8]} answers in the deprecated form `chore(beans): … "
-                         f"ruling <id>`, read as `rule({tid})`: {subj[:60]!r}")
-    waits = []
-    for k, (kind, t) in enumerate(seq):
-        if kind == "ask":
-            nxt = next((t2 for kind2, t2 in seq[k + 1:] if kind2 == "rule"), None)
-            if nxt is not None:
-                waits.append(round((nxt - t) / 60))
-    n_ask = sum(1 for x, _ in seq if x == "ask")
-    return n_ask, sum(1 for x, _ in seq if x == "rule"), waits, notes
-
-
-def asks(paths, repo=None, written_under=None):
-    """(rows, fails): per file its counts and notes; fails holds UNPARSED and FAIL A0/A2 lines."""
-    fails, rows = [], []
-    young = {c: too_young(c, written_under) for c in ("A1", "A2", "A3")}
-    for p in paths:
-        text = read(p)
-        lines = text.splitlines()
-        if not text.strip():
-            fails.append(f"FAIL A0 {p}: empty input (0 lines); a ticket given to --asks may not "
-                         "be empty")
+def counts(body):
+    """--counts: the Decisions and Findings rows of a body per label, or `no table`."""
+    body = strip_comments(body)
+    found = {}
+    for n, _k, ls in sections(body):
+        found.setdefault(canonical(n), ls)
+    out = []
+    for name, labs in (("Decisions", ("RULING", "DEFAULT")),
+                       ("Findings", ("APPLY", "DECLINE", "TICKET", "RULING"))):
+        head_cells, rows = table(found.get(name, []))
+        if head_cells is None:
+            out.append(f"{name}: no table")
             continue
-        n_ask, n_q, kinds, cur, about = 0, 0, Counter(), False, False
-        dated, stops = set(), []  # (kind, date) of the asks; (lineno, line, kind, date) of stops
-        for k, line in enumerate(lines):
-            if line.startswith("## "):
-                cur, about = False, False
-                stop = re.match(r"^##\s+(Plan|Built)\b(?!\s+paused)", line)
-                if stop:
-                    d = re.search(r"\d{4}-\d{2}-\d{2}", line)
-                    stops.append((k, line, "plan-ending" if stop.group(1) == "Plan" else
-                                  "pr-open", d.group(0) if d else None))
-                if re.match(r"^##\s+Ask\b", line):
-                    m = re.match(r"^##\s+Ask\s+(\d{4}-\d{2}-\d{2})\s+·\s+([\w-]+)\s*$", line)
-                    if not m or m.group(2) not in ASK_KINDS:
-                        fails.append(f"UNPARSED: {p}:{k + 1}: {line.strip()}")
-                        continue
-                    n_ask, cur = n_ask + 1, True
-                    kinds[m.group(2)] += 1
-                    dated.add((m.group(2), m.group(1)))
-                continue
-            if not cur:
-                continue
-            if WHAT_ABOUT.match(line):
-                about = True
-            elif re.match(r"^\s*(?:[-*]\s+)?\*\*", line) and \
-                    not re.fullmatch(r"\s*\*{3,}\s*", line):  # `***` is a thematic break
-                m = re.match(r"^\s*(?:[-*]\s+)?\*\*([^*]+)\*\*", line)
-                i = slot_id(m.group(1)) if m and m.group(1) == m.group(1).strip() else None
-                if not i or i != m.group(1).strip("`"):
-                    if not young["A1"]:
-                        fails.append(f"UNPARSED: {p}:{k + 1}: {line.strip()}")
-                    continue
-                n_q += 1
-                if not about and not young["A2"]:
-                    fails.append(f"FAIL A2 {p}:{k + 1}: question {i} has no `> **What this is "
-                                 "about:**` blockquote above it in its ask")
-        for k, line, kind, d in stops if not young["A3"] else []:
-            if (d and (kind, d) not in dated) or (not d and not kinds[kind]):
-                fails.append(f"UNPARSED: {p}:{k + 1}: {line.strip()} — no `## Ask "
-                             f"{d or '<date>'} · {kind}` (A3)")
-        by_kind = " ".join(f"{x}={kinds[x]}" for x in ASK_KINDS if kinds[x])
-        row = f"{p}: asks={n_ask} questions={n_q} by kind: {by_kind or '-'}"
-        notes = [f"{p}: {y}" for y in dict.fromkeys(young.values()) if y]
-        if repo:
-            n_a, n_r, waits, more = ask_waits(repo, ticket_id(p, text))
-            row += (f" · commits ask={n_a} rule={n_r} wait minutes: "
-                    f"{' '.join(map(str, waits)) or '-'}")
-            notes += more
-        rows += [row] + notes
-    return rows, fails
+        got = Counter((c[1].replace("*", "").replace("`", "").split() or [""])[0]
+                      if len(c) > 1 else "" for _k, c in rows)
+        other = sum(v for x, v in got.items() if x not in labs)
+        out.append(f"{name}: " + " ".join(f"{x}={got[x]}" for x in labs)
+                   + (f" other={other}" if other else ""))
+    return out
 
 
 def pop_opts(args, flags):
@@ -956,18 +1380,12 @@ def run(argv):
         if args == ["--skeleton"]:
             print(SKELETON, end="")
             return 0
-        if args[:1] == ["--asks"]:
-            args = args[1:]
-            opts = pop_opts(args, ("--repo", "--written-under"))
-            if not args:
-                raise Unusable("--asks needs a ticket file")
-            rows, fails = asks(args, opts.get("--repo"), opts.get("--written-under"))
-            for r in rows + fails:
-                print(r)
-            print("PASS" if not fails else f"FAIL ({len(fails)})")
-            return 1 if fails else 0
+        if args[:1] == ["--counts"] and len(args) == 2 and not args[1].startswith("-"):
+            for line in counts(read(args[1])):
+                print(line)
+            return 0
         opts = {"--head": "HEAD"}
-        opts.update(pop_opts(args, ("--repo", "--tests-commit", "--head", "--base",
+        opts.update(pop_opts(args, ("--repo", "--tests-commit", "--head", "--base", "--merged",
                                     "--written-under")))
         if len(args) != 2 or any(a.startswith("-") for a in args):
             print(__doc__.split("\n\n")[1], file=sys.stderr)
@@ -981,7 +1399,8 @@ def run(argv):
         ticket = None if brief else ticket_id(args[0], plan)
         notes = []
         fails = check(plan, body, opts.get("--repo"), opts.get("--tests-commit"), opts["--head"],
-                      decisions, notes, opts.get("--base"), ticket, opts.get("--written-under"))
+                      decisions, notes, opts.get("--base"), ticket, opts.get("--written-under"),
+                      opts.get("--merged"), args[0])
     except Unusable as e:
         print(f"UNUSABLE: {e}")
         return 2

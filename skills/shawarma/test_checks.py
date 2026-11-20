@@ -351,6 +351,9 @@ The lid closes when the soup boils.
 | reading | command | result |
 |---|---|---|
 | suite | `python3 -m pytest` | 12 passed |
+| §5 R1 the lid holds | `python3 tools/gate_lid.py` | PASS |
+
+Readings taken on head 5d6e7f8.
 
 ## Unreviewed since the last lane
 
@@ -366,6 +369,7 @@ empty
 | decision | label | what was done | why |
 |---|---|---|---|
 | Plan Q1: the lid first | RULING | lid before the timer | a timer cannot stop a spill |
+| A3: one duplicate test dropped | RULING | dropped | one reason to go red |
 | D1: a glass lid | DEFAULT | shipped (§9 D1) | the cook sees the soup |
 | E1: the lid is glass | DEFAULT | accepted | as recommended |
 
@@ -376,7 +380,7 @@ empty
 | finding | label | what was done | why |
 |---|---|---|---|
 | (review) the lid rattles | DECLINE | — | `style`: a sound, not a spill |
-| (plan) the handle burns | TICKET | `soup-3` | outside the pot |
+| (plan) `handle.py:-` the handle burns | TICKET | `soup-3` | outside the pot |
 
 ## Follow-up
 
@@ -427,7 +431,7 @@ class CheckPr(unittest.TestCase):
         bullets = GOOD_BODY.replace(
             "| finding | label | what was done | why |\n|---|---|---|---|\n"
             "| (review) the lid rattles | DECLINE | — | `style`: a sound, not a spill |\n"
-            "| (plan) the handle burns | TICKET | `soup-3` | outside the pot |\n",
+            "| (plan) `handle.py:-` the handle burns | TICKET | `soup-3` | outside the pot |\n",
             "- Corrected (plan): the handle burns.\n")
         self.assertRedGreen("P2", bullets)
         self.assertTrue(ids(run_cp(bullets), "P3"), "a bullet opening with no label")
@@ -510,22 +514,6 @@ class CheckPr(unittest.TestCase):
         self.assertEqual(ids(named, "P6"), [])
         self.assertTrue(ids(unnamed, "P6"))
 
-    def test_asks_counts_and_refuses_a_bad_kind(self):
-        good = ("# soup-1\n\n## Ask 2026-10-18 · interview\n\n"
-                "> **What this is about:** the lid.\n\n**Q1** glass or steel?\n"
-                "**Q2** lid first?\n\n## Ask 2026-10-19 · ruling\n\n"
-                "> **What this is about:** a noise.\n\n**Q1** keep the rattle?\n\n"
-                "## Ask 2026-10-20 · pr-open\n\nPR open.\n")
-        with tempfile.TemporaryDirectory() as d:
-            p, q = Path(d) / "good.md", Path(d) / "bad.md"
-            p.write_text(good)
-            q.write_text(good.replace("· ruling", "· chat"))
-            rows, fails = cp.asks([str(p)])
-            self.assertEqual(fails, [])
-            self.assertIn("asks=3 questions=3 by kind: interview=1 ruling=1 pr-open=1", rows[0])
-            rows, fails = cp.asks([str(q)])
-            self.assertTrue(fails)
-
     def test_exit_codes(self):
         with tempfile.TemporaryDirectory() as d:
             plan, body = Path(d) / "plan.md", Path(d) / "body.md"
@@ -547,7 +535,7 @@ MINTED = ["Q1", "D5", "RB1", "RV1a", "A-B3", "RR1-a", "W1-b", "W0-R1", "W3-D12",
 
 class IdGrammar(unittest.TestCase):
     def test_the_docstring_writes_every_minted_form(self):
-        doc = cp.__doc__.split("Id grammar")[1].split("Ask convention")[0]
+        doc = cp.__doc__.split("Id grammar")[1]
         for form in MINTED + ["RB"]:
             with self.subTest(form=form):
                 self.assertRegex(doc, r"(?<![\w-])" + re.escape(form) + r"(?![\w-])")
@@ -646,7 +634,7 @@ DECISIONS_DEFAULT = (f"## Decisions\n\n{cp.DECISIONS_KEY}\n\n| decision | label 
                      "beyond the ticket |\n\n")
 FINDINGS = (f"## Findings\n\n{cp.FINDINGS_KEY}\n\n| finding | label | what was done | why |\n"
             "|---|---|---|---|\n| (plan) a tab also splits | APPLY | tested | same path |\n"
-            "| (plan) a slow read | TICKET | `t-0002` | another file |\n\n")
+            "| (plan) `parser.py:-` a slow read | TICKET | `t-0002` | another file |\n\n")
 FOLLOW = "## Follow-up\n\n- `t-0002` — the slow read\n"
 TRIVIAL_SHAPES = {
     "default, findings, follow-up": TRIVIAL_HEAD + DECISIONS_DEFAULT + FINDINGS + FOLLOW,
@@ -712,8 +700,8 @@ class UnruledOnTheBrief(unittest.TestCase):
         self.assertEqual(ids(run_cp(body, plan), "P4"), [])
 
 
-GOOD_DECISIONS = """2026-10-17 | Q1 RULING | lid first | the human: "lid first"
-2026-10-18 | A3 RULING | the duplicate test dropped | one reason to go red
+GOOD_DECISIONS = """2026-10-17 | Q1 RULING | A · lid first · reco A | the human: "lid first"
+2026-10-18 | A3 RULING | A · the duplicate test dropped · reco A | one reason to go red
 2026-10-18 | D1 DEFAULT | a glass lid | you can see the soup
 """
 
@@ -739,7 +727,9 @@ class DecisionsMirror(unittest.TestCase):
                                                    "unruled: E2 the spoon — default wood")
         self.assertTrue(ids(run_cp(GOOD_BODY, plan, decisions=GOOD_DECISIONS), "M1"))
         dec = GOOD_DECISIONS + "2026-10-18 | E2 DEFAULT | a wooden spoon | as recommended\n"
-        self.assertEqual(ids(run_cp(GOOD_BODY, plan, decisions=dec), "M1"), [])
+        body = GOOD_BODY.replace("| E1: the lid is glass |", "| E2: a wooden spoon | DEFAULT | "
+                                 "accepted | as recommended |\n| E1: the lid is glass |")
+        self.assertEqual(ids(run_cp(body, plan, decisions=dec), "M1"), [])
 
     def test_main_reads_the_decisions_file_beside_the_brief(self):
         with tempfile.TemporaryDirectory() as d:
@@ -770,57 +760,6 @@ def ask_file(d, text, name="t-0001.md"):
     p = Path(d) / name
     p.write_text(text, encoding="utf-8")
     return str(p)
-
-
-ASK = """# t-0001
-
-## Ask 2026-01-02 · plan-ending
-
-> **What this is about:** the parser could also trim spaces.
-
-**U1** trim spaces too? Default: no.
-- **W3-D1** keep the old flag? Default: yes.
-"""
-
-
-class Asks(unittest.TestCase):
-    def test_plan_ending_kind_and_grammar_ids_count(self):
-        with tempfile.TemporaryDirectory() as d:
-            rows, fails = cp.asks([ask_file(d, ASK + "\n***\n")])
-        self.assertEqual(fails, [])
-        self.assertIn("asks=1 questions=2 by kind: plan-ending=1", rows[0])
-
-    def test_an_unreadable_heading_or_bold_line_prints_unparsed_and_exits_1(self):
-        for bad in (ASK.replace("· plan-ending", "· chat"),
-                    ASK.replace("**U1** trim", "**U1 (RULING, the parser)** trim"),
-                    ASK.replace("**U1** trim", "**Note:** trim")):
-            with self.subTest(bad=bad.splitlines()[2:7]), tempfile.TemporaryDirectory() as d:
-                f = ask_file(d, bad)
-                _rows, fails = cp.asks([f])
-                self.assertTrue([x for x in fails if x.startswith("UNPARSED: ")], fails)
-                with contextlib.redirect_stdout(io.StringIO()) as out:
-                    self.assertEqual(cp.main(["--asks", f]), 1)
-                self.assertIn("UNPARSED: ", out.getvalue())
-
-    def test_a2_a_question_with_no_blockquote_above_it(self):
-        below = ASK.replace("> **What this is about:** the parser could also trim spaces.\n\n", "")
-        below += "\n> **What this is about:** too late.\n"
-        with tempfile.TemporaryDirectory() as d:
-            _rows, fails = cp.asks([ask_file(d, below)])
-        self.assertEqual(len([f for f in fails if f.startswith("FAIL A2 ")]), 2)
-
-    def test_repo_counts_ask_and_rule_commits(self):
-        with tempfile.TemporaryDirectory() as d:
-            repo = Path(d)
-            git(repo, "init", "-q")
-            for subj, when in (("ask(0001): plan-ending", "2026-01-02T10:00:00"),
-                               ("rule(0001): U1 struck", "2026-01-02T10:45:00"),
-                               ("ask(t-0002): ruling", "2026-01-02T11:00:00")):
-                env = dict(GIT_ENV, GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
-                subprocess.run(["git", "-C", str(repo), "commit", "-q", "--allow-empty", "-m",
-                                subj], check=True, env=env)
-            rows, fails = cp.asks([ask_file(d, ASK)], repo=repo)
-        self.assertIn("commits ask=1 rule=1 wait minutes: 45", rows[0])
 
 
 class FreezeUnruled(unittest.TestCase):
@@ -875,7 +814,8 @@ class Skeleton(unittest.TestCase):
             repo = Path(d)
             git(repo, "init", "-q")
             git(repo, "commit", "-q", "--allow-empty", "-m", "reviewed")
-            body = GOOD_BODY.replace("REVIEWED", git(repo, "rev-parse", "--short", "HEAD"))
+            body = GOOD_BODY.replace("REVIEWED", git(repo, "rev-parse", "--short", "HEAD")).replace(
+                "5d6e7f8", git(repo, "rev-parse", "HEAD"))
             self.assertEqual(run_cp(body, repo=repo), [])
             body = body.replace("## Unreviewed since the last lane\n", "## Unreviewed since the "
                                 "last lane\n\n<!-- `git log <last reviewed>..HEAD` -->\n")
@@ -962,71 +902,6 @@ def main_out(mod, argv):
     with contextlib.redirect_stdout(io.StringIO()) as out:
         code = mod.main(argv)
     return code, out.getvalue()
-
-
-ASKED = ASK.replace("· plan-ending", "· plan-paused")
-
-
-class AsksRound10(unittest.TestCase):
-    def test_a_recommitted_ask_counts_once(self):
-        with tempfile.TemporaryDirectory() as d:
-            repo = Path(d)
-            git(repo, "init", "-q")
-            commit(repo, "ask(t-0001): plan-paused", "2026-01-02T10:00:00", {"t-0001.md": ASKED})
-            commit(repo, "ask(t-0001): plan-paused — question lines in the grammar",
-                   "2026-01-02T10:00:14", {"t-0001.md": ASKED.replace("too?", "as well?")})
-            commit(repo, "rule(t-0001): U1 W3-D1", "2026-01-02T10:45:00", allow_empty=True)
-            rows, fails = cp.asks([str(repo / "t-0001.md")], repo=repo)
-        self.assertEqual(fails, [])
-        self.assertIn("commits ask=1 rule=1 wait minutes: 45", rows[0])
-
-    def test_a_second_ask_after_an_answer_counts(self):
-        with tempfile.TemporaryDirectory() as d:
-            repo = Path(d)
-            git(repo, "init", "-q")
-            commit(repo, "ask(t-0001): plan-paused", "2026-01-02T10:00:00", {"t-0001.md": ASKED})
-            commit(repo, "rule(t-0001): U1", "2026-01-02T10:45:00", allow_empty=True)
-            later = ASKED + ("\n## Ask 2026-01-03 · ruling\n\n> **What this is about:** x.\n\n"
-                             "**Q2** y?\n")
-            commit(repo, "ask(t-0001): ruling", "2026-01-03T09:00:00", {"t-0001.md": later})
-            commit(repo, "rule(t-0001): Q2", "2026-01-03T09:10:00", allow_empty=True)
-            rows, _ = cp.asks([str(repo / "t-0001.md")], repo=repo)
-        self.assertIn("commits ask=2 rule=2 wait minutes: 45 10", rows[0])
-
-    def test_an_older_ruling_commit_is_read_with_a_deprecation_note(self):
-        with tempfile.TemporaryDirectory() as d:
-            repo = Path(d)
-            git(repo, "init", "-q")
-            commit(repo, "ask(t-0001): plan-paused", "2026-01-02T10:00:00", {"t-0001.md": ASKED})
-            commit(repo, "chore(beans): t-0001 — ruling U1 (refuse)", "2026-01-02T10:37:00",
-                   allow_empty=True)
-            rows, fails = cp.asks([str(repo / "t-0001.md")], repo=repo)
-        self.assertEqual(fails, [], "a pre-change record does not go red")
-        self.assertIn("commits ask=1 rule=1 wait minutes: 37", rows[0])
-        self.assertTrue([r for r in rows if r.startswith("note: ") and "deprecated" in r], rows)
-
-    def test_a_plan_or_built_with_no_matching_ask_is_unparsed(self):
-        plan = ("# t-0001\n\n## Plan (2026-01-03)\n\nTrivial: the parser. Awaiting go.\n\n"
-                "> **What this is about:** spaces.\n\nunruled: U1 trimming — default no\n")
-        asked = plan.replace("## Plan (2026-01-03)\n\nTrivial: the parser. Awaiting go.\n\n",
-                             "## Plan (2026-01-03)\n\nTrivial: the parser. Awaiting go.\n\n"
-                             "## Ask 2026-01-03 · plan-ending\n\n")
-        built = asked + "\n## Built (2026-01-05)\n\nPR #7 open.\n"
-        cases = {"plan, no ask": (plan, 1), "plan + plan-ending": (asked, 0),
-                 "built, no pr-open": (built, 1),
-                 "built + pr-open": (built + "\n## Ask 2026-01-05 · pr-open\n\nPR open.\n", 0)}
-        for case, (text, want) in cases.items():
-            with self.subTest(case=case), tempfile.TemporaryDirectory() as d:
-                code, out = main_out(cp, ["--asks", ask_file(d, text)])
-                self.assertEqual(code, want, out)
-                self.assertEqual("UNPARSED: " in out, bool(want), out)
-
-    def test_an_empty_ticket_fails_naming_it(self):
-        with tempfile.TemporaryDirectory() as d:
-            f = ask_file(d, "")
-            code, out = main_out(cp, ["--asks", f])
-        self.assertEqual(code, 1)
-        self.assertIn(f"FAIL A0 {f}: empty input", out)
 
 
 PLAN_ENDING_TICKET = TICKET.replace(
@@ -1163,7 +1038,8 @@ class RangesWithMarkup(unittest.TestCase):
     def test_m1_reads_a_bold_range_in_the_authority_clause(self):
         plan = GOOD_BRIEF.replace("authority: the ticket's ruling Q1 (lid first)",
                                   "authority: the ticket's rulings **Q1**–**Q3**")
-        dec = GOOD_DECISIONS + "2026-10-17 | Q2 RULING | a deep pot | the human: \"deep\"\n"
+        dec = GOOD_DECISIONS + ("2026-10-17 | Q2 RULING | B · a deep pot · reco B | the human: "
+                                "\"deep\"\n")
         self.assertNotEqual(plan, GOOD_BRIEF)
         self.assertEqual(ids(run_cp(GOOD_BODY, plan, decisions=dec), "M1"), [])
 
@@ -1272,26 +1148,6 @@ class ReplayV08(unittest.TestCase):
         self.assertEqual(ids(run_cp(body, V08_BRIEF), "P7"), [])
         self.assertTrue(ids(run_cp(body), "P7"), "a current brief FAILs")
 
-    def test_a2_a_question_with_no_blockquote_in_a_v08_ask(self):
-        text = ("# t-0001\n\n## Ask 2026-01-01 · interview\n\nThe parser drops a field.\n\n"
-                "**Q1** — keep an empty last field?\n")
-        with tempfile.TemporaryDirectory() as d:
-            f = ask_file(d, text)
-            code, out = main_out(cp, ["--asks", "--written-under", "0.8", f])
-            self.assertEqual(code, 0, out)
-            self.assertIn("A2 not applicable (pre-v0.9 format)", out)
-            self.assertEqual(main_out(cp, ["--asks", f])[0], 1, "a current ask FAILs A2")
-
-    def test_an_answer_line_inside_a_v08_ask(self):
-        text = ("# t-0001\n\n## Ask 2026-01-01 · interview\n\n> **What this is about:** a "
-                "field.\n\n**Q1** — keep an empty last field?\n\n**Q1 ruling (owner, "
-                "2026-01-01):** \"go\" → (a).\n")
-        with tempfile.TemporaryDirectory() as d:
-            f = ask_file(d, text)
-            code, out = main_out(cp, ["--asks", "--written-under", "0.8", f])
-            self.assertEqual(code, 0, out)
-            self.assertIn("questions=1", out)
-            self.assertIn("UNPARSED: ", main_out(cp, ["--asks", f])[1])
 
 
 # ---- 0.10.2, script fixes between retros: a crash reads as a crash, a missing section is F1
@@ -1327,10 +1183,8 @@ class Crashes(unittest.TestCase):
             plan, body = Path(d) / "plan.md", Path(d) / "body.md"
             plan.write_text(GOOD_BRIEF, encoding="utf-8")
             body.write_text(GOOD_BODY, encoding="utf-8")
-            ticket = ask_file(d, ASK)
             for mod, name, argv in ((fc, "check", [str(plan)]),
-                                    (cp, "check", [str(plan), str(body)]),
-                                    (cp, "asks", ["--asks", ticket])):
+                                    (cp, "check", [str(plan), str(body)])):
                 with self.subTest(script=mod.__name__, entry=name), \
                         mock.patch.object(mod, name, Crashes.boom):
                     code, out, err = main_out_err(mod, argv)
@@ -1368,8 +1222,10 @@ class Crashes(unittest.TestCase):
         env = dict(os.environ, PYTHONIOENCODING="ascii")
         with tempfile.TemporaryDirectory() as d:
             ticket = ask_file(d, TICKET)  # trivial mode prints a line holding an en dash
+            body = ask_file(d, TRIVIAL_SHAPES["default only, follow-up"].replace(
+                "| U1: trim spaces |", "| U1: trim spaces — or not |"), "body.md")
             for script, argv in (("freeze_check.py", [ticket]),
-                                 ("check_pr.py", ["--asks", ticket])):
+                                 ("check_pr.py", [ticket, body])):
                 with self.subTest(script=script):
                     r = subprocess.run([sys.executable, "-B", str(HERE / script), *argv],
                                        capture_output=True, text=True, env=env)
@@ -1413,7 +1269,8 @@ class UnbalancedQuote(unittest.TestCase):
         (repo / "src" / "pot.py").write_text("x = 1\n")
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", "reviewed")
-        return repo, GOOD_BODY.replace("REVIEWED", git(repo, "rev-parse", "--short", "HEAD"))
+        body = GOOD_BODY.replace("REVIEWED", git(repo, "rev-parse", "--short", "HEAD"))
+        return repo, body.replace("5d6e7f8", git(repo, "rev-parse", "HEAD"))
 
     def test_p5_a_head_holding_a_backslash_fails_p5(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1745,6 +1602,542 @@ async function scenario(name, over) {
              "after-consolidate=0", "no_propositions=false",
              'counts={"lean":0,"rigor":0,"deletions":1}', "double-slash=false", "keys=-"],
         ])
+
+
+# ---- round 11: the ask convention is gone (P3), the id grammar's fixes (P4), the decisions mirror
+# both ways (P9), reco and reverses (P3), the gate's default rows (P11) and readings (P12), a stale
+# head (P14), new failures at the head (P15), TICKET rows (P13), a record changed after the merge
+# (P16), the retro's counts ------------------------------------------------------------------------
+
+V10_BRIEF = GOOD_BRIEF.replace("planned 2026-10-18 at base", "planned 2026-10-18 (a model; skill "
+                               "0.10.2) at base")
+NOTE = "# ACME-12 Fix the widget\n" + TICKET.split("---\n", 2)[2]
+TRIVIAL_BODY = TRIVIAL_SHAPES["default only, follow-up"]
+R1_ROW = "| §5 R1 the lid holds | `python3 tools/gate_lid.py` | PASS |"
+HEAD_LINE = "Readings taken on head 5d6e7f8.\n"
+A3_ROW = "| A3: one duplicate test dropped | RULING | dropped | one reason to go red |\n"
+TICKET_ROW = "| (plan) `handle.py:-` the handle burns | TICKET | `soup-3` | outside the pot |"
+D1_S9 = "| D1 | 2026-10-18 | default | §2 2a | steel lid → glass lid |"
+EARLY = "2026-01-01T09:00:00"
+
+
+def tmp():
+    return tempfile.TemporaryDirectory()
+
+
+def new_repo(path):
+    path.mkdir(parents=True, exist_ok=True)
+    git(path, "init", "-q")
+    git(path, "symbolic-ref", "HEAD", "refs/heads/main")
+    return path
+
+
+def merge(repo, ref, when):
+    env = dict(GIT_ENV, GIT_AUTHOR_DATE=when, GIT_COMMITTER_DATE=when)
+    subprocess.run(["git", "-C", str(repo), "merge", "-q", "--no-ff", "-m", f"merge {ref}", ref],
+                   check=True, env=env, capture_output=True)
+
+
+class GrammarRound11(unittest.TestCase):
+    def test_to_in_the_authority_clause_expands(self):
+        plan = GOOD_BRIEF.replace("authority: the ticket's ruling Q1 (lid first)",
+                                  "authority: the ticket's rulings Q1 to Q5 and defaults D1 to D15")
+        self.assertNotEqual(plan, GOOD_BRIEF)
+        body = GOOD_BODY.replace("| E1: the lid is glass | DEFAULT |",
+                                 "| D7: a deeper pot | DEFAULT |")
+        dec = GOOD_DECISIONS + "2026-10-17 | D7 DEFAULT | a deeper pot | as recommended\n"
+        for cid in ("P4", "M1"):
+            with self.subTest(cid=cid):
+                self.assertEqual(ids(run_cp(body, plan, decisions=dec), cid), [])
+                self.assertTrue(ids(run_cp(body, decisions=dec), cid), "no clause, no D7")
+
+    def test_a_two_letter_prefix_expands_in_the_clause(self):
+        plan = GOOD_BRIEF.replace("authority: the ticket's ruling Q1 (lid first)",
+                                  "authority: rulings Q1 and DF1 to DF6")
+        self.assertEqual(cp.brief_records(plan).authority, {"Q1"} | {f"DF{k}" for k in range(1, 7)})
+
+    def test_to_in_running_text_is_no_range(self):
+        self.assertEqual(cp.ids_in("rulings Q1 to Q5"), {"Q1", "Q5"})
+        plan = GOOD_BRIEF.replace("The pot boils over (`pot.py:3`).",
+                                  "The pot boils over (`pot.py:3`); see Q1 to Q5.")
+        self.assertNotEqual(plan, GOOD_BRIEF)
+        self.assertNotIn("Q3", cp.brief_records(plan).authority)
+        body = GOOD_BODY.replace("| E1: the lid is glass | DEFAULT | accepted |",
+                                 "| Q3: a deep pot | RULING | accepted |")
+        self.assertTrue(ids(run_cp(body, plan), "P4"))
+
+    def test_p9_reads_the_ticket_id_from_a_note_headed_by_id_and_title(self):
+        self.assertEqual(cp.ticket_id("plans/2026-01-03-acme-12-widget/note.md", NOTE), "ACME-12")
+        self.assertEqual(cp.ticket_id("t-0001.md", TICKET), "t-0001")
+        with tmp() as d:
+            repo = new_repo(Path(d) / "repo")
+            commit(repo, "docs: base", EARLY, {"README.md": "the widget\n"})
+            commit(repo, "plan(ACME-12): the widget — trivial", EARLY,
+                   {"docs/plans/widget/note.md": NOTE})
+            git(repo, "checkout", "-q", "-b", "work")
+            commit(repo, "fix: the widget", EARLY, {"src/widget.py": "x = 1\n"})
+            b = ask_file(d, TRIVIAL_BODY, "body.md")
+            _code, out = main_out(cp, [str(repo / "docs/plans/widget/note.md"), b, "--repo",
+                                       str(repo), "--head", "work", "--base", "main"])
+        self.assertNotIn("FAIL P9", out)
+        self.assertNotIn("plan(note)", out)
+
+    def test_an_id_leading_a_line_of_the_plan_note_is_known(self):
+        ticket = TICKET.replace("> **What this is about:** the parser could also trim",
+                                "Q2 (a): a tab splits a field too; unlike Q3, the note keeps "
+                                "quotes.\n\n> **What this is about:** the parser could also trim")
+        self.assertNotEqual(ticket, TICKET)
+        u1 = "| U1: trim spaces | DEFAULT | not folded | beyond the ticket |"
+        body = TRIVIAL_BODY.replace(u1, "| Q2 | RULING | a tab splits a field | the owner's "
+                                    "answer |\n" + u1)
+        self.assertEqual(ids(run_cp(body, ticket), "P4"), [])
+        self.assertEqual(ids(run_cp(body, ticket.replace("Q2 (a):", "- Q2 (a):")), "P4"), [])
+        self.assertTrue(ids(run_cp(body.replace("| Q2 |", "| Q3 |"), ticket), "P4"),
+                        "an id in running text stays unknown")
+        self.assertTrue(ids(run_cp(body, TICKET), "P4"))
+
+    def test_a_plan_heading_with_a_suffix_and_the_later_note(self):
+        for heading in ("## Plan (2026-01-03, trivial)", "## Plan (2026-01-03): trivial"):
+            with self.subTest(heading=heading):
+                ticket = TICKET.replace("## Plan (2026-01-03)", heading)
+                self.assertNotEqual(ticket, TICKET)
+                self.assertEqual(run_cp(TRIVIAL_BODY, ticket), [])
+                older = TRIVIAL_BODY.replace("| U1: trim spaces |", "| U9: an older item |")
+                self.assertTrue(ids(run_cp(older, ticket), "P4"), "the earlier note is not read")
+
+    def test_a_bare_ask_heading_neither_crashes_nor_refuses(self):
+        ticket = TICKET + "\n## Ask\n\n**Q5** keep tabs?\n\n## Ask 2026-01-04 · chat\n\nA word.\n"
+        self.assertEqual(run_cp(TRIVIAL_BODY, ticket), [])
+        with tmp() as d:
+            code, out = main_out(cp, [ask_file(d, ticket), ask_file(d, TRIVIAL_BODY, "body.md")])
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("UNPARSED", out)
+        self.assertNotIn("--asks", cp.__doc__)
+        self.assertFalse(hasattr(cp, "asks"))
+
+
+class RulesRound11(unittest.TestCase):
+    # P11: a default row may not change a gate rule; a file a rule runs changed needs a RULING
+    def test_p11_a_default_row_that_changes_a_gate_rule(self):
+        bad = {"value": "| D1 | 2026-10-18 | default | §2 2a | `spill=0` → `spill=1` |",
+               "dataset": "| D1 | 2026-10-18 | default | §2 2a | R1 dataset: the stand-in pot → "
+                          "the big pot |",
+               "settle": "| D1 | 2026-10-18 | default | §4 | R1 settle: once → twice |"}
+        good = {"reading": "| D1 | 2026-10-18 | default | §5 | R1 read by the orchestrator → read "
+                           "by lane 3a |", "lid": D1_S9}
+        for case, row in bad.items():
+            with self.subTest(bad=case):
+                self.assertTrue(ids(run_cp(GOOD_BODY, GOOD_BRIEF.replace(D1_S9, row)), "P11"))
+        for case, row in good.items():
+            with self.subTest(good=case):
+                self.assertEqual(ids(run_cp(GOOD_BODY, GOOD_BRIEF.replace(D1_S9, row)), "P11"), [])
+
+    def gate_repo(self, d, change):
+        repo = new_repo(Path(d) / "repo")
+        commit(repo, "plan(soup-1): the brief", "2026-10-18T09:00:00",
+               {"tools/gate_lid.py": "print('spill=0')\n",
+                "tests/test_lid.py": "def test_lid():\n    pass\n"})
+        freeze = git(repo, "rev-parse", "HEAD")
+        commit(repo, "fix: the lid", "2026-10-18T10:00:00", change)
+        return repo, GOOD_BODY.replace("abc1234", freeze)
+
+    def test_p11_a_file_a_gate_rule_runs_changed_since_the_freeze(self):
+        ruled = GOOD_BRIEF.replace(D1_S9, "| A4 | 2026-10-18 | the human (\"deeper\") | §5 R1 | "
+                                   "the script reads a deeper pot | the pot grew |\n" + D1_S9)
+        with tmp() as d:
+            repo, body = self.gate_repo(d, {"tools/gate_lid.py": "print('spill=1')\n"})
+            self.assertTrue(ids(run_cp(body, repo=repo), "P11"))
+            self.assertEqual(ids(run_cp(body, ruled, repo=repo), "P11"), [])
+        floor = GOOD_BRIEF.replace("`python3 tools/gate_lid.py`",
+                                   "`python3 -m pytest tests/test_lid.py`")
+        self.assertNotEqual(floor, GOOD_BRIEF)
+        with tmp() as d:  # a test added: the ran count rises above the frozen floor
+            repo, body = self.gate_repo(d, {"tests/test_lid.py": "def test_lid():\n    pass\n\n\n"
+                                            "def test_rim():\n    pass\n"})
+            self.assertEqual(ids(run_cp(body, floor, repo=repo), "P11"), [])
+        with tmp() as d:
+            repo, body = self.gate_repo(d, {"tests/test_lid.py": "def test_rim():\n    pass\n"})
+            self.assertTrue(ids(run_cp(body, floor, repo=repo), "P11"))
+
+    # P12: each §5 rule reads PASS in Verification, or a RULING quotes its reading
+    def test_p12_each_gate_rule_reads_pass_in_verification(self):
+        self.assertIn(R1_ROW, GOOD_BODY)
+        self.assertTrue(ids(run_cp(GOOD_BODY.replace(R1_ROW + "\n", "")), "P12"), "no R1 row")
+        self.assertEqual(ids(run_cp(GOOD_BODY.replace("| PASS |", "| `spill=0` |")), "P12"), [],
+                         "the rule's own PASS token")
+        odd = GOOD_BODY.replace(R1_ROW, R1_ROW.replace("PASS", "spill=2"))
+        self.assertTrue(ids(run_cp(odd), "P12"))
+        ruled = GOOD_BRIEF.replace(D1_S9, "| A4 | 2026-10-18 | the human (\"ship it\") | §5 R1 | "
+                                   "reads `spill=2` → accepted | a wider pot |\n" + D1_S9)
+        self.assertEqual(ids(run_cp(odd, ruled), "P12"), [])
+
+    # P14: the head the readings were taken on is --head
+    def test_p14_verification_names_the_head_it_read(self):
+        self.assertIn(HEAD_LINE, GOOD_BODY)
+        self.assertTrue(ids(run_cp(GOOD_BODY.replace(HEAD_LINE, "")), "P14"))
+        with tmp() as d:
+            repo = new_repo(Path(d) / "repo")
+            commit(repo, "fix: the lid", EARLY, {"src/pot.py": "lid = 1\n"})
+            body = GOOD_BODY.replace("5d6e7f8", git(repo, "rev-parse", "HEAD"))
+            self.assertEqual(ids(run_cp(body, repo=repo), "P14"), [])
+            commit(repo, "fix: the lid, again", EARLY, {"src/pot.py": "lid = 2\n"})
+            stale = ids(run_cp(body, repo=repo), "P14")
+        self.assertTrue(stale and "stale" in stale[0], stale)
+
+    # P15: more failures at the head than at the base, or a test failing only there
+    def test_p15_a_new_failure_at_the_head_needs_a_findings_row(self):
+        at = "| §5 R1 the lid holds |"
+        rattles = "| (review) the lid rattles |"
+        lint = ("| lint against the base | `ruff check .` at base 1a2b3c4 and head 5d6e7f8 | "
+                "base 2 findings; head 3 findings |\n")
+        bad = GOOD_BODY.replace(at, lint + at)
+        self.assertTrue(ids(run_cp(bad), "P15"))
+        self.assertEqual(ids(run_cp(bad.replace("head 3", "head 2")), "P15"), [])
+        good = bad.replace(rattles, "| (review) `pot.py:4` a new lint finding at the head | "
+                           "APPLY | fixed | same file |\n" + rattles)
+        self.assertEqual(ids(run_cp(good), "P15"), [])
+        suite = ("| suite against the base | `python3 -m pytest` at base 1a2b3c4 and head 5d6e7f8 "
+                 "| base 1 failed (`test_old_pot`); head 1 failed (`test_lid_rattle`) |\n")
+        bad = GOOD_BODY.replace(at, suite + at)
+        self.assertTrue(ids(run_cp(bad), "P15"))
+        good = bad.replace(rattles, "| (review) `pot.py:9` `test_lid_rattle` fails at the head | "
+                           "APPLY | fixed | same file |\n" + rattles)
+        self.assertEqual(ids(run_cp(good), "P15"), [])
+
+    # P13: a TICKET row names another ticket and opens with file:line
+    def test_p13_a_ticket_row_names_another_ticket_and_its_line(self):
+        self.assertIn(TICKET_ROW, GOOD_BODY)
+        bad = {"own ticket": TICKET_ROW.replace("`soup-3`", "`soup-1`"),
+               "no ticket": TICKET_ROW.replace("`soup-3`", "later"),
+               "no line": TICKET_ROW.replace("`handle.py:-` ", "")}
+        for case, row in bad.items():
+            with self.subTest(bad=case):
+                self.assertTrue(ids(run_cp(GOOD_BODY.replace(TICKET_ROW, row)), "P13"))
+        lead = TICKET_ROW.replace("(plan) `handle.py:-`", "`handle.py:7` (plan)")
+        self.assertEqual(ids(run_cp(GOOD_BODY.replace(TICKET_ROW, lead)), "P13"), [])
+
+    def test_p13_with_repo_a_ticket_on_a_changed_line_names_a_decision(self):
+        with tmp() as d:
+            repo = new_repo(Path(d) / "repo")
+            commit(repo, "fix: base", EARLY, {"src/pan.py": "a = 1\nb = 2\nc = 3\nd = 4\ne = 5\n"})
+            git(repo, "checkout", "-q", "-b", "work")
+            commit(repo, "fix: the pan", EARLY, {"src/pan.py": "a = 1\nb = 20\nc = 3\nd = 4\n"
+                                                                "e = 5\n"})
+
+            def p13(row):
+                body = GOOD_BODY.replace(TICKET_ROW, row)
+                return ids(run_cp(body, repo=repo, head="work", base="main"), "P13")
+            on_hunk = TICKET_ROW.replace("`handle.py:-`", "`src/pan.py:2`")
+            self.assertTrue(p13(on_hunk), "a ticket on a line the PR adds")
+            self.assertEqual(p13(on_hunk.replace("outside the pot", "outside the pot (D1)")), [])
+            self.assertEqual(p13(on_hunk.replace("pan.py:2", "pan.py:5")), [])
+            self.assertTrue(p13(TICKET_ROW.replace("handle.py", "pot.py")), "a file §3 names")
+            self.assertEqual(p13(TICKET_ROW), [])
+
+    # M1: decisions.md's run-time ids are Decisions rows of the same label
+    def test_m1_each_run_time_line_has_a_decisions_row_of_its_label(self):
+        self.assertIn(A3_ROW, GOOD_BODY)
+        self.assertEqual(ids(run_cp(GOOD_BODY, decisions=GOOD_DECISIONS), "M1"), [])
+        self.assertTrue(ids(run_cp(GOOD_BODY.replace(A3_ROW, ""), decisions=GOOD_DECISIONS), "M1"))
+        default = GOOD_BODY.replace(A3_ROW, A3_ROW.replace("RULING", "DEFAULT"))
+        self.assertTrue(ids(run_cp(default, decisions=GOOD_DECISIONS), "M1"))
+        q1 = ("| Plan Q1: the lid first | RULING | lid before the timer | a timer cannot stop a "
+              "spill |\n")
+        self.assertIn(q1, GOOD_BODY)
+        self.assertEqual(ids(run_cp(GOOD_BODY.replace(q1, ""), decisions=GOOD_DECISIONS), "M1"), [],
+                         "a plan-time id of the authority clause is exempt")
+
+    def test_m1_a_range_row_is_read_id_by_id(self):
+        plan = GOOD_BRIEF.replace(D1_S9, "| D2 | 2026-10-18 | default | §2 2a | thin → thick | it "
+                                  "lasts |\n| D3 | 2026-10-18 | default | §2 2a | round → oval | "
+                                  "it fits |\n" + D1_S9)
+        dec = GOOD_DECISIONS + ("2026-10-18 | D2 DEFAULT | thick glass | it lasts\n"
+                                "2026-10-18 | D3 DEFAULT | an oval lid | it fits\n")
+        body = GOOD_BODY.replace("| D1: a glass lid | DEFAULT |", "| D1–D3: a thick oval glass lid "
+                                 "| DEFAULT |")
+        self.assertNotEqual(body, GOOD_BODY)
+        self.assertEqual(ids(run_cp(body, plan, decisions=dec), "M1"), [])
+        self.assertTrue(ids(run_cp(body.replace("D1–D3", "D1–D2"), plan, decisions=dec), "M1"))
+
+    def test_m1_reco_and_the_choice_are_option_letters(self):
+        for bad, word in (("reco A |", "reco drop |"), ("| A · the duplicate", "| the duplicate")):
+            with self.subTest(bad=word):
+                dec = GOOD_DECISIONS.replace(bad, word)
+                self.assertNotEqual(dec, GOOD_DECISIONS)
+                self.assertTrue(ids(run_cp(GOOD_BODY, decisions=dec), "M1"))
+        none = GOOD_DECISIONS.replace("| A · the duplicate test dropped · reco A |",
+                                      "| - · the duplicate test dropped · reco - |")
+        self.assertNotEqual(none, GOOD_DECISIONS)
+        self.assertEqual(ids(run_cp(GOOD_BODY, decisions=none), "M1"), [])
+
+    def test_m1_a_ruling_line_carries_reco_and_reverses_an_earlier_id(self):
+        no_reco = GOOD_DECISIONS.replace("dropped · reco A |", "dropped |")
+        self.assertNotEqual(no_reco, GOOD_DECISIONS)
+        self.assertTrue([f for f in ids(run_cp(GOOD_BODY, decisions=no_reco), "M1") if "reco" in f])
+        plan = GOOD_BRIEF.replace(D1_S9, "| A4 | 2026-10-19 | the human (\"keep it\") | §4 | "
+                                  "dropped → kept | a second reason |\n" + D1_S9)
+        body = GOOD_BODY.replace("| D1: a glass lid |", "| A4: the duplicate test kept | RULING | "
+                                 "kept | a second reason |\n| D1: a glass lid |")
+        line = ("2026-10-19 | A4 RULING | B · the duplicate test kept · reco A · reverses {} | the "
+                "human: \"keep it\"\n")
+        self.assertEqual(ids(run_cp(body, plan, decisions=GOOD_DECISIONS + line.format("A3")),
+                             "M1"), [])
+        for gone in ("A9", "A4"):  # recorded nowhere; not on an earlier line
+            with self.subTest(reverses=gone):
+                fails = ids(run_cp(body, plan, decisions=GOOD_DECISIONS + line.format(gone)), "M1")
+                self.assertTrue([f for f in fails if "reverses" in f], fails)
+
+    # P16: decisions.md or §9 changed after the merge
+    BRIEF_AT = "docs/plans/soup-1/plan.md"
+    DEC_AT = "docs/plans/soup-1/decisions.md"
+
+    def merged_repo(self, d):
+        repo = new_repo(Path(d) / "repo")
+        commit(repo, "docs: base", "2026-10-17T09:00:00", {"README.md": "soup\n"})
+        git(repo, "checkout", "-q", "-b", "work")
+        commit(repo, "plan(soup-1): the brief", "2026-10-18T09:00:00",
+               {self.BRIEF_AT: GOOD_BRIEF, self.DEC_AT: GOOD_DECISIONS})
+        commit(repo, "fix: the lid", "2026-10-18T10:00:00", {"src/pot.py": "lid = True\n"})
+        git(repo, "checkout", "-q", "main")
+        merge(repo, "work", "2026-10-19T09:00:00")
+        return repo
+
+    def p16(self, repo, d, *extra):
+        b = ask_file(d, GOOD_BODY, "body.md")
+        return main_out(cp, [str(repo / self.BRIEF_AT), b, "--repo", str(repo), "--head", "work",
+                             *extra])[1]
+
+    def test_p16_a_record_changed_after_the_merge(self):
+        later = {"§1 typo": (self.BRIEF_AT, GOOD_BRIEF.replace("boils over", "boils over again"),
+                             False),
+                 "§9 row": (self.BRIEF_AT, GOOD_BRIEF.replace(D1_S9, D1_S9.replace("glass lid",
+                                                                                   "steel lid")),
+                            True),
+                 "decisions.md": (self.DEC_AT, GOOD_DECISIONS.replace("a glass lid", "steel"),
+                                  True)}
+        for case, (path, text, red) in later.items():
+            with self.subTest(case=case), tmp() as d:
+                repo = self.merged_repo(d)
+                self.assertNotIn("FAIL P16", self.p16(repo, d, "--base", "main"))
+                self.assertIn("P16 NOT RUN", self.p16(repo, d), "no --base, no --merged")
+                merged = git(repo, "rev-parse", "HEAD")
+                commit(repo, "docs: after the merge", "2026-10-20T09:00:00", {path: text})
+                self.assertEqual("FAIL P16" in self.p16(repo, d, "--base", "main"), red)
+                self.assertEqual("FAIL P16" in self.p16(repo, d, "--merged", merged), red)
+
+    # the version gate: a v0.10 record reads the new rules as not applicable
+    def test_the_new_rules_read_a_pre_v011_record_as_not_applicable(self):
+        old = (GOOD_BODY.replace(R1_ROW + "\n", "").replace(HEAD_LINE, "").replace(A3_ROW, "")
+               .replace(TICKET_ROW, "| (plan) the handle burns | TICKET | `soup-1` | outside |"))
+        dec = GOOD_DECISIONS.replace(" · reco A |", " |")
+        plan = V10_BRIEF.replace(D1_S9, "| D1 | 2026-10-18 | default | §5 | `spill=0` → "
+                                 "`spill=1` |")
+        notes = []
+        self.assertEqual(run_cp(old, plan, decisions=dec, notes=notes), [])
+        for cid in ("P11", "P12", "P13", "P14", "P15", "M1"):
+            with self.subTest(cid=cid):
+                self.assertTrue([n for n in notes if n.startswith(f"{cid} ")
+                                 and n.endswith("not applicable (pre-v0.11 format)")], notes)
+        self.assertTrue(run_cp(old, GOOD_BRIEF, decisions=dec), "a current record FAILs")
+
+
+R1_RULE = ("- **R1 the lid holds.** `python3 tools/gate_lid.py` reads `spill=`. Dataset: the stand-in "
+           "pot. Settle: once. Dry run with the fix in: `spill=0`. FAIL reading (base): `spill=3`. "
+           "Cannot run: `spill=` absent, read FAIL.")
+
+
+def suite_rule(command, reads, dry):
+    return (f"\n- **R2 the suite holds.** `{command}` reads {reads}. Dataset: the kitchen's tests. "
+            f"Settle: once. Dry run with the fix in: `{dry}`. FAIL reading (base): `failed=1`. "
+            "Cannot run: no summary line, read FAIL.")
+
+
+class FreezeRound11(unittest.TestCase):
+    def test_the_fixture_holds_r1_on_one_line(self):
+        self.assertIn(R1_RULE, GOOD_BRIEF)
+
+    # red test 2: the authority clause's `DF1 to DF6` is a range for P4, M1 and F11
+    def test_df_to_range_in_the_authority_clause(self):
+        plan = GOOD_BRIEF.replace("authority: the ticket's ruling Q1 (lid first)",
+                                  "authority: the ticket's ruling Q1 (lid first) and defaults DF1 "
+                                  "to DF6")
+        self.assertNotEqual(plan, GOOD_BRIEF)
+        body = GOOD_BODY.replace("| E1: the lid is glass | DEFAULT |",
+                                 "| DF3: a deeper pot | DEFAULT |")
+        dec = GOOD_DECISIONS + "".join(f"2026-10-17 | DF{k} DEFAULT | a deeper pot | as recommended"
+                                       "\n" for k in range(2, 6))
+        for cid in ("P4", "M1"):
+            with self.subTest(cid=cid):
+                self.assertEqual(ids(run_cp(body, plan, decisions=dec), cid), [])
+                self.assertTrue(ids(run_cp(body, decisions=dec), cid), "no clause, no DF3")
+        self.assertEqual(ids(run_fc(plan, decisions=dec), "F11"), [])
+        self.assertEqual(len(ids(run_fc(GOOD_BRIEF, decisions=dec), "F11")), 4, "no clause")
+
+    # P5: a test-suite rule reads a floor, never an exact count
+    def test_f12_a_suite_rule_compared_to_an_exact_count(self):
+        floor = suite_rule("python3 -m pytest -q", "`failed: 0` and `ran ≥ 42`, with ran printed",
+                           "ran=42 failed=0")
+        exact = {"pytest": suite_rule("python3 -m pytest -q", "`passed=` and `failed=`",
+                                      "passed=42 failed=0"),
+                 "npm": suite_rule("npm test", "`tests = 42` and `failed: 0`", "tests=42 failed=0"),
+                 "unittest": suite_rule("python3 -m unittest test_lid", "`Ran 42 tests` and `OK`",
+                                        "Ran 42 tests OK")}
+        self.assertEqual(ids(run_fc(GOOD_BRIEF.replace(R1_RULE, R1_RULE + floor)), "F12"), [])
+        self.assertEqual(run_fc(GOOD_BRIEF.replace(R1_RULE, R1_RULE + floor), LISTING), [])
+        for case, rule in exact.items():
+            with self.subTest(case=case):
+                self.assertTrue(ids(run_fc(GOOD_BRIEF.replace(R1_RULE, R1_RULE + rule)), "F12"))
+        self.assertEqual(ids(run_fc(GOOD_BRIEF), "F12"), [], "`spill=0` runs no test runner")
+
+    # P2: a "before merge" condition belongs in §5
+    def test_f13_before_merge_outside_the_gate(self):
+        bad = GOOD_BRIEF.replace("The pot boils over (`pot.py:3`).",
+                                 "The pot boils over (`pot.py:3`). Taste it before merge.")
+        good = GOOD_BRIEF.replace("- suite and lint per run steps 3–4",
+                                  "- suite and lint per run steps 3–4, before merge")
+        self.assertNotEqual(bad, GOOD_BRIEF)
+        self.assertNotEqual(good, GOOD_BRIEF)
+        self.assertTrue(ids(run_fc(bad), "F13"))
+        self.assertEqual(ids(run_fc(good), "F13"), [])
+
+    def test_the_new_freeze_rules_read_a_pre_v011_brief_as_not_applicable(self):
+        old = V10_BRIEF.replace(R1_RULE, R1_RULE + suite_rule(
+            "python3 -m pytest -q", "`passed=`", "passed=42")).replace(
+            "The pot boils over (`pot.py:3`).", "The pot boils over (`pot.py:3`) before merge.")
+        self.assertNotEqual(old, V10_BRIEF)
+        out = run_fc(old)
+        self.assertEqual([f for f in out if f.startswith("FAIL")], [])
+        for cid in ("F12", "F13"):
+            self.assertIn(f"{cid} not applicable (pre-v0.11 format)", out)
+
+
+R2_RULE = ("\n- **R2 the suite holds.** `python3 -m pytest` reads `failed: 0` and `ran ≥ 40`, with ran "
+           "printed. Dataset: the kitchen's tests. Settle: once. Dry run with the fix in: `failed: 0, "
+           "ran 41`. FAIL reading (base): `failed: 1, ran 41`. Cannot run: no summary line, read FAIL.")
+R2_ROW = "\n| §5 R2 the suite holds | `python3 -m pytest` | {} |"
+
+
+class ReviewRound11(unittest.TestCase):
+    # P12: a reading that meets the rule's own comparisons (a ran above the floor) is a PASS
+    def test_p12_a_ran_count_above_the_floor_passes(self):
+        plan = GOOD_BRIEF.replace(R1_RULE, R1_RULE + R2_RULE)
+        self.assertNotEqual(plan, GOOD_BRIEF)
+
+        def p12(result):
+            return ids(run_cp(GOOD_BODY.replace(R1_ROW, R1_ROW + R2_ROW.format(result)), plan),
+                       "P12")
+        self.assertEqual(p12("failed: 0, ran 44"), [], "tests added: no §9 row")
+        self.assertEqual(p12("failed: 0, ran 40"), [])
+        self.assertTrue(p12("failed: 0, ran 38"), "a ran below the floor")
+        self.assertTrue(p12("failed: 1, ran 44"), "a failure")
+        self.assertTrue(p12("ran 44"), "failed not printed")
+
+    # P12: the PASS token after "dry-run reading", the field's own name
+    def test_p12_the_token_after_a_dry_run_reading(self):
+        plan = GOOD_BRIEF.replace("Dry run with the fix in: `spill=0`",
+                                  "dry-run reading with the fix in: `spill=0`")
+        self.assertNotEqual(plan, GOOD_BRIEF)
+        body = GOOD_BODY.replace(R1_ROW, R1_ROW.replace("PASS", "`spill=0`"))
+        self.assertEqual(ids(run_cp(body, plan), "P12"), [])
+        self.assertTrue(ids(run_cp(body.replace("spill=0", "spill=2"), plan), "P12"))
+
+    # M1: `reverses` followed by words, not an id, is prose
+    def test_m1_a_prose_reverses_is_not_the_field(self):
+        dec = GOOD_DECISIONS.replace('the human: "lid first"',
+                                     "the human: \"lid first\"; this reverses the plan's order")
+        self.assertNotEqual(dec, GOOD_DECISIONS)
+        self.assertEqual(ids(run_cp(GOOD_BODY, decisions=dec), "M1"), [])
+        bad = dec.replace("this reverses the plan's order", "reverses Q9")
+        self.assertTrue(ids(run_cp(GOOD_BODY, decisions=bad), "M1"))
+
+    # P15: a Findings row that only says "test" does not cover a count rise
+    def test_p15_a_row_saying_test_without_a_failure_is_no_cover(self):
+        at = "| §5 R1 the lid holds |"
+        suite = ("| suite against the base | `python3 -m pytest` at base 1a2b3c4 and head 5d6e7f8 "
+                 "| base 0 failed; head 3 failed |\n")
+        bad = GOOD_BODY.replace(at, suite + at).replace("the lid rattles |",
+                                                        "the lid rattles in a test kitchen |")
+        self.assertIn("test kitchen", bad)
+        self.assertTrue(ids(run_cp(bad), "P15"))
+        good = bad.replace("| (review) the lid rattles", "| (review) the suite fails 3 tests at the "
+                           "head | APPLY | fixed | same file |\n| (review) the lid rattles")
+        self.assertEqual(ids(run_cp(good), "P15"), [])
+
+    # P15: clauses split at a comma too, so each count reads its own side
+    def test_p15_a_comma_between_the_base_and_head_clauses(self):
+        at = "| §5 R1 the lid holds |"
+        suite = ("| suite against the base | `python3 -m pytest` | 0 failed at base 1a2b3c4, 3 failed "
+                 "at head 5d6e7f8 |\n")
+        self.assertTrue(ids(run_cp(GOOD_BODY.replace(at, suite + at)), "P15"))
+        same = suite.replace("3 failed at head", "0 failed at head")
+        self.assertEqual(ids(run_cp(GOOD_BODY.replace(at, same + at)), "P15"), [])
+        listed = ("| suite against the base | `python3 -m pytest` | base 1a2b3c4: 0 failed; head "
+                  "5d6e7f8: 2 failed (`test_lid_rattle`, `test_lid_hiss`) |\n")
+        out = ids(run_cp(GOOD_BODY.replace(at, listed + at)), "P15")
+        self.assertEqual(len(out), 2, out)
+
+    # P11: a file §3 names is the contract's own change, not a gate change
+    def test_p11_a_file_section_3_names_is_no_gate_change(self):
+        plan = GOOD_BRIEF.replace("`python3 tools/gate_lid.py` reads", "`python3 -m pot` reads")
+        self.assertNotEqual(plan, GOOD_BRIEF)
+
+        def p11(change):
+            with tmp() as d:
+                repo = new_repo(Path(d) / "repo")
+                commit(repo, "plan(soup-1): the brief", "2026-10-18T09:00:00",
+                       {"pot.py": "lid = False\n", "tools/gate_lid.py": "print('spill=0')\n"})
+                freeze = git(repo, "rev-parse", "HEAD")
+                commit(repo, "fix: the lid", "2026-10-18T10:00:00", change)
+                return ids(run_cp(GOOD_BODY.replace("abc1234", freeze), plan, repo=repo), "P11")
+        self.assertEqual(p11({"pot.py": "lid = True\n"}), [], "§3 names pot.py")
+        plan = plan.replace("`python3 -m pot` reads", "`python3 -m pot tools/gate_lid.py` reads")
+        self.assertTrue(p11({"tools/gate_lid.py": "print('spill=1')\n"}), "the gate script")
+
+    # F12: each exact count fails, whatever floor the rule holds elsewhere
+    def test_f12_a_floor_elsewhere_does_not_clear_an_exact_count(self):
+        mixed = suite_rule("python3 -m pytest -q", "`passed: 41`; also `ran ≥ 40`",
+                           "passed=41 failed=0")
+        self.assertTrue(ids(run_fc(GOOD_BRIEF.replace(R1_RULE, R1_RULE + mixed)), "F12"))
+        floor = suite_rule("python3 -m pytest -q", "`failed: 0` and `ran ≥ 40`, with ran printed",
+                           "41 passed")
+        self.assertEqual(ids(run_fc(GOOD_BRIEF.replace(R1_RULE, R1_RULE + floor)), "F12"), [],
+                         "a dry-run reading holds an observed count")
+
+    # F13: the pasted lessons, a fenced block and a verbatim quote are not the brief's words
+    def test_f13_quoted_text_is_not_read(self):
+        quoted = {
+            "lessons": ("- 5 (retro r2) one kitchen, two cooks → matches the run.",
+                        "- 5 (retro r2) run the oven test before merge → matches the run."),
+            "fenced": ("The pot boils over (`pot.py:3`).",
+                       "The pot boils over (`pot.py:3`).\n\n```\nTaste the soup before merging.\n"
+                       "```"),
+            "quote": ('| "boils at 100 C" | verified |', '| "boils before merge" | verified |'),
+        }
+        for case, (old, new) in quoted.items():
+            with self.subTest(case=case):
+                plan = GOOD_BRIEF.replace(old, new)
+                self.assertNotEqual(plan, GOOD_BRIEF)
+                self.assertEqual(ids(run_fc(plan), "F13"), [])
+        said = GOOD_BRIEF.replace("| 2a · water boils at 100 C |", "| 2a · boil before merge |")
+        self.assertTrue(ids(run_fc(said), "F13"), "the sentence column is the brief's own")
+        after = GOOD_BRIEF.replace(*quoted["fenced"]).replace(
+            "```\n\n## 2.", "```\nTaste it before merge.\n\n## 2.")
+        self.assertIn("```\nTaste it before merge.", after)
+        self.assertTrue(ids(run_fc(after), "F13"), "after the fence closes")
+
+
+class Counts(unittest.TestCase):
+    def test_counts_prints_rows_per_label_and_no_table(self):
+        with tmp() as d:
+            code, out = main_out(cp, ["--counts", ask_file(d, GOOD_BODY, "body.md")])
+            self.assertEqual(code, 0, out)
+            self.assertIn("Decisions: RULING=2 DEFAULT=2", out)
+            self.assertIn("Findings: APPLY=0 DECLINE=1 TICKET=1 RULING=0", out)
+            code, out = main_out(cp, ["--counts", ask_file(d, TRIVIAL_BODY, "body.md")])
+            self.assertEqual(code, 0, out)
+            self.assertIn("Decisions: RULING=0 DEFAULT=1", out)
+            self.assertIn("Findings: no table", out)
+            self.assertNotIn("APPLY=0", out)
 
 
 if __name__ == "__main__":
