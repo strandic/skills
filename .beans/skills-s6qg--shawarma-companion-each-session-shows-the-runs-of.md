@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-20T06:43:34Z
-updated_at: 2026-11-20T12:38:44Z
+updated_at: 2026-11-20T15:24:10Z
 ---
 
 Every session in a repo draws the runs of all its worktrees. `discover()` (hooks/register.tsx) runs `git worktree list` from `$.session.cwd()` and scans every tree, up to MAX_TREES. `ownTree()` finds the session's own tree, but it is only used to put that tree's rows first. Nothing filters the other trees out. So two sessions, each in its own worktree, both show both runs.
@@ -63,3 +63,7 @@ Brief `docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/plan.md`, sketch be
 - follow-ups: P6 (EnterWorktree and `/clear` in an interactive session, the owner's); bean `skills-enjt` (pane ticket line break, D9); retro: session id in the marker
 
 unruled: none
+
+## Run (2026-11-20)
+
+PR: https://github.com/strandic/skills/pull/10 (head 35acf2b; code 08b188c). Gates on 08b188c: G1 277 pass / 0 fail (Q8), G2 validate passed, G3 tsc exit 0, G4 real-engine store `claims:3f3e9c84-…` = [R, R/.worktrees/wt]. Records: docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/ (plan.md §9, decisions.md, reports/run/). Rulings during the run: Q6, Q7, Q8; defaults W1-1, W3-D1–D12. Known limits filed: skills-5w5c, skills-79iv, skills-s475, skills-bnbu, skills-6y0d, skills-7y7p, skills-cq6n, skills-yxw1, skills-enjt.
