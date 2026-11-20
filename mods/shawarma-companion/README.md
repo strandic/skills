@@ -37,7 +37,7 @@ A session claims a worktree when:
 
 The mod checks the working directory and the project root at each update and every 15 seconds while a row is shown. It checks the folders of the last 64 files the session wrote at each update, so a worktree made and written in the same turn is claimed once git lists it. Subagents' calls count, but a subagent's own working directory does not.
 
-Claims only grow: a worktree stays claimed for the rest of the session, even after the session moves away. They survive `/clear`. The mod saves them in its store, keyed by the session id, so `--resume` brings them back. A saved entry not updated for 30 days is deleted.
+Claims only grow: a worktree stays claimed for the rest of the session, even after the session moves away. A session that claims no worktree saves nothing. Each call to the session or the store gives up after 2 seconds; a call that gives up claims nothing that update. They survive `/clear`. The mod saves them in its store, keyed by the session id, so `--resume` brings them back. A saved entry not updated for 30 days is deleted.
 
 The *current* worktree is the one that holds the working directory, or else the one that holds the project root. Its rows come first. Rows from the other claimed worktrees start with `other tree: `.
 
@@ -45,7 +45,7 @@ The *current* worktree is the one that holds the working directory, or else the 
 
 The band above the prompt shows one row per marker in a claimed worktree. The markers in the current worktree come first. The others follow, newest first. If the rows do not fit, the band scrolls.
 
-The mod looks in at most 50 trees, the session's own tree first. It reads and shows at most 20 markers. When there are more, a last dimmed row says so. `+<n> more not shown` counts the markers it found but did not read. `1 run in another worktree` or `<n> runs in other worktrees` counts the markers in worktrees the session has not claimed. `1 worktree not scanned` or `<k> worktrees not scanned` counts the trees it did not look in. The row shows even when no other row does.
+The mod looks in at most 50 trees: the current worktree first, then the other claimed worktrees, then the rest. It reads and shows at most 20 markers. When there are more, a last dimmed row says so. `+<n> more not shown` counts the markers it found but did not read. `1 run in another worktree` or `<n> runs in other worktrees` counts the markers in worktrees the session has not claimed. `1 worktree not scanned` or `<k> worktrees not scanned` counts the trees it did not look in. The row shows even when no other row does.
 
 A row reads:
 
