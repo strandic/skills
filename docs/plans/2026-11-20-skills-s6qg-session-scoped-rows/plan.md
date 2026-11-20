@@ -274,4 +274,9 @@ unruled: none
 | W3-D5 | 2026-11-20 | default | §8 | — → a call's open span also claims a marker another session writes during it (accepted, over-claim) | The safe direction under §6. |
 | W3-D6 | 2026-11-20 | default | §8 | — → a Bash call writing a marker past the 50-tree cap without moving there is not claimed (accepted, as D8) | Residual of the tree cap. |
 | W3-D7 | 2026-11-20 | default | §8 | — → a `/clear` during a paused claim can leave the new id's entry short: bean skills-7y7p | Timing-dependent; 1 fail in 3 on d5ce6ef. |
+| W3-D8 | 2026-11-20 | default | §8 | — → a long call's span dropped before a check lists its marker hides the own run: bean skills-5w5c (limit stated in the PR, per Q7) | Final lane F1; same on d5ce6ef. |
+| W3-D9 | 2026-11-20 | default | §8 | — → a late store write leaves claims short (old id after `/clear`, or after the last refresh): bean skills-79iv (limit stated in the PR, per Q7) | Final lane F2, F3. |
+| W3-D10 | 2026-11-20 | default | §8 | — → after one abandoned write, every claim reads the store back: bean skills-s475 (limit stated in the PR, per Q7) | Final lane F4. |
+| W3-D11 | 2026-11-20 | default | §8 | — → clean-up bounded per call, not per pass (up to about 200 s): bean skills-bnbu (limit stated in the PR, per Q7) | Final lane F5, F7; F7 pre-existing. |
+| W3-D12 | 2026-11-20 | default | §8 | — → one unreadable entry stops every session's clean-up: bean skills-6y0d (limit stated in the PR, per Q7) | Final lane F6. |
 

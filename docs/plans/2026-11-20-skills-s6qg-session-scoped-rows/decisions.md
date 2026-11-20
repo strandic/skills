@@ -22,3 +22,8 @@
 2026-11-20 | W3-D5 DEFAULT | Accept N4: a call's open span also claims a marker another session writes during the call (over-claim, the safe direction; widens Q5) | Owner: "Go with reco".
 2026-11-20 | W3-D6 DEFAULT | Accept N5 as with D8: a Bash call writing a marker into a tree past the 50-tree cap, without moving there, is not claimed; A7 a one-refresh gap for a Write there | Owner: "Go with reco".
 2026-11-20 | W3-D7 DEFAULT | A8 (a /clear during a paused claim can leave the new id's entry short; 1 fail in 3 on d5ce6ef) to a new bean, skills-7y7p | Owner: "Go with reco".
+2026-11-20 | W3-D8 DEFAULT | Final lane F1 (a long call's span dropped before a check lists its marker; same on d5ce6ef) to bean skills-5w5c and a limit in the PR, per Q7 | Q7 ended the loop after this lane.
+2026-11-20 | W3-D9 DEFAULT | Final lane F2, F3 (a late store write leaves claims short: old id after /clear, or after the last refresh) to bean skills-79iv and a limit in the PR, per Q7 | Q7 ended the loop.
+2026-11-20 | W3-D10 DEFAULT | Final lane F4 (after one abandoned write, every claim reads the store back) to bean skills-s475 and a limit in the PR, per Q7 | Q7 ended the loop.
+2026-11-20 | W3-D11 DEFAULT | Final lane F5, F7 (clean-up bounded per call, not per pass: up to about 200 s on the first call) to bean skills-bnbu and a limit in the PR, per Q7 | Q7 ended the loop; F7 is pre-existing.
+2026-11-20 | W3-D12 DEFAULT | Final lane F6 (one unreadable entry stops every session's clean-up) to bean skills-6y0d and a limit in the PR, per Q7 | Q7 ended the loop.
