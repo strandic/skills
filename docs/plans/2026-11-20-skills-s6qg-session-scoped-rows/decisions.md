@@ -18,3 +18,7 @@
 2026-11-20 | W3-D2 DEFAULT | F5 (--fork-session loses the claims) to a new bean, skills-cq6n | Owner: "Go with reco".
 2026-11-20 | W3-D3 DEFAULT | X6 (a cwd call that never answers holds the tool call, pre-existing) to a new bean, skills-yxw1 | Owner: "Go with reco".
 2026-11-20 | W3-D4 DEFAULT | F9 left as ruled: entries dated more than 30 days ahead are deleted (D5) | Owner: "Go with reco".
+2026-11-20 | Q7 RULING | Apply round 3 (N1 a closed call span remembered again as the newest; N2 after an abandoned store write, each claim reads the entry back and rewrites a short one; N3 prune judges only entries read in time, a late or failed read deletes nothing and ends the pass), regression tests from lane A3, A4, A5; one more fresh review lane, then the loop ends: later findings become beans and limits stated in the PR | Owner: "Go with reco". The round-3 lane found N1 (a regression from Q6), N2 and N3 on d5ce6ef; the spike passes all three.
+2026-11-20 | W3-D5 DEFAULT | Accept N4: a call's open span also claims a marker another session writes during the call (over-claim, the safe direction; widens Q5) | Owner: "Go with reco".
+2026-11-20 | W3-D6 DEFAULT | Accept N5 as with D8: a Bash call writing a marker into a tree past the 50-tree cap, without moving there, is not claimed; A7 a one-refresh gap for a Write there | Owner: "Go with reco".
+2026-11-20 | W3-D7 DEFAULT | A8 (a /clear during a paused claim can leave the new id's entry short; 1 fail in 3 on d5ce6ef) to a new bean, skills-7y7p | Owner: "Go with reco".

@@ -2998,3 +2998,72 @@ describe('run review (Q6): lane 3a reproductions', () => {
   })
 
 })
+
+describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
+  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
+  const rows = async ($: any): Promise<string[]> =>
+    ((await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND }))
+      .findAll({ type: 'Text' })) as any[]).map(one => (one.text as string).replace(/ · since.*/, ''))
+  const V = `${ROOT}/.worktrees/v`
+  const T0 = STARTED + 120_000
+  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
+  const never = () => new Promise<never>(() => undefined)
+  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+
+  test('Q7-1 (N1) a long subagent call outlives a main turn end and 64 main writes; it writes its marker at its end: own run', { options: ON }, async ($, on) => {
+    let release!: () => void
+    const gate = new Promise<void>(r => (release = r))
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (e.command === 'long' ? gate : undefined) })
+    await bash($, 'true')
+    const call = $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any)
+    await settle()
+    await turnEnd($)
+    for (let i = 0; i < 64; i++) await write($, `${ROOT}/src/f${i}.ts`, 'x')
+    await clock.advance(10_000)
+    files.set(...at(WT, 'wt-7', T0 + 10_000))
+    release()
+    await call
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-7 · trivial'])
+  })
+
+  test('Q7-2 (N2) store.set for [ROOT, WT] gives up at 2 s, B lands [ROOT, WT, V], then A lands late', { options: ON }, async ($, on) => {
+    let cwdNow = WT
+    let first = true
+    let releaseSet!: () => void
+    const gate = new Promise<void>(r => (releaseSet = r))
+    const store = new Map<string, unknown>()
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(V, 'v-1')]), ROOT, [], new Set(), { claimed: [],
+      trees: [ROOT, WT, V], store, cwdNow: () => cwdNow,
+      hold: { 'store.set': () => (first ? (first = false, gate.then(() => undefined)) : undefined) } })
+    const a = bash($, 'true')
+    await settle()
+    await clock.advance(2_000)
+    await settle()
+    await a
+    cwdNow = V
+    await bash($, 'true')
+    const afterB = (store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort()
+    releaseSet()
+    await settle()
+    for (let i = 0; i < 3; i++) await bash($, 'true')
+    expect({ afterB, final: (store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort() })
+      .toEqual({ afterB: [ROOT, V, WT], final: [ROOT, V, WT] })
+  })
+
+  test('Q7-3 (N3) other sessions\' entries whose store.get runs past 2 s: kept, and the call answers within 2 advances', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    for (let i = 0; i < 100; i++) store.set(`claims:o${i}`, { trees: ['/other'], at: T0 - 1000 })
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+      hold: { 'store.get': (e: any) => (e.key === `claims:${SESSION}` ? undefined : never()) } })
+    let done = false
+    void bash($, 'true').then(() => { done = true })
+    let advances = 0
+    while (!done && advances < 400) { await settle(5); await clock.advance(2_000); advances += 1 }
+    await settle()
+    const others = [...store.keys()].filter(k => k.startsWith('claims:o')).length
+    expect({ advances, others }).toEqual({ advances: 1, others: 100 })
+  })
+
+})

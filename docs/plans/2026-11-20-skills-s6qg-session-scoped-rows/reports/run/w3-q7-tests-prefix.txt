@@ -1,0 +1,40 @@
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) run review round 3 (Q7): lane 3a-fix reproductions > Q7-2 (N2) store.set for [ROOT, WT] gives up at 2 s, B lands [ROOT, WT, V], then A lands late [147.77ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    afterB: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    final: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  }
+  Received: {
+    afterB: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    final: ["/repo", "/repo/.worktrees/w"]
+  }
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) run review round 3 (Q7): lane 3a-fix reproductions > Q7-3 (N3) other sessions' entries whose store.get runs past 2 s: kept, and the call answers within 2 advances [1465.62ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: { advances: 1, others: 100 }
+  Received: { advances: 100, others: 0 }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+
+ 274 pass
+ 3 fail
+Ran 277 tests across 1 file. [12.51s]
