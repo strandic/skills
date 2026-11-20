@@ -270,4 +270,8 @@ unruled: none
 | W3-D2 | 2026-11-20 | default | §8 | — → a session started with `--fork-session` loses its parent's claims: bean skills-cq6n | Needs a link from the fork to its parent. |
 | W3-D3 | 2026-11-20 | default | §8 | — → a working-directory call that never answers holds the tool call (pre-existing): bean skills-yxw1 | Out of this diff. |
 | W3-D4 | 2026-11-20 | default | §8 | — → stored claims dated more than 30 days ahead are deleted, as ruled | The rule's consequence when a clock jumps back. |
+| Q7 | 2026-11-20 | the owner | §3 `hooks/register.tsx` | a call's span remembered at its start only; an abandoned store write not tracked; prune deletes an entry whose read failed or ran late → a closed span remembered again as the newest; after an abandoned write each claim reads the entry back and rewrites a short one; prune judges only entries read in time and stops at the first late read; the review loop ends after one more lane | The round-3 review lane hid the session's own run behind a long subagent call (N1, from Q6), left the stored claims short after a late write (N2), and deleted 100 live entries after 200 s of slow reads (N3). Regression tests Q7-1 to Q7-3. |
+| W3-D5 | 2026-11-20 | default | §8 | — → a call's open span also claims a marker another session writes during it (accepted, over-claim) | The safe direction under §6. |
+| W3-D6 | 2026-11-20 | default | §8 | — → a Bash call writing a marker past the 50-tree cap without moving there is not claimed (accepted, as D8) | Residual of the tree cap. |
+| W3-D7 | 2026-11-20 | default | §8 | — → a `/clear` during a paused claim can leave the new id's entry short: bean skills-7y7p | Timing-dependent; 1 fail in 3 on d5ce6ef. |
 
