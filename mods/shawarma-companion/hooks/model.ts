@@ -47,6 +47,21 @@ export const CLAIM_TTL_MS = 30 * 24 * 3600 * 1000
 /** The store key of a session's claims. */
 export const claimKey = (sessionId: string) => `claims:${sessionId}`
 
+/**
+ * skills-bnbu Q2: where a session's prune starts among `count` keys: FNV-1a of
+ * the id, mod `count`, so sessions start at different keys and one entry that
+ * never answers stops none of them for good. 0 when `count` is 0.
+ */
+export function pruneStart(sessionId: string, count: number): number {
+  if (count <= 0) return 0
+  let hash = 0x811c9dc5
+  for (let i = 0; i < sessionId.length; i++) {
+    hash ^= sessionId.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193) >>> 0
+  }
+  return hash % count
+}
+
 /** A stored claims entry, or null when the value has another shape (an older or foreign write). */
 export function parseClaimed(value: unknown): Claimed | null {
   if (value === null || typeof value !== 'object') return null
