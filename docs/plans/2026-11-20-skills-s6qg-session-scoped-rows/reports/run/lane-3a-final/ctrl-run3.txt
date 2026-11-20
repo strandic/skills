@@ -1,0 +1,1010 @@
+
+tests/final.test.tsx:
+(fail) lane 3a fix > A1 B2 another session writes a marker in an unclaimed tree during a long call; the 15 s check lists it [220.95ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    rows: ["main-1 · trivial", "1 run in another worktree"],
+    stored: ["/repo"]
+  }
+  Received: {
+    rows: ["main-1 · trivial", "other tree: other-1 · trivial"],
+    stored: ["/repo", "/repo/.worktrees/w"]
+  }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) lane 3a fix > A2 a subagent call that never ends: a marker another session writes 10 min later is claimed [511.72ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: ["main-1 · trivial", "1 run in another worktree"]
+  Received: ["main-1 · trivial", "other tree: other-1 · trivial"]
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) lane 3a fix > A3 a long subagent call outlives a main turn end and 64 main writes; it writes its marker at its end: own run [471.21ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: ["main-1 · trivial", "other tree: wt-7 · trivial"]
+  Received: ["main-1 · trivial", "1 run in another worktree"]
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) lane 3a fix > A4 store.set for [ROOT, WT] gives up at 2 s, B lands [ROOT, WT, V], then A lands late [186.15ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    afterB: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    final: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  }
+  Received: {
+    afterB: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    final: ["/repo", "/repo/.worktrees/w"]
+  }
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a fix > A5 other sessions' entries whose store.get runs past 2 s: kept, and the call answers within 2 advances [1639.06ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: { advances: 1, others: 100 }
+  Received: { advances: 100, others: 0 }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) lane 3a fix > A6 F4 residual: 56 trees, a Bash call from ROOT writes a marker into the 55th tree (no cd) [95.23ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: [
+    "main-1 · trivial",
+    "other tree: far-1 · trivial",
+    "6 worktrees not scanned"
+  ]
+  Received: ["main-1 · trivial", "6 worktrees not scanned"]
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t00'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t01'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t02'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t03'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t04'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t05'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t06'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t07'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t08'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t09'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t10'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t11'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t12'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t13'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t14'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t15'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t16'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t17'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t18'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t19'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t20'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t21'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t22'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t23'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t24'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t25'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t26'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t27'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t28'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t29'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t30'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t31'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t32'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t33'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t34'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t35'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t36'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t37'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t38'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t39'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t40'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t41'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t42'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t43'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t44'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t45'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t46'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t47'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t48'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t00/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t01/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t02/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t03/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t04/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t05/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t06/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t07/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t08/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t09/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t10/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t11/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t12/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t13/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t14/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t15/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t16/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t17/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t18/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t19/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t20/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t21/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t22/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t23/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t24/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t25/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t26/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t27/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t28/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t29/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t30/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t31/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t32/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t33/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t34/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t35/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t36/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t37/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t38/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t39/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t40/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t41/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t42/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t43/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t44/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t45/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t46/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t47/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t48/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t00/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t01/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t02/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t03/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t04/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t05/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t06/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t07/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t08/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t09/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t10/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t11/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t12/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t13/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t14/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t15/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t16/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t17/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t18/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t19/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t20/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t21/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t22/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t23/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t24/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t25/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t26/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t27/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t28/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t29/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t30/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t31/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t32/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t33/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t34/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t35/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t36/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t37/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t38/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t39/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t40/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t41/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t42/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t43/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t44/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t45/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t46/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t47/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t48/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t00/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t01/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t02/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t03/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t04/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t05/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t06/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t07/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t08/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t09/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t10/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t11/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t12/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t13/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t14/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t15/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t16/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t17/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t18/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t19/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t20/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t21/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t22/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t23/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t24/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t25/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t26/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t27/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t28/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t29/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t30/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t31/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t32/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t33/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t34/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t35/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t36/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t37/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t38/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t39/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t40/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t41/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t42/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t43/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t44/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t45/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t46/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t47/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t48/.shawarma'
+(fail) lane 3a fix > A7 56 trees, a Write into the 55th tree from ROOT: rows after that call and after the next [94.87ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    first: [
+      "main-1 · trivial",
+      "other tree: far-1 · trivial",
+      "6 worktrees not scanned"
+    ],
+    second: [
+      "main-1 · trivial",
+      "other tree: far-1 · trivial",
+      "6 worktrees not scanned"
+    ]
+  }
+  Received: {
+    first: ["main-1 · trivial", "6 worktrees not scanned"],
+    second: [
+      "main-1 · trivial",
+      "other tree: far-1 · trivial",
+      "6 worktrees not scanned"
+    ]
+  }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t00'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t01'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t02'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t03'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t04'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t05'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t06'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t07'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t08'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t09'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t10'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t11'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t12'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t13'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t14'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t15'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t16'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t17'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t18'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t19'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t20'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t21'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t22'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t23'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t24'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t25'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t26'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t27'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t28'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t29'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t30'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t31'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t32'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t33'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t34'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t35'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t36'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t37'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t38'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t39'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t40'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t41'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t42'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t43'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t44'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t45'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t46'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t47'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/t48'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t00/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t01/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t02/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t03/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t04/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t05/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t06/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t07/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t08/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t09/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t10/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t11/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t12/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t13/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t14/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t15/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t16/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t17/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t18/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t19/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t20/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t21/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t22/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t23/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t24/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t25/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t26/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t27/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t28/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t29/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t30/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t31/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t32/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t33/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t34/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t35/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t36/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t37/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t38/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t39/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t40/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t41/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t42/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t43/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t44/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t45/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t46/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t47/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t48/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t00/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t01/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t02/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t03/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t04/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t05/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t06/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t07/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t08/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t09/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t10/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t11/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t12/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t13/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t14/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t15/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t16/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t17/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t18/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t19/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t20/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t21/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t22/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t23/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t24/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t25/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t26/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t27/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t28/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t29/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t30/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t31/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t32/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t33/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t34/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t35/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t36/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t37/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t38/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t39/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t40/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t41/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t42/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t43/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t44/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t45/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t46/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t47/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t48/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t00/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t01/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t02/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t03/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t04/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t05/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t06/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t07/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t08/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t09/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t10/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t11/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t12/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t13/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t14/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t15/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t16/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t17/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t18/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t19/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t20/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t21/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t22/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t23/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t24/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t25/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t26/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t27/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t28/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t29/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t30/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t31/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t32/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t33/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t34/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t35/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t36/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t37/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t38/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t39/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t40/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t41/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t42/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t43/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t44/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t45/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t46/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/t47/.shawarma'
+(pass) lane 3a fix > A8 the id changes (/clear) while call A is paused inside claim: the new id's entry ends with every claim [80.45ms]
+(fail) lane 3a fix > A9 a call whose tool throws closes its span: another session's marker 60 s later is not claimed [92.17ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    thrown: "Error: boom",
+    rows: ["main-1 · trivial", "1 run in another worktree"]
+  }
+  Received: {
+    thrown: "HooksError: no implementation for tool.call",
+    rows: ["main-1 · trivial", "1 run in another worktree"]
+  }
+  
+  nothing beneath the plugins answers tool.call: a test answers it with on('tool.call', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's tool.call hook was skipped: test: boom
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) lane 3a fix > A10 cost: store.set always rejects: store.set calls over 10 Bash calls; and with sets landing, over 10 calls [64.07ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: 1
+  Received: 10
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.set hook was skipped: test: full
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(pass) lane 3a fix > A10c control: store.set lands: store.set calls over 10 Bash calls [50.47ms]
+(pass) lane 3a final > P1 isolation, part 1: an abandoned store.set leaves isStoreUncertain set [152.65ms]
+(pass) lane 3a final > P2 isolation, part 2: own-key store.get calls over 3 calls with a calm store [41.27ms]
+(fail) lane 3a final > B1 (N1) long subagent call: marker written mid-call after its span was evicted (turn end + 64 writes), the 15 s check lists it, then the call ends [323.03ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    during: ["main-1 · trivial", "other tree: wt-7 · trivial"],
+    after: ["main-1 · trivial", "other tree: wt-7 · trivial"]
+  }
+  Received: {
+    during: ["main-1 · trivial", "1 run in another worktree"],
+    after: ["main-1 · trivial", "1 run in another worktree"]
+  }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(fail) lane 3a final > B1c control: same, no 15 s check before the call ends (Q7-1 shape) [210.92ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: ["main-1 · trivial", "other tree: wt-7 · trivial"]
+  Received: ["main-1 · trivial", "1 run in another worktree"]
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(pass) lane 3a final > B1d variant: turn end only (no 64 writes), the 15 s check lists the mid-call marker [145.04ms]
+(fail) lane 3a final > B2 (N2 x /clear) A abandoned under id1, B lands id1, /clear to id2, then A lands late: id1 entry [215.66ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: {
+    id1AfterB: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    id1: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    id2: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  }
+  Received: {
+    id1AfterB: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"],
+    id1: ["/repo", "/repo/.worktrees/w"],
+    id2: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  }
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > B2c control: same without /clear (Q7-2 shape) [167.45ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  Received: ["/repo", "/repo/.worktrees/w"]
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > B4a (N2) A lands late after the session's last claim, no further refresh: stored entry [160.32ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  Received: ["/repo", "/repo/.worktrees/w"]
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > B4b (N2) as B4a, then one 15 s check: stored entry [197.46ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: ["/repo", "/repo/.worktrees/v", "/repo/.worktrees/w"]
+  Received: ["/repo", "/repo/.worktrees/w"]
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(pass) lane 3a final > B3 (N2 cost) one abandoned set, later sets land, own-key reads hang after restore: 2 s advances needed per call for 5 calls [622.23ms]
+(pass) lane 3a final > B3c control: no abandoned set, own-key reads hang after restore [417.39ms]
+(fail) lane 3a final > H (N2 read-back) own entry set to deleted after the abandoned write: next call's entry holds every claim [118.04ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to string after the abandoned write: next call's entry holds every claim [118.12ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to array after the abandoned write: next call's entry holds every claim [134.31ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to null after the abandoned write: next call's entry holds every claim [116.03ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to trees string after the abandoned write: next call's entry holds every claim [120.76ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to trees numbers after the abandoned write: next call's entry holds every claim [113.81ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to relative tree after the abandoned write: next call's entry holds every claim [110.54ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to at NaN after the abandoned write: next call's entry holds every claim [118.81ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to no at after the abandoned write: next call's entry holds every claim [112.25ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(fail) lane 3a final > H (N2 read-back) own entry set to 10 000 trees, V missing after the abandoned write: next call's entry holds every claim [114.45ms]
+  AssertionError: expect(received).toBe()
+  
+  Expected: true
+  Received: false
+  
+  nothing beneath the plugins answers ui.log: a test answers it with on('ui.log', ...): { value: ... } for a call on $, the event's own result otherwise, naming { plugin: '*' } where the event carries another plugin's name
+  
+  the engine reported:
+    [shawarma-companion] $.ui.log dropped: HooksError: no implementation for ui.log
+(pass) lane 3a final > H (N2 read-back) own entry set to 10 000 trees, all present after the abandoned write: next call's entry holds every claim [115.74ms]
+(pass) lane 3a final > Hc control: own entry set to "x" with no abandoned write before [41.26ms]
+(fail) lane 3a final > B5 (N3) 100 other sessions' fresh entries, each store.get answering in 1.9 s: engine time the first call is held [1165.92ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: { heldMsAtMost4000: true, ms: 0, others: 100 }
+  Received: { heldMsAtMost4000: false, ms: 190000, others: 100 }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(pass) lane 3a final > B5c control: same 100 entries, store.get answers at once [126.91ms]
+(fail) lane 3a final > B6 (N3) 5000 keys: the first other key's get rejects, 4999 expired after it; three session ids in turn: keys left [427.80ms]
+  AssertionError: expect(received).toEqual()
+  
+  Expected: { n: [0, 0, 0], old: 4702, bad: true }
+  Received: { n: [0, 0, 0], old: 4700, bad: false }
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's store.get hook was skipped: test: EIO
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(pass) lane 3a final > B6c control: same 5000 keys, no failing key [376.60ms]
+(fail) lane 3a final > B7 (prune delete, unchanged line) 100 expired other entries, store.delete hangs: 2 s advances the first call needs [4838.26ms]
+  AssertionError: expect(received).toBeLessThanOrEqual()
+  
+  Expected: <= 2
+  Received: 100
+  
+  the engine reported:
+    test's fs.stat hook was skipped: test: ENOENT: no such file, stat '/repo/.worktrees/w'
+    test's fs.list hook was skipped: test: ENOENT: no such file or directory, scandir '/repo/.worktrees/w/.shawarma'
+(pass) lane 3a final, B2 enumerate on the re-remembered span > B8 a marker dated 2.001 s after a 10 s call closed (re-remembered span): not claimed [141.67ms]
+(pass) lane 3a final, B2 enumerate on the re-remembered span > B8c control: dated 1.999 s after: claimed (slack) [174.38ms]
+(fail) the file ran to its end [0.00ms]
+  a rejection nothing handled: no implementation for tool.call
+
+ 13 pass
+ 29 fail
+Ran 42 tests across 1 file. [15.07s]
