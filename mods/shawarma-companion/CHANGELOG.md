@@ -5,6 +5,19 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0] - unreleased
+
+Each session shows full rows only for the worktrees it works in (skills-s6qg).
+
+### Added
+- A session *claims* a worktree when its working directory or project root is in it, when it writes a file there, or when a marker there changes during one of its own calls. Claims only grow, survive `/clear`, and are saved in the mod's store under the session id so `--resume` restores them; entries untouched for 30 days are deleted.
+- The more-row counts the runs of unclaimed worktrees: `1 run in another worktree`, `<n> runs in other worktrees`. The pane lists their tickets under `In other worktrees:`.
+- The `other tree:` label on rows from a claimed worktree that is not the current one.
+
+### Changed
+- The rows of the current worktree (the working directory's, else the project root's) come first; the other claimed worktrees' rows follow.
+- The mod now writes to its own store (one entry per session).
+
 ## [0.2.0] - 2026-11-02
 
 Reads the per-ticket markers of shawarma 0.9 (skills-v2tm, PR #5).

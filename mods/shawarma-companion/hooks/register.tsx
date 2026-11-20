@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, Register, Timer } from 'claude-code'
 
 import type { Snapshot } from '../types'
 import {
-  MARKER_PREFIX, clean, lines, order, ownTree, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
+  CLAIM_TTL_MS, MARKER_PREFIX, changedFiles, claimKey, clean, lines, order, ownTree, parseClaimed, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
   MAX_ROWS, MAX_TREES, isInside, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
 } from './model'
 
@@ -13,7 +13,80 @@ const rowsAtom = atom({ plugin: 'shawarma-companion', key: 'rows' } as const, []
 /** The marker path the pane shows: set by a row press or the command. */
 const chosen = atom({ plugin: 'shawarma-companion', key: 'chosen' } as const, null)
 /** Q6, round 2 N3: markers listed but not read, and worktrees not scanned: one dimmed more-row. */
-const hiddenAtom = atom({ plugin: 'shawarma-companion', key: 'hidden' } as const, { markers: 0, trees: 0 })
+const hiddenAtom = atom({ plugin: 'shawarma-companion', key: 'hidden' } as const, { markers: 0, trees: 0, others: 0, otherTickets: [] as string[] })
+/**
+ * s6qg Q1: the tree roots this session claimed, as `git worktree list` (or the
+ * fallback) spells them. Claims only grow. Kept in `$.state` (a hot reload keeps
+ * it), in `lastClaims` (a `/clear` keeps the process), and in the store under
+ * the session id (a `--resume` starts a new process, Q4).
+ */
+const claimsAtom = atom({ plugin: 'shawarma-companion', key: 'claims' } as const, [])
+/** The claims last written, kept across a `/clear` in the same process (Q4). */
+let lastClaims: readonly string[] = []
+/** The session id the store last held these claims for: a `/clear` changes the id, so the next claim writes again. */
+let storedFor: string | null = null
+/**
+ * The session id whose stored claims were read in (Q4). Set only once that read
+ * succeeded: until then the store is not written for that id, so a failed read
+ * never overwrites what a resumed session had (lane A9c).
+ */
+let restoredFor: string | null = null
+/**
+ * Q3, lane A9a: the folders of the last MAX_FOLDERS paths this session's tools
+ * wrote. Each refresh places them again against the trees it lists, so a write
+ * into a worktree git did not list yet (made in the same turn) claims it once
+ * listed.
+ */
+const folders: string[] = []
+export const MAX_FOLDERS = 64
+/**
+ * Lane round 2 B4a2: every folder and call span of the current main turn, kept
+ * until that turn's end refresh has placed them against a fresh worktree list,
+ * at most MAX_TURN each; the last MAX_FOLDERS and MAX_WINDOWS carry over.
+ */
+const turnFolders: string[] = []
+const turnWindows: { from: number; to: number }[] = []
+export const MAX_TURN = 4096
+/** Lane round 2 B2e: a marker this close to a call span counts as written in it (file times rounded to the second, clock skew). */
+export const WINDOW_SLACK_MS = 2_000
+/**
+ * s6qg D1: the time spans of this session's last MAX_WINDOWS writing tool calls,
+ * main session and subagents. A marker whose time falls in one claims its tree,
+ * whatever tool wrote it (a Bash write into another worktree is in no
+ * changed-files list: probed).
+ */
+const windows: { from: number; to: number }[] = []
+export const MAX_WINDOWS = 64
+/**
+ * Lane round 3 C3: the marker paths of the last listing. Only a marker absent
+ * from it whose time falls in a call span claims its tree, so another session's
+ * rewrites of its own marker during this session's calls claim nothing. Null
+ * until the first listing since load.
+ */
+let lastSeen: Set<string> | null = null
+/** The main session's working directory, last read outside a subagent's hook (lane A9g). */
+let mainCwd: string | null = null
+/**
+ * s6qg S1: a written folder in no tree as written (a Write spelled through a
+ * link, `/tmp/…` for `/private/tmp/…`) has its real path asked, at most this many
+ * folders per refresh, each answer kept until the turn ends; past the cap, or
+ * with no answer in RUN_MS, it claims nothing that refresh.
+ */
+export const MAX_RESOLVE = 8
+/** Per folder, its real path or null, asked this turn (cleared with `worktrees`). */
+const folderReals = new Map<string, string | null>()
+/** Q4: at most this many other store keys are examined per session id. */
+export const MAX_PRUNE = 100
+
+/** `items` as a list holding each once, the last MAX newest, after appending `more`. */
+function remember<T>(list: T[], more: readonly T[], max: number, same: (a: T, b: T) => boolean): void {
+  for (const one of more) {
+    const at = list.findIndex(other => same(other, one))
+    if (at !== -1) list.splice(at, 1)
+    list.push(one)
+  }
+  if (list.length > max) list.splice(0, list.length - max)
+}
 /**
  * The check's signature (round 2 N4): the markers that would be drawn, from
  * the listings, plus the hidden counts. A hidden marker rewritten while it
@@ -27,7 +100,8 @@ let lastListed: string | null = null
  * listed marker; `unread` the picked markers whose files failed to read.
  */
 type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string>; unread: Set<string> }
-let lastScan: Scan = { status: 'none', trees: new Set(), paths: new Set(), unread: new Set() }
+const NO_SCAN = (status: 'none' | 'failed'): Scan => ({ status, trees: new Set(), paths: new Set(), unread: new Set() })
+let lastScan: Scan = NO_SCAN('none')
 
 /** Why the chosen marker is not drawn, from facts the last scan holds only. */
 function reasonFor(want: string): string {
@@ -43,7 +117,7 @@ function reasonFor(want: string): string {
  * scanned root to its real path, links followed (R3); a root missing from it
  * is used as given.
  */
-type Trees = { own: string | null; roots: string[]; reals: ReadonlyMap<string, string> }
+type Trees = { own: string | null; roots: string[]; reals: ReadonlyMap<string, string>; isFromGit?: boolean }
 /** Per cwd, from `git worktree list` (or the fallback) and the roots' real paths: cleared at each turn end and at session start (Q2, R3). */
 const worktrees = new Map<string, Trees>()
 /** Fallback only: the file-API walk per cwd, kept for the session when it found a repo. */
@@ -111,6 +185,98 @@ let check: Timer | null = null
 /** Set from `options.band` at register: the check runs only while a row can be drawn. */
 let isBandOn = false
 
+/**
+ * s6qg Q1, Q3, Q4: the trees this session claims now: those already claimed;
+ * the trees holding the main session's working directory and the project root;
+ * the trees of the recent written folders, placed against `trees` now; and the
+ * trees of the listed markers whose time falls in one of this session's writing
+ * calls (D1). Written to `$.state` by merging (two refreshes can run at once:
+ * lane A9e), and to the store when they changed or the session id did, once the
+ * stored claims for that id were read in. A failed call claims less, never throws.
+ */
+async function claim($: EngineInterface, trees: Trees, found: readonly Found[], isSub = false): Promise<Set<string>> {
+  const id = await $.session.id().catch(() => null)
+  if (id !== null && id !== restoredFor) {
+    await restore($, id).then(() => { restoredFor = id }, (err: unknown) =>
+      $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
+  }
+  const held = new Set([...lastClaims, ...(await read($, claimsAtom))])
+  const before = held.size
+  // B7f: a subagent's hook reads its own cwd: with no main cwd known yet, the root alone.
+  const cwd = mainCwd ?? (isSub ? null : await $.session.cwd().catch(() => null))
+  const root = await $.session.root().catch(() => null)
+  // S1: the engine gives the cwd and the root as real paths (probed): placed as written, else against each root's real path (B7a).
+  for (const path of [cwd, root]) {
+    const tree = path === null ? null : byReal(trees, path) ?? ownTree(path, trees.roots)
+    if (tree !== null) held.add(tree)
+  }
+  const realRoots = trees.roots.map(one => ({ root: one, real: trees.reals.get(one) ?? one }))
+  let asked = 0
+  for (const folder of new Set([...folders, ...turnFolders])) {
+    const tree = ownTree(folder, trees.roots)
+    if (tree !== null) held.add(tree)
+    // A9a: a folder under a root that git may not list yet is placed again next refresh; one in no tree, through its real path.
+    if (tree !== null || trees.roots.length === 0) continue
+    if (!folderReals.has(folder)) {
+      if (asked >= MAX_RESOLVE) continue
+      asked += 1
+      folderReals.set(folder, await realOf($, folder))
+    }
+    const real = folderReals.get(folder) ?? null
+    const hit = real === null ? undefined
+      : realRoots.filter(one => isInside(one.real, real)).sort((a, b) => b.real.length - a.real.length)[0]
+    if (hit !== undefined) held.add(hit.root)
+  }
+  const spans = [...windows, ...turnWindows]
+  const seen = lastSeen
+  const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
+  for (const one of found) {
+    if (seen === null || seen.has(pathOf(one))) continue
+    if (spans.some(span => one.at >= span.from - WINDOW_SLACK_MS && one.at <= span.to + WINDOW_SLACK_MS)) held.add(one.root)
+  }
+  lastSeen = new Set(found.map(pathOf))
+  if (held.size === before && (id === null || id === storedFor)) return held
+  const all = await update($, claimsAtom, prev => [...new Set([...(prev ?? []), ...held])])
+  lastClaims = [...new Set([...lastClaims, ...all])]
+  if (id !== null && id === restoredFor) {
+    const now = await $.clock.now()
+    await $.store.set(claimKey(id), { trees: [...lastClaims], at: now }).then(() => { storedFor = id }, (err: unknown) =>
+      $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' }))
+  }
+  return new Set(lastClaims)
+}
+
+/** The root whose real path holds the real path `path`, the longest, else null (B7a). */
+function byReal(trees: Trees, path: string): string | null {
+  let best: { root: string; real: string } | null = null
+  for (const root of trees.roots) {
+    const real = trees.reals.get(root) ?? root
+    if (isInside(real, path) && (best === null || real.length > best.real.length)) best = { root, real }
+  }
+  return best?.root ?? null
+}
+
+/**
+ * Q4: the claims stored for `id` (a `--resume`) read in, and at most MAX_PRUNE
+ * other `claims:` entries examined: one untouched for 30 days, dated in the
+ * future, or malformed, deleted. Throws when the read of `id`'s entry fails.
+ */
+async function restore($: EngineInterface, id: string): Promise<void> {
+  const now = await $.clock.now()
+  const mine = parseClaimed(await $.store.get(claimKey(id)))
+  if (mine !== null) {
+    const all = await update($, claimsAtom, prev => [...new Set([...(prev ?? []), ...lastClaims, ...mine.trees])])
+    lastClaims = all
+  }
+  const keys = (await $.store.keys().catch(() => [] as string[])).filter(key => key.startsWith('claims:') && key !== claimKey(id))
+  for (const key of keys.slice(0, MAX_PRUNE)) {
+    const entry = parseClaimed(await $.store.get(key).catch(() => undefined))
+    if (entry === null || now - entry.at > CLAIM_TTL_MS || entry.at > now + CLAIM_TTL_MS) {
+      await $.store.delete(key).catch(() => undefined)
+    }
+  }
+}
+
 /** One pass's listings, each path listed at most once; a failed listing is null (D6: it rejects on a missing folder). */
 type Lister = (path: string) => Promise<FsEntry[] | null>
 function lister($: EngineInterface): Lister {
@@ -163,8 +329,9 @@ async function planFiles($: EngineInterface, dir: string): Promise<[string | nul
  * cwd's own tree (Q2). A sibling-folder worktree is then missed. Each scanned
  * root's real path is then asked with one stat, raced against RUN_MS (R3).
  */
-async function discover($: EngineInterface): Promise<Trees> {
-  const cwd = await $.session.cwd()
+async function discover($: EngineInterface, isSub = false): Promise<Trees> {
+  // B7f: in a subagent's hook with no main cwd known, discover from the project root.
+  const cwd = mainCwd ?? (isSub ? await $.session.root().catch(() => $.session.cwd()) : await $.session.cwd())
   const hit = worktrees.get(cwd)
   if (hit !== undefined) return hit
   const git = await run($, ['git', 'worktree', 'list', '--porcelain', '-z'], cwd)
@@ -181,7 +348,14 @@ async function discover($: EngineInterface): Promise<Trees> {
     const real = await realOf($, root)
     if (real !== null) reals.set(root, real)
   }
-  const trees: Trees = { ...found, reals }
+  // B7a: git may spell the roots through a link; the cwd and root are real paths.
+  const probe: Trees = { ...found, reals }
+  let own = byReal(probe, cwd) ?? found.own
+  if (own === null) {
+    const root = await $.session.root().catch(() => null)
+    own = root === null ? null : byReal(probe, root) ?? ownTree(root, found.roots)
+  }
+  const trees: Trees = { ...found, own, reals, isFromGit: listed !== null }
   worktrees.set(cwd, trees)
   return trees
 }
@@ -313,10 +487,16 @@ const keyOf = (one: { root: string; ticket: string; at: number }) => `${under(on
 
 /** A listed marker: its tree root, its ticket and its time. */
 type Found = { root: string; ticket: string; at: number }
-/** The markers to draw, in order, and the signature the check compares (N4). */
-function pick(found: Found[], trees: Trees, left: number): { picked: Found[]; signature: string } {
-  const picked = order(found.map(one => ({ ...one, tree: one.root, since: one.at })), trees.own).slice(0, MAX_ROWS)
-  return { picked, signature: `${picked.map(keyOf).join('\n')}\n#${found.length - picked.length}\n#${left}` }
+/**
+ * The markers to draw, in order, and the signature the check compares (N4):
+ * only markers of claimed trees are drawn (s6qg Q1); the others are counted.
+ */
+function pick(found: Found[], trees: Trees, left: number, claims: ReadonlySet<string>): { picked: Found[]; others: Found[];
+  signature: string } {
+  const mine = found.filter(one => claims.has(one.root))
+  const others = found.filter(one => !claims.has(one.root))
+  const picked = order(mine.map(one => ({ ...one, tree: one.root, since: one.at })), trees.own).slice(0, MAX_ROWS)
+  return { picked, others, signature: `${picked.map(keyOf).join('\n')}\n#${mine.length - picked.length}\n#${left}\n#${others.length}` }
 }
 
 /**
@@ -324,47 +504,51 @@ function pick(found: Found[], trees: Trees, left: number): { picked: Found[]; si
  * newest, ticket), then at most MAX_ROWS markers are read; the rest only
  * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
  */
-async function snapshot($: EngineInterface, trees: Trees, list: Lister): Promise<{ rows: Snapshot[]; hidden: { markers: number; trees: number };
-  listed: string; scan: Scan }> {
+async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = false): Promise<{ rows: Snapshot[];
+  hidden: { markers: number; trees: number; others: number; otherTickets: string[] }; listed: string; scan: Scan }> {
   const scan = scanned(trees)
   const answered = new Set<string>()
   const found = await markersOf(list, scan.roots, answered)
-  const { picked, signature: listed } = pick(found, trees, scan.left)
-  const facts: Scan = { status: 'ok', trees: answered, unread: new Set(),
-    paths: new Set(found.map(one => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))) }
+  const claims = await claim($, trees, found, isSub)
+  const { picked, others, signature: listed } = pick(found, trees, scan.left, claims)
+  const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
+  const facts: Scan = { status: 'ok', trees: answered, unread: new Set(), paths: new Set(found.map(pathOf)) }
+  const hidden = { markers: found.length - others.length - picked.length, trees: scan.left, others: others.length,
+    otherTickets: [...new Set(others.map(one => one.ticket))].sort().slice(0, MAX_ROWS) }
   for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
   for (const marker of lateDirs.keys()) if (!facts.paths.has(marker)) lateDirs.delete(marker)
-  if (found.length === 0) return { rows: [], hidden: { markers: 0, trees: scan.left }, listed, scan: facts }
+  if (picked.length === 0) return { rows: [], hidden, listed, scan: facts }
   const { startedAt } = await $.session.usage()
   const now = await $.clock.now()
   const rows: Snapshot[] = []
   for (const one of picked) {
-    const row = await rowOf($, list, one, startedAt, now, trees.reals.get(one.root) ?? one.root).catch((err: unknown) => {
+    const row = await rowOf($, list, one, startedAt, now, trees.reals.get(one.root) ?? one.root).then(
+      made => ({ ...made, isOtherTree: one.root !== trees.own }), (err: unknown) => {
       $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
       return null
     })
     if (row !== null) rows.push(row)
     else facts.unread.add(under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))
   }
-  return { rows, hidden: { markers: found.length - picked.length, trees: scan.left }, listed, scan: facts }
+  return { rows, hidden, listed, scan: facts }
 }
 
 /** Never throws: a failed discovery or read draws nothing rather than a stale row. */
-async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($)): Promise<void> {
+async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<void> {
   const next = await (async () => {
-    const at = trees ?? (await discover($))
+    const at = trees ?? (await discover($, isSub))
     lastTrees = at
-    return snapshot($, at, list)
+    return snapshot($, at, list, isSub)
   })().catch((err: unknown) => {
     $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
-    return { rows: [] as Snapshot[], hidden: { markers: 0, trees: 0 }, listed: null,
-      scan: { status: 'failed', trees: new Set(), paths: new Set(), unread: new Set() } as Scan }
+    return { rows: [] as Snapshot[], hidden: { markers: 0, trees: 0, others: 0, otherTickets: [] as string[] }, listed: null,
+      scan: NO_SCAN('failed') }
   })
   lastListed = next.listed
   lastScan = next.scan
   await update($, rowsAtom, () => next.rows)
   await update($, hiddenAtom, () => next.hidden)
-  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees) !== null)
+  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null)
 }
 
 /** Starts the check when a row or the more-row is drawn (round 3 R3-3), stops it when neither is. */
@@ -374,7 +558,7 @@ function watch($: EngineInterface, isDrawn: boolean): void {
     check = null
   } else if (check === null) {
     check = $.clock.every(CHECK_MS, () => void stale($).catch(() => {
-      lastScan = { status: 'failed', trees: new Set(), paths: new Set(), unread: new Set() }
+      lastScan = NO_SCAN('failed')
       return update($, rowsAtom, () => [])
     }))
   }
@@ -392,12 +576,16 @@ function watch($: EngineInterface, isDrawn: boolean): void {
 async function stale($: EngineInterface): Promise<void> {
   const rows = await read($, rowsAtom)
   const hidden = await read($, hiddenAtom)
-  if (rows.length === 0 && moreText(hidden.markers, hidden.trees) === null) return watch($, false)
+  if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null) return watch($, false)
   if (lastTrees === null) return refresh($)
   const trees = lastTrees
   const list = lister($)
   const scan = scanned(trees)
-  let isChanged = lastListed === null || pick(await markersOf(list, scan.roots), trees, scan.left).signature !== lastListed
+  // A9i: the timer reads the session's own directory; a `/cd` with no tool call is claimed here.
+  mainCwd = await $.session.cwd().catch(() => mainCwd)
+  const found = await markersOf(list, scan.roots)
+  const claims = await claim($, trees, found)
+  let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
   for (const row of rows) {
     if (isChanged) break
     if (row.planDir === '') continue
@@ -432,6 +620,10 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     worktrees.clear()
     lateDirs.clear()
+    folderReals.clear()
+    storedFor = null
+    restoredFor = null
+    mainCwd = e.cwd
     if (options.pane === true) {
       await $.command
         .register({
@@ -446,15 +638,40 @@ export const register: Register = (on, options) => {
 
   on('tool.call', async ($, e, next) => {
     if (!WRITERS.has(e.tool)) return next(e)
+    // The hook's own cwd: a subagent's in a subagent's call (d.ts `$.session.cwd`), for its relative paths.
+    const cwd = await $.session.cwd().catch(() => null)
+    const from = await $.clock.now()
     const result = await next(e)
-    await refresh($)
+    const to = await $.clock.now()
+    remember(windows, [{ from, to }], MAX_WINDOWS, () => false)
+    remember(turnWindows, [{ from, to }], MAX_TURN, () => false)
+    const isMain = (e as { agentId?: unknown }).agentId === undefined
+    if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
+    // Q3: a file tool's path (relative to the cwd read before the call) or a Bash call's changed files claim their trees.
+    const input = e as { file_path?: unknown; notebook_path?: unknown }
+    const path = e.tool === 'NotebookEdit' ? input.notebook_path : e.tool === 'Bash' ? undefined : input.file_path
+    const paths = typeof path === 'string' && path !== '' && (path.startsWith('/') || cwd !== null) ? [resolvePath(cwd ?? '/', path)] : []
+    // Lane finding 5: changed files are folded like a tool's path (`..`, `//`).
+    if (e.tool === 'Bash' && 'result' in result) paths.push(...changedFiles(result.result).map(one => resolvePath('/', one)))
+    remember(folders, paths.map(parentOf), MAX_FOLDERS, (a, b) => a === b)
+    remember(turnFolders, paths.map(parentOf), MAX_TURN, (a, b) => a === b)
+    await refresh($, null, lister($), !isMain)
     return result
   })
 
   on('turn.complete', async ($, e, next) => {
     worktrees.clear()
     lateDirs.clear()
-    await refresh($)
+    folderReals.clear()
+    const isMain = (e as { agentId?: unknown }).agentId === undefined
+    if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
+    await refresh($, null, lister($), !isMain)
+    // B4a2: the main turn's end placed this turn's folders and spans against a fresh git list; the last 64 carry
+    // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn.
+    if (isMain && lastTrees?.isFromGit === true) {
+      turnFolders.splice(0)
+      turnWindows.splice(0)
+    }
     return next(e)
   })
 
@@ -467,7 +684,7 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const rows = await read($, rowsAtom)
     const hidden = await read($, hiddenAtom)
-    const more = moreText(hidden.markers, hidden.trees)
+    const more = moreText(hidden.markers, hidden.trees, hidden.others ?? 0)
     // N3: the more-row is drawn even when no other row is.
     if (options.band !== true || (rows.length === 0 && more === null) || e.props.hasSurvey) return next(e)
     // A settings change re-registers the module without a session.start: the
@@ -515,18 +732,23 @@ export const register: Register = (on, options) => {
     }
     if (rows.length === 0) {
       const hidden = await read($, hiddenAtom)
-      const more = moreText(hidden.markers, hidden.trees)
+      const more = moreText(hidden.markers, hidden.trees, hidden.others ?? 0)
       const unread = lastScan.unread.size
       const line = lastScan.status === 'none' ? 'No scan has run since the mod loaded.'
         : unread > 0 ? `${unread} ${unread === 1 ? 'marker' : 'markers'} could not be read.`
         : more !== null ? `No row drawn: ${more}` : 'No shawarma marker in the last scan.'
-      return <Text dimColor>{line}</Text>
+      const away = hidden.otherTickets ?? []
+      return <Text dimColor>{clean(away.length === 0 ? line : `${line}\nIn other worktrees: ${away.map(one => clean(one)).join(', ')}`, true)}</Text>
     }
     const row = picked ?? rows[0]!
     // N2: the others with their labels, never called live.
     const others = rows.filter(one => one !== row)
       .map(one => `${one.ticket}${one.isStale ? ' (stale)' : one.isEarlier ? ' (earlier session)' : ''}`)
-    const header = others.length === 0 ? null : clean(`Other tickets: ${others.join(', ')}`)
+    const away = (await read($, hiddenAtom)).otherTickets ?? []
+    // B6d: each name with no line break, so a ticket cannot open a Markdown line of its own.
+    const lines2 = [...(others.length === 0 ? [] : [`Other tickets: ${others.map(one => clean(one)).join(', ')}`]),
+      ...(away.length === 0 ? [] : [`In other worktrees: ${away.map(one => clean(one)).join(', ')}`])]
+    const header = lines2.length === 0 ? null : clean(lines2.join('\n'), true)
     const label = labelOf(row)
     const problemLine = (problem: string) => {
       const line = <Text dimColor>{clean(`${label}shawarma: ${row.ticket}: ${problem} (${row.marker})`)}</Text>

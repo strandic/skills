@@ -1,13 +1,13 @@
 ---
 # skills-s6qg
 title: 'shawarma-companion: each session shows the runs of every worktree, not only its own'
-status: todo
+status: in-progress
 type: feature
 priority: normal
 tags:
     - shawarma
 created_at: 2026-11-20T06:43:34Z
-updated_at: 2026-11-20T06:43:34Z
+updated_at: 2026-11-20T12:38:44Z
 ---
 
 Every session in a repo draws the runs of all its worktrees. `discover()` (hooks/register.tsx) runs `git worktree list` from `$.session.cwd()` and scans every tree, up to MAX_TREES. `ownTree()` finds the session's own tree, but it is only used to put that tree's rows first. Nothing filters the other trees out. So two sessions, each in its own worktree, both show both runs.

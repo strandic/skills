@@ -13,6 +13,8 @@ export type Snapshot = {
   since: number
   /** True unless the marker's modification time is more than 1 ms past this session's start (D5: a row reads current only then). */
   isEarlier: boolean
+  /** s6qg Q2: true when the row's tree is claimed but is not the session's current tree: the row reads `other tree: `. */
+  isOtherTree?: boolean
   /** Q5: true when the marker was not rewritten for 12 h or is dated more than 1 min ahead; the check re-tests it on the clock. */
   isStale: boolean
   /** Lines of decisions.md that start with a date and `|`: the row's count. */
@@ -32,6 +34,6 @@ export type Snapshot = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'shawarma-companion': { rows: Snapshot[]; chosen: string | null; hidden: { markers: number; trees: number } }
+    'shawarma-companion': { rows: Snapshot[]; chosen: string | null; hidden: { markers: number; trees: number; others?: number; otherTickets?: string[] }; claims: string[] }
   }
 }
