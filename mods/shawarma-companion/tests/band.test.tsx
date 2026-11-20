@@ -2637,7 +2637,7 @@ describe('s6qg session-scoped rows', () => {
     world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(V, 'v-1')]), ROOT, [], new Set(), { claimed: [], trees: [ROOT, WT, V], store })
     await Promise.all([write($, `${WT}/a`, 'x'), write($, `${V}/b`, 'x')])
     await bash($, 'true')
-    expect((store.get(`claims:${SESSION}`) as any).trees.slice().sort()).toEqual([ROOT, V, WT])
+    expect((store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort()).toEqual([ROOT, V, WT])
   })
 
   test('S26 lane A9i a /cd with no tool call: the 15 s check claims the new root', { options: ON }, async ($, on) => {
@@ -2668,9 +2668,9 @@ describe('s6qg session-scoped rows', () => {
     const store = new Map<string, unknown>()
     world(on, two(), ROOT, [], new Set(), { claimed: [], store })
     await write($, `${WT}/a`, 'x')
-    const saved = JSON.parse(JSON.stringify(store.get(`claims:${SESSION}`)))
-    expect(saved.trees.slice().sort()).toEqual([ROOT, WT])
-    expect(saved.at).toBe(STARTED + 120_000)
+    const saved = JSON.parse(JSON.stringify(store.get(`claims:${SESSION}`) ?? null))
+    expect(saved?.trees?.slice().sort()).toEqual([ROOT, WT])
+    expect(saved?.at).toBe(STARTED + 120_000)
   })
 
   test('S30 Q4 prune: at most 100 other keys examined per id; an entry dated past now + 30 days deleted', { options: ON }, async ($, on) => {
@@ -2702,7 +2702,7 @@ describe('s6qg session-scoped rows', () => {
     await Promise.all([$.tool.call({ tool: 'Write', file_path: `${V}/b`, content: 'x', agentId: 'ag' } as any), turnEnd($)])
     now = ROOT
     await bash($, 'true')
-    expect((store.get(`claims:${SESSION}`) as any).trees.slice().sort()).toEqual([ROOT, V, WT])
+    expect((store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort()).toEqual([ROOT, V, WT])
   })
 
   test('S33 lane B7a git spells the roots through a link; the cwd is real: its tree is claimed and current', { options: ON }, async ($, on) => {

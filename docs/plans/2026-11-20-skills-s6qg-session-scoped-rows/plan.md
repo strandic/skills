@@ -264,3 +264,4 @@ unruled: none
 
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
 |---|---|---|---|---|---|
+| W1-1 | 2026-11-20 | default | §4 | S25, S32 read `store.get(…).trees` and S29 `JSON.parse(JSON.stringify(store.get(…)))` → the same reads null-safe (`?.`, `?? null`), expectations unchanged | On the base modules the store holds no entry, so these three reds threw a TypeError or SyntaxError before reaching their assertion; the run's tests-first rule needs each red to fail at its own assertion. Executed: 69 fail, all AssertionError. |
