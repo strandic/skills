@@ -1,0 +1,4 @@
+commit 08b188c
+command: claude-personal -p --plugin-dir mods/shawarma-companion --allowedTools Bash --output-format json "1) Bash: cd .worktrees/wt 2) Bash: cd R" in a scratch repo R with worktree .worktrees/wt
+session 3f3e9c84-7018-42d0-ac2e-834dd5109010
+store shawarma-companion_inline-745bc5609816.json claims:3f3e9c84-7018-42d0-ac2e-834dd5109010 = {"trees": ["R", "R/.worktrees/wt"], "at": 1795187407014}  (R = /private/tmp/claude-502/-Users-jonathan-Documents-strandic-skills/d2daf19c-9fb4-43fe-b8a1-edd716fde3f7/scratchpad/s6qg/g4-final/R)
