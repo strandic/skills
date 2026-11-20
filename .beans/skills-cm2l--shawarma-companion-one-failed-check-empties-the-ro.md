@@ -30,3 +30,11 @@ Spike on `1eed2e3` (sketch `docs/plans/2026-11-20-skills-cm2l-check-survives-a-f
 - **Q5 (RULING)** the `0 decisions` such a row shows while decisions.md holds rulings: fold or new ticket.
 - **Q6 (RULING)** the four existing tests whose expectations Q1 flips, and the pane's `<n> markers could not be read.` line removed.
 - Defaults: D1 version 0.3.1; D2 new ticket for a refused `clock.every` period (the check stops for good, the band keeps old content; lane A11a); D3 a note on skills-y1gt (a hanging read keeps the old count while pending; lane A8).
+
+## Plan ending: brief (2026-11-20)
+
+Q4–Q6 and D1–D3 ruled "go with reco" (decisions.md). Brief: `docs/plans/2026-11-20-skills-cm2l-check-survives-a-failed-pass/plan.md`. Re-spiked on the ruled design: sketch `291 pass` / `0 fail`; base modules with the final tests `273 pass` / `18 fail`. New beans skills-6loo (Q5) and skills-vtd4 (D2); note on skills-y1gt (D3).
+
+`freeze_check.py docs/plans/2026-11-20-skills-cm2l-check-survives-a-failed-pass/plan.md --repo .worktrees/cm2l-spike --listing <grep -n '^- Lesson (' docs/plans/lessons.md, empty> --ticket <this bean>`: `PASS`.
+
+unruled: none
