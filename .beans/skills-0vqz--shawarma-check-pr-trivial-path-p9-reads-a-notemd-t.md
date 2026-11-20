@@ -1,13 +1,13 @@
 ---
 # skills-0vqz
 title: 'shawarma check_pr trivial path: P9 reads a note.md ticket as ''note'', P4 wants rulings in bold — note form is never stated'
-status: todo
+status: completed
 type: bug
 priority: normal
 tags:
     - shawarma
 created_at: 2026-11-17T20:00:29Z
-updated_at: 2026-11-17T20:00:29Z
+updated_at: 2026-11-20T15:38:59Z
 ---
 
 Handoff from a project using strandic 0.10.1, received 2026-11-17. On the trivial path, `check_pr.py` reports two failures that come from how the plan note is written, not from anything wrong with the PR. The skill never tells the author the form the checker expects. The project hit these false failures on three trivial PRs in a row, and each time disclosed them as false under Verification.
@@ -45,3 +45,8 @@ No wrong output reaches anyone. But each false failure makes the author disclose
 The handoff's repro for item 2 arrived partly garbled; it is restated above from the checker's code, not quoted.
 
 **Filed 2026-11-17, for the next retro.** The skill changes only at a retro.
+
+
+## Fixed in 0.11.0 (2026-11-20)
+
+Round 11 (pull request 9): check_pr reads `X1 to Xn` in the authority clause as a range, takes a trivial note's ticket id from its `# <id> <title>` first line, knows an id that starts a line of the note, and parses `## Plan (<date>, trivial)` headings. Red tests in test_checks.py.
