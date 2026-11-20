@@ -1608,7 +1608,8 @@ describe('lane 3a round 3 fixes', () => {
     await $.ui.press({ plugin: 'shawarma-companion', key: 'row:a' })
     fail.add(`read ${ROOT}/.shawarma/active-a`)
     await bash($, 'true')
-    expect(await paneText($)).toBe('a: could not be read')
+    // cm2l Q1: the unread marker is a problem row, chosen and drawn as one.
+    expect(await paneText($)).toBe('shawarma: a: could not be read (/repo/.shawarma/active-a)\nOther tickets: b')
   })
 
   test('R3-1 the chosen marker deleted, every tree scanned: "no longer active"', { options: ON }, async ($, on) => {
@@ -1901,17 +1902,17 @@ describe('review round 2 (R1, R2, mutants)', () => {
     expect(resolves(n0)).toEqual([`stat ${ROOT}/docs/plans/p resolve`])
   })
 
-  test('R2 the only marker could not be read: the pane says so', { options: ON }, async ($, on) => {
+  test('R2 the only marker could not be read: the pane says so (cm2l Q1: as its row)', { options: ON }, async ($, on) => {
     world(on, new Map([markerAt(ROOT, 'u-1', 'u-1\ntrivial\n', STARTED + 5)]), ROOT, [], new Set([`read ${ROOT}/.shawarma/active-u-1`]), { trees: [ROOT] })
     await bash($, 'true')
-    expect(await paneText($)).toBe('1 marker could not be read.')
+    expect(await paneText($)).toBe('shawarma: u-1: could not be read (/repo/.shawarma/active-u-1)')
   })
 
-  test('R2 two markers could not be read: the count', { options: ON }, async ($, on) => {
+  test('R2 two markers could not be read: both rows (cm2l Q1)', { options: ON }, async ($, on) => {
     world(on, new Map([markerAt(ROOT, 'u-1', 'u-1\ntrivial\n', STARTED + 5), markerAt(ROOT, 'u-2', 'u-2\ntrivial\n', STARTED + 6)]), ROOT, [],
       new Set([`read ${ROOT}/.shawarma/active-u-1`, `read ${ROOT}/.shawarma/active-u-2`]), { trees: [ROOT] })
     await bash($, 'true')
-    expect(await paneText($)).toBe('2 markers could not be read.')
+    expect(await paneText($)).toBe('shawarma: u-2: could not be read (/repo/.shawarma/active-u-2)\nOther tickets: u-1')
   })
 
   test('isInside and ownTree: a / boundary; a root of / holds every path (mutants d6, d10)', async () => {
@@ -2051,7 +2052,7 @@ describe('review round 3 (R3)', () => {
     expect(await band($)).toEqual(['shawarma: s-1: plan dir outside its tree'])
   })
 
-  test('21 markers, the 20 picked unreadable, one hidden: the unread sentence comes first (lane r2 L3, mutant m10)', { options: ON }, async ($, on) => {
+  test('21 markers, the 20 picked unreadable, one hidden: 20 problem rows, then the more-row (cm2l Q1)', { options: ON }, async ($, on) => {
     const files: Files = new Map()
     const fail = new Set<string>()
     for (let i = 0; i < 21; i += 1) {
@@ -2061,8 +2062,10 @@ describe('review round 3 (R3)', () => {
     }
     world(on, files, ROOT, [], fail, { trees: [ROOT] })
     await bash($, 'true')
-    expect(await band($)).toEqual(['+1 more not shown'])
-    expect(await paneText($)).toBe('20 markers could not be read.')
+    expect(await band($)).toEqual([
+      ...Array.from({ length: 20 }, (_, i) => `shawarma: u-${String(20 - i).padStart(2, '0')}: could not be read`), '+1 more not shown'])
+    expect(await paneText($)).toBe('shawarma: u-20: could not be read (/repo/.shawarma/active-u-20)\nOther tickets: '
+      + Array.from({ length: 19 }, (_, i) => `u-${String(19 - i).padStart(2, '0')}`).join(', '))
   })
 })
 
@@ -2308,7 +2311,7 @@ describe('review round 5 (R5, mutants)', () => {
     expect(await band($)).toEqual(['h-1 — p · run W1 · since 14:00 · 0 decisions'])
   })
 
-  test('N11 a not-readable row: the 15 s check asks whether it exists and starts no refresh (no read)', { options: ON }, async ($, on) => {
+  test('N11 a not-readable row: the 15 s check starts a refresh, real path asked before the list (cm2l Q4)', { options: ON }, async ($, on) => {
     const log: string[] = []
     const clock = world(on, new Map([markerAt(ROOT, 'u-1', 'docs/plans/later\nrun W1\n', STARTED + 5), [`${LATER}/plan.md`, { text: '# u-1\n', mtimeMs: 1 }]]),
       ROOT, log, new Set([`list ${LATER}`]), { trees: [ROOT] })
@@ -2316,7 +2319,11 @@ describe('review round 5 (R5, mutants)', () => {
     expect(await band($)).toEqual([`u-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
     const n0 = log.length
     await clock.advance(15_000)
-    expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([])
+    const pass = log.slice(n0)
+    expect(pass.filter(line => line.startsWith('read '))).toEqual([`read ${ROOT}/.shawarma/active-u-1`])
+    expect(pass.filter(line => line.endsWith(LATER) || line.endsWith(`${LATER} resolve`)))
+      .toEqual([`stat ${LATER} resolve`, `list ${LATER}`, `exists ${LATER}`])
+    expect(await band($)).toEqual([`u-1 · later · run W1 · since 14:00 · 0 decisions · plan dir not readable: ${LATER}`])
   })
 
   test('N22 a not-readable folder made listable through a link out: the 15 s check does not list it', { options: ON }, async ($, on) => {
@@ -3202,5 +3209,183 @@ describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped, 
     await bash($, 'true')
     await clock.advance(10_000)
     expect(fired.length).toBe(0)
+  })
+})
+
+describe('cm2l: the 15 s check survives a failed pass', () => {
+  const DEC = `${DIR}/decisions.md`
+  const dec = (n: number, at: number): [string, File] =>
+    [DEC, { text: Array.from({ length: n }, (_, i) => `2026-11-20 | Q${i + 1} RULING | A | x\n`).join(''), mtimeMs: at }]
+  const pane = async ($: any): Promise<string> => {
+    const view = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane', requestId: 'shawarma-companion',
+      props: {} } as any)
+    return (await view.findAll({ type: 'Text' })).map((one: any) => one.text as string).join('\n')
+  }
+
+  test('C1 decisions.md fails to read once in the check: a problem row, then the full row within 15 s', { options: ON }, async ($, on) => {
+    const fail = new Set<string>()
+    const files = new Map([plan, dec(1, 1)])
+    const clock = world(on, files, ROOT, [], fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toBe('skills-x — the thing · run W1 · since 14:01 · 1 decision')
+    files.set(...dec(2, 2))
+    fail.add(`read ${DEC}`)
+    await clock.advance(15_000)
+    expect(await bandText($)).toBe('shawarma: skills-x: could not be read')
+    fail.delete(`read ${DEC}`)
+    await clock.advance(15_000)
+    expect(await bandText($)).toBe('skills-x — the thing · run W1 · since 14:01 · 2 decisions')
+  })
+
+  test('C2 a read that keeps failing: the problem row stays, read again once each 15 s (Q2)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const fail = new Set<string>()
+    const files = new Map([plan, dec(1, 1)])
+    const clock = world(on, files, ROOT, log, fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    files.set(...dec(2, 2))
+    fail.add(`read ${DEC}`)
+    await clock.advance(15_000)
+    const n0 = log.length
+    await clock.advance(60_000)
+    expect(log.slice(n0).filter(line => line === `read ${DEC}`).length).toBe(4)
+    expect(await bandText($)).toBe('shawarma: skills-x: could not be read')
+  })
+
+  test('C3 the check\'s exists rejects once on a not-found row: the check goes on and follows a later marker change', { options: ON }, async ($, on) => {
+    const st = { boom: false }
+    const files = new Map<string, File>()
+    const clock = world(on, files, ROOT, [], new Set(), { hold: { 'fs.exists': (e: any) =>
+      (st.boom && e.path === DIR ? (st.boom = false, Promise.reject(new Error('EACCES'))) : undefined) } })
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    expect(await bandText($)).toMatch(/plan dir not found/)
+    st.boom = true
+    await clock.advance(15_000)
+    // The row as before the failed call: the step and the problem, both hand-written (lane flag on a copied prefix).
+    expect(await bandText($)).toMatch(/· run W1 ·/)
+    expect(await bandText($)).toMatch(/· plan dir not found: \/repo\/docs\/plans\/2026-10-16-skills-x-thing$/)
+    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 200_000 })
+    await clock.advance(15_000)
+    expect(await bandText($)).toMatch(/· run W2 ·/)
+  })
+
+  test('C4 (skills-0wsk) a check that throws: no row, no more-row, the pane says so; both back within 15 s', { options: ON }, async ($, on) => {
+    const st = { boom: false }
+    const files = new Map([plan, [`${WT}/.shawarma/active-skills-y`, { text: 'skills-y\ntrivial\n', mtimeMs: STARTED + 70_000 }] as [string, File]])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [ROOT], hold: { 'clock.now': () =>
+      (st.boom ? (st.boom = false, Promise.reject(new Error('clock failed'))) : undefined) } })
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    const BIG = { ...BAND, maxRows: 8, scroll: { offset: 0, bodyRows: 8 } }
+    const band = async (): Promise<string[]> =>
+      (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
+        .findAll({ type: 'Text' })).map((one: any) => one.text as string)
+    await clock.advance(15_000)
+    expect(await band()).toEqual(['skills-x — the thing · run W1 · since 14:01 · 0 decisions', '1 run in another worktree'])
+    st.boom = true
+    await clock.advance(15_000)
+    expect(await band()).toEqual([])
+    expect(await pane($)).toBe('Shawarma state could not be read.')
+    await clock.advance(15_000)
+    expect(await band()).toEqual(['skills-x — the thing · run W1 · since 14:01 · 0 decisions', '1 run in another worktree'])
+  })
+
+  test('C5 a refresh that fails inside the check: the check goes on and draws the row again', { options: ON }, async ($, on) => {
+    const fail = new Set<string>()
+    const files = new Map([plan])
+    const clock = world(on, files, ROOT, [], fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 200_000 })
+    fail.add('usage')
+    await clock.advance(15_000)
+    expect(await bandText($)).toBe(undefined)
+    fail.delete('usage')
+    await clock.advance(15_000)
+    expect(await bandText($)).toMatch(/^skills-x — the thing · run W2 ·/)
+  })
+
+  for (const site of ['marker', 'plan.md', 'exists'] as const) {
+    test(`C6 ${site} fails once in the check: the problem row, then the full row within 15 s (Q1, lane A1)`, { options: ON }, async ($, on) => {
+      const fail = new Set<string>()
+      const st = { boom: false }
+      const files = new Map([plan, dec(1, 1)])
+      const clock = world(on, files, ROOT, [], fail, { hold: { 'fs.exists': (e: any) =>
+        (st.boom && e.path === DIR ? (st.boom = false, Promise.reject(new Error('EACCES'))) : undefined) } })
+      await write($, MARKER, MARKER_TEXT('run W1'))
+      files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 125_000 })
+      files.set(`${DIR}/plan.md`, { text: '# skills-x — the new thing\n', mtimeMs: 3 })
+      if (site === 'marker') fail.add(`read ${MARKER}`)
+      if (site === 'plan.md') fail.add(`read ${DIR}/plan.md`)
+      if (site === 'exists') { fail.add(`list ${DIR}`); st.boom = true }
+      await clock.advance(15_000)
+      expect(await bandText($)).toBe('shawarma: skills-x: could not be read')
+      fail.clear()
+      await clock.advance(15_000)
+      expect(await bandText($)).toBe('skills-x — the new thing · run W2 · since 14:02 · 1 decision')
+    })
+  }
+
+  test('C7 labels on an unreadable row: other tree, earlier session (lane A2)', { options: ON }, async ($, on) => {
+    const Y = `${WT}/.shawarma/active-skills-y`
+    const Z = `${ROOT}/.shawarma/active-skills-z`
+    const fail = new Set<string>([`read ${Y}`, `read ${Z}`])
+    const files = new Map<string, File>([[Y, { text: 'skills-y\ntrivial\n', mtimeMs: STARTED + 70_000 }],
+      [Z, { text: 'skills-z\ntrivial\n', mtimeMs: STARTED - 60_000 }]])
+    world(on, files, ROOT, [], fail)
+    await bash($, 'true')
+    const BIG = { ...BAND, maxRows: 8, scroll: { offset: 0, bodyRows: 8 } }
+    const band = (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
+      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
+    expect(band).toEqual(['earlier session: shawarma: skills-z: could not be read', 'other tree: shawarma: skills-y: could not be read'])
+  })
+
+  test('C8 the command opens the pane on an unreadable first row (lane A10)', { options: ON }, async ($, on) => {
+    const fail = new Set<string>()
+    world(on, new Map([plan]), ROOT, [], fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    fail.add(`read ${MARKER}`)
+    await bash($, 'true')
+    await $.command.run({ command: 'shawarma-companion', args: '' } as any)
+    expect(await pane($)).toBe(`shawarma: skills-x: could not be read (${MARKER})`)
+  })
+
+  for (const n of [20, 40]) {
+    test(`C9 cost: ${n} unreadable trivial markers, one tree: 21 fs calls per check pass (Q2, lane A9)`, { options: ON }, async ($, on) => {
+      const log: string[] = []
+      const files: Files = new Map()
+      const fail = new Set<string>()
+      for (let i = 0; i < n; i += 1) files.set(`${ROOT}/.shawarma/active-c-${i}`, { text: `c-${i}\ntrivial\n`, mtimeMs: STARTED + 100 + i })
+      const clock = world(on, files, ROOT, log, fail, { trees: [ROOT] })
+      for (let i = 0; i < n; i += 1) fail.add(`read ${ROOT}/.shawarma/active-c-${i}`)
+      await bash($, 'true')
+      await clock.advance(15_000)
+      const n0 = log.length
+      await clock.advance(60_000)
+      // Each pass: one listing of the tree's .shawarma, then one marker read per drawn row, at most 20 rows.
+      expect((log.length - n0) / 4).toBe(1 + 20)
+    })
+  }
+
+  test('C10 the plan dir fails to list once in the check: the full row within 15 s (Q4, lane A1+)', { options: ON }, async ($, on) => {
+    const fail = new Set<string>()
+    const files = new Map([plan, dec(1, 1)])
+    const clock = world(on, files, ROOT, [], fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    files.set(...dec(2, 2))
+    fail.add(`list ${DIR}`)
+    await clock.advance(15_000)
+    expect(await bandText($)).toMatch(/· plan dir not readable: \/repo\/docs\/plans\/2026-10-16-skills-x-thing$/)
+    fail.clear()
+    await clock.advance(15_000)
+    expect(await bandText($)).toBe('skills-x — the thing · run W1 · since 14:01 · 2 decisions')
+  })
+
+  test('G1 a refresh that fails with no check running starts none', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const fail = new Set<string>(['usage'])
+    const clock = world(on, new Map([plan]), ROOT, log, fail)
+    await write($, MARKER, MARKER_TEXT('run W1'))
+    const n0 = log.length
+    await clock.advance(60_000)
+    expect(log.length).toBe(n0)
   })
 })
