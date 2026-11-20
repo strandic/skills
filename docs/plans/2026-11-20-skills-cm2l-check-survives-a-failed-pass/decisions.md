@@ -1,0 +1,3 @@
+2026-11-20 | Q1 RULING | A: a row whose files fail to read is drawn as a problem row `shawarma: <ticket>: could not be read`, redrawn in full once they read again; the 15 s check keeps running; reco A | never shows a value that may be out of date, and the active run stays visible
+2026-11-20 | Q2 RULING | A: no limit; while a problem row from Q1 is drawn, the check re-reads it every 15 s for as long as the read fails; reco A | same cost as a drawn row, bounded by the row limit; one timer path
+2026-11-20 | Q3 RULING | A: fold skills-0wsk; a check that fails as a whole clears the rows and the other-runs counts, marks the scan failed, and keeps checking every 15 s; reco A | same handler, same lines; the 0wsk fix alone would stop the check on the base
