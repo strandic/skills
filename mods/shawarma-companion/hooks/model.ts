@@ -21,17 +21,51 @@ export function isStaleAt(at: number, now: number): boolean {
  * The more-row (Q6, round 2 N3): `+<n> more not shown` for listed markers not
  * read, `<k> worktree(s) not scanned` for trees past MAX_TREES; null when both are 0.
  */
-export function moreText(markers: number, trees: number): string | null {
+export function moreText(markers: number, trees: number, others = 0): string | null {
   const parts = [
     ...(markers > 0 ? [`+${markers} more not shown`] : []),
+    ...(others > 0 ? [`${others} ${others === 1 ? 'run in another worktree' : 'runs in other worktrees'}`] : []),
     ...(trees > 0 ? [`${trees} ${trees === 1 ? 'worktree' : 'worktrees'} not scanned`] : []),
   ]
   return parts.length === 0 ? null : parts.join(' · ')
 }
 
-/** The label a row's title carries: `stale: `, `earlier session: ` or nothing (Q5 order). */
-export function labelOf(row: { isStale?: boolean; isEarlier: boolean }): string {
-  return row.isStale === true ? 'stale: ' : row.isEarlier ? 'earlier session: ' : ''
+/**
+ * The label a row's title carries: `other tree: ` when the row is in a claimed
+ * tree that is not the current one (s6qg Q2), then `stale: `, `earlier session: `
+ * or nothing (Q5 order).
+ */
+export function labelOf(row: { isStale?: boolean; isEarlier: boolean; isOtherTree?: boolean }): string {
+  const where = row.isOtherTree === true ? 'other tree: ' : ''
+  return `${where}${row.isStale === true ? 'stale: ' : row.isEarlier ? 'earlier session: ' : ''}`
+}
+
+/** One session's saved claims in the mod's store (s6qg Q4): the tree roots and when they were last written. */
+export type Claimed = { trees: string[]; at: number }
+/** Q4: a store entry untouched for this long is pruned. */
+export const CLAIM_TTL_MS = 30 * 24 * 3600 * 1000
+/** The store key of a session's claims. */
+export const claimKey = (sessionId: string) => `claims:${sessionId}`
+
+/** A stored claims entry, or null when the value has another shape (an older or foreign write). */
+export function parseClaimed(value: unknown): Claimed | null {
+  if (value === null || typeof value !== 'object') return null
+  const { trees, at } = value as { trees?: unknown; at?: unknown }
+  if (!Array.isArray(trees) || !trees.every(tree => typeof tree === 'string' && tree.startsWith('/'))) return null
+  return typeof at === 'number' && Number.isFinite(at) ? { trees: trees as string[], at } : null
+}
+
+/**
+ * s6qg Q3: the absolute paths a Bash call changed, from its result's internal
+ * `bashEditDiff.changedFiles`; empty when the field is absent or has another
+ * shape, so a change in it only claims less.
+ */
+export function changedFiles(result: unknown): string[] {
+  if (result === null || typeof result !== 'object') return []
+  const diff = (result as { bashEditDiff?: unknown }).bashEditDiff
+  if (diff === null || typeof diff !== 'object') return []
+  const files = (diff as { changedFiles?: unknown }).changedFiles
+  return Array.isArray(files) ? files.filter((file): file is string => typeof file === 'string' && file.startsWith('/')) : []
 }
 
 /** `name` under the folder `root`; a root of `/` gives `/<name>`. */
