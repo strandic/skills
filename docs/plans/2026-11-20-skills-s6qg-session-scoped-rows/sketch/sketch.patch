@@ -626,7 +626,7 @@ index 768acd6..3f97f20 100644
      const problemLine = (problem: string) => {
        const line = <Text dimColor>{clean(`${label}shawarma: ${row.ticket}: ${problem} (${row.marker})`)}</Text>
 diff --git a/mods/shawarma-companion/tests/band.test.tsx b/mods/shawarma-companion/tests/band.test.tsx
-index 48ebede..1981266 100644
+index 48ebede..56b121d 100644
 --- a/mods/shawarma-companion/tests/band.test.tsx
 +++ b/mods/shawarma-companion/tests/band.test.tsx
 @@ -45,7 +45,20 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
@@ -1279,7 +1279,7 @@ index 48ebede..1981266 100644
 +  })
 +
 +  test('S43 lane C6b3 git fails at the turn end: the turn\'s folders are kept and claim the worktree next turn', { options: ON }, async ($, on) => {
-+    const NEW = `${ROOT}/.worktrees/n`
++    const NEW = '/elsewhere/n'
 +    const trees = [ROOT, WT]
 +    const git: any = { claimed: [], trees }
 +    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), git)
