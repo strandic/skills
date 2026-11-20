@@ -32,3 +32,15 @@ The marker could record which session owns it. That is the strongest signal, but
 
 - A session started in the main checkout that then creates a worktree with git, without `EnterWorktree` or `cd`, claims nothing new. Is the write-based claim (item 4) needed for that case?
 - What should the band show when the session has claimed no tree that has a run: nothing, or only the more-row?
+
+## Design interview (2026-11-20)
+
+Rulings, from `docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/decisions.md`:
+
+- **Error directions.** Hiding one of the session's own runs under "other worktrees" tells the reader something false: that is the corrupting direction, and the rule never errs that way. Showing another session's run as a full row is noise (today's behaviour).
+- **Q1 RULING.** A session claims the worktree holding its project root and the one holding its working directory at every refresh, and keeps every claim. Full rows only for claimed trees; the others fold into the more-row. Owner: "Go with reco. It should put emphasis on the current worktree though".
+- **Q2 RULING.** The current tree is the one holding the working directory (else the project root's). Its rows come first; rows of other claimed trees carry a text label such as `other tree:`; grey keeps meaning stale or earlier session only. Owner: "Go with reco".
+- **Q3 RULING.** A Write, Edit or NotebookEdit into a tree claims it; a Bash call claims each tree in its changed-files list when that internal field is present and well-formed, else nothing. Owner: "Go with reco".
+- **Q4 RULING.** Claims survive `/clear`, and are saved in the mod's store under the session id so `--resume` restores them; entries untouched for 30 days are pruned. Owner: "Go with reco".
+
+Out of scope: the marker recording the session that wrote it (needs a skill-text change; retro candidate).
