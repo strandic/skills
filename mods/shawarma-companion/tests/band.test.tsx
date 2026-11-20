@@ -57,7 +57,11 @@ type Git = { trees?: string[]; extra?: Record<string, string>; records?: string[
   /** s6qg: the working directory `$.session.cwd()` answers, when it moves during the test (tool paths still resolve against `cwd`). */
   cwdNow?: () => string
   /** s6qg: what a Bash call's result carries as `bashEditDiff` (raw); default: `touch <abs>` answers `{ changedFiles: [<abs>] }`. */
-  bashDiff?: unknown }
+  bashDiff?: unknown
+  /** Run review (Q6): replace or stall the engine's answer to the named call; undefined passes it on. */
+  hold?: Record<string, (e: any) => Promise<unknown> | undefined>
+  /** Run review (Q6): awaited after the fake tool ran, before the call answers (a long call). */
+  after?: (e: any) => Promise<unknown> | undefined }
 const SESSION = 'sess-1'
 /** Porcelain as git prints it: `-z` ends each attribute with NUL and each record with one more; else newlines. */
 const render = (records: string[][], z: boolean) => z
@@ -66,8 +70,17 @@ const render = (records: string[][], z: boolean) => z
 const recordsOf = (trees: string[], extra: Record<string, string> = {}) =>
   trees.map(tree => [`worktree ${tree}`, 'HEAD 0123abcd', extra[tree] ?? 'branch refs/heads/x'])
 
-function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set(), git: Git = {}) {
+function world(on0: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<string> = new Set(), git: Git = {}) {
   let tick = STARTED + 60_000
+  const on = ((name: string, ...args: any[]) => {
+    const h = args[args.length - 1]
+    if (git.hold?.[name] !== undefined) {
+      args[args.length - 1] = async (...a: any[]) => { const r = await git.hold![name]!(a[1]); return r !== undefined ? r : h(...a) }
+    } else if (name === 'tool.call' && git.after !== undefined) {
+      args[args.length - 1] = async (...a: any[]) => { const r = await h(...a); await git.after!(a[1]); return r }
+    }
+    return (on0 as any)(name, ...args)
+  }) as unknown as On
   if (git.noRepo !== true && !files.has(`${ROOT}/.git/HEAD`)) files.set(`${ROOT}/.git/HEAD`, { text: 'ref: refs/heads/main\n', mtimeMs: 1 })
   const clock = mock.clock(on, { now: git.now ?? STARTED + 120_000 })
   const failing = (name: string) => { if (fail.has(name)) throw new Error(`${name} failed`) }
@@ -2811,4 +2824,177 @@ describe('s6qg session-scoped rows', () => {
     await $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any)
     expect((await rows($)).length).toBeGreaterThan(0)
   })
+})
+
+describe('run review (Q6): lane 3a reproductions', () => {
+  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
+  const rows = async ($: any): Promise<string[]> =>
+    ((await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND }))
+      .findAll({ type: 'Text' })) as any[]).map(one => (one.text as string).replace(/ · since.*/, ''))
+  const V = `${ROOT}/.worktrees/v`
+  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
+  const never = () => new Promise<never>(() => undefined)
+
+  test('Q6-1 the 15 s check lists the new marker while the writing Bash call is still running', { options: ON }, async ($, on) => {
+    let release!: () => void
+    const gate = new Promise<void>(r => (release = r))
+    const log: string[] = []
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, log, new Set(), { claimed: [],
+      after: (e: any) => (String(e.command ?? '').startsWith('mark ') ? gate : undefined) })
+    await bash($, 'true')
+    await clock.advance(10_000)
+    const call = bash($, `mark ${WT} wt-7 10000`)
+    await settle()
+    const n0 = log.length
+    await clock.advance(15_000)
+    await settle()
+    const during = log.slice(n0).filter(l => l === `list ${WT}/.shawarma`).length
+    release()
+    await call
+    await bash($, 'true')
+    expect({ during, rows: await rows($) }).toEqual({ during: 1, rows: ['main-1 · trivial', 'other tree: wt-7 · trivial'] })
+  })
+
+  test('Q6-1c control: same long call, no check in between', { options: ON }, async ($, on) => {
+    let release!: () => void
+    const gate = new Promise<void>(r => (release = r))
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (String(e.command ?? '').startsWith('mark ') ? gate : undefined) })
+    await bash($, 'true')
+    await clock.advance(10_000)
+    const call = bash($, `mark ${WT} wt-7 10000`)
+    await settle()
+    await clock.advance(2_000)
+    release()
+    await call
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-7 · trivial'])
+  })
+
+  test('Q6-2 a parallel Write (4 s later) refreshes while the marker-writing Bash call runs', { options: ON }, async ($, on) => {
+    let release!: () => void
+    const gate = new Promise<void>(r => (release = r))
+    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (String(e.command ?? '').startsWith('mark ') ? gate : undefined) })
+    await bash($, 'true')
+    await clock.advance(10_000)
+    const call = bash($, `mark ${WT} wt-7 10000`)
+    await settle()
+    await clock.advance(4_000)
+    await write($, `${ROOT}/notes.txt`, 'x')
+    release()
+    await call
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-7 · trivial'])
+  })
+
+  test('Q6-3 m16 interleave: call A paused at session.root inside claim while call B claims V', { options: ON }, async ($, on) => {
+    let cwdNow = WT
+    let first = true
+    let releaseRoot!: () => void
+    const gate = new Promise<void>(r => (releaseRoot = r))
+    const store = new Map<string, unknown>()
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(V, 'v-1')]), ROOT, [], new Set(), { claimed: [],
+      trees: [ROOT, WT, V], store, cwdNow: () => cwdNow,
+      hold: { 'session.root': () => (first ? (first = false, gate.then(() => undefined)) : undefined) } })
+    const a = bash($, 'true')
+    await settle()
+    cwdNow = V
+    await bash($, 'true')
+    releaseRoot()
+    await a
+    await bash($, 'true')
+    expect((store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort()).toEqual([ROOT, V, WT])
+    expect((await rows($)).filter(r => r.includes('other worktree'))).toEqual([])
+  })
+
+  test('Q6-4 store.set answers out of order: A ([ROOT, WT]) lands after B ([ROOT, WT, V])', { options: ON }, async ($, on) => {
+    let cwdNow = WT
+    let first = true
+    let releaseSet!: () => void
+    const gate = new Promise<void>(r => (releaseSet = r))
+    const store = new Map<string, unknown>()
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(V, 'v-1')]), ROOT, [], new Set(), { claimed: [],
+      trees: [ROOT, WT, V], store, cwdNow: () => cwdNow,
+      hold: { 'store.set': () => (first ? (first = false, gate.then(() => undefined)) : undefined) } })
+    const a = bash($, 'true')
+    await settle()
+    cwdNow = V
+    await bash($, 'true')
+    releaseSet()
+    await a
+    await bash($, 'true')
+    await bash($, 'true')
+    expect((store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort()).toEqual([ROOT, V, WT])
+  })
+
+  for (const name of ['session.id', 'session.root', 'store.get', 'store.keys', 'store.set', 'store.delete']) {
+    test(`Q6-5 ${name} never answers: the Bash call still answers within 2 s of engine clock`, { options: ON }, async ($, on) => {
+      const store = new Map<string, unknown>([['claims:old', { trees: [], at: 0 }]])
+      const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+        hold: { [name]: () => never() } })
+      let done = false
+      void bash($, 'true').then(() => { done = true })
+      await settle()
+      await clock.advance(2_000)
+      await settle()
+      await clock.advance(60_000)
+      await settle()
+      expect(done).toBe(true)
+    })
+  }
+
+  for (const [label, value] of [['null', null], ['an object', {}], ['a string', 'claims:x']] as const) {
+    test(`Q6-6 store.keys answers ${label}: the entry for this id is still written`, { options: ON }, async ($, on) => {
+      const store = new Map<string, unknown>()
+      world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+        hold: { 'store.keys': () => Promise.resolve({ value }) } })
+      await bash($, 'true')
+      await bash($, 'true')
+      expect((store.get(`claims:${SESSION}`) as any)?.trees).toEqual([ROOT])
+    })
+  }
+
+  test('Q6-7 session.id answers undefined: no shared key written', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
+      hold: { 'session.id': () => Promise.resolve({ value: undefined }) } })
+    await bash($, 'true')
+    expect([...store.keys()]).toEqual([])
+  })
+
+  test('Q6-8 56 worktrees: a claimed other tree past the 50-tree scan cap (cd in, mark, cd back)', { options: ON }, async ($, on) => {
+    const many = [ROOT, ...Array.from({ length: 55 }, (_, i) => `${ROOT}/.worktrees/t${String(i).padStart(2, '0')}`)]
+    const far = many[54]!
+    let cwdNow = ROOT
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], trees: many, cwdNow: () => cwdNow })
+    await bash($, 'true')
+    cwdNow = far
+    await bash($, `mark ${far} far-1`)
+    expect(await rows($)).toEqual(['far-1 · trivial', 'other tree: main-1 · trivial', '6 worktrees not scanned'])
+    cwdNow = ROOT
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: far-1 · trivial', '6 worktrees not scanned'])
+  })
+
+  test('Q6-9 a session in no repository writes no store entry', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    world(on, new Map(), '/scratch', [], new Set(), { claimed: [], store, noRepo: true, worktree: { exitCode: 128, stdout: '' } })
+    await bash($, 'true')
+    expect([...store.entries()]).toEqual([])
+  })
+
+  test('Q6-10 a worktree path with spaces and unicode; git lists NFC, the cwd is NFD (real path NFD)', { options: ON }, async ($, on) => {
+    const SP = `${ROOT}/.worktrees/w x`
+    const NFC = `${ROOT}/.worktrees/café`
+    const NFD = `${ROOT}/.worktrees/café`
+    let cwdNow = `${SP}/src`
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(SP, 'sp-1'), at(NFC, 'u-1')]), ROOT, [], new Set(), { claimed: [],
+      trees: [ROOT, SP, NFC], cwdNow: () => cwdNow, links: { [NFC]: NFD } })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['sp-1 · trivial', 'other tree: main-1 · trivial', '1 run in another worktree'])
+    cwdNow = `${NFD}/src`
+    await bash($, 'true')
+    expect((await rows($))[0]).toBe('u-1 · trivial')
+  })
+
 })
