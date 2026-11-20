@@ -1,1 +1,0 @@
-exit 0 (tsconfig-run.json, no output)
