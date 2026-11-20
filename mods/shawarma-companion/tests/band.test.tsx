@@ -45,7 +45,20 @@ const MARKER_TEXT = (step: string) => `docs/plans/2026-10-16-skills-x-thing\n${s
  */
 type Answer = 'reject' | 'hang' | { exitCode: number; stdout: string | ((z: boolean) => string); truncated?: boolean }
 type Git = { trees?: string[]; extra?: Record<string, string>; records?: string[][]; worktree?: Answer; revparse?: Answer;
-  noRepo?: boolean; inits?: unknown[]; now?: number; links?: Record<string, string>; noReal?: boolean; hangStat?: string }
+  noRepo?: boolean; inits?: unknown[]; now?: number; links?: Record<string, string>; noReal?: boolean; hangStat?: string
+  /** s6qg: the project root (default: the cwd), the session id (default SESSION), the store's entries (shared with the test when given). */
+  root?: string | (() => string); id?: string | (() => string); store?: Map<string, unknown>
+  /**
+   * s6qg: the trees claimed before the test, seeded as this session's stored claims. Default `'all'`: every tree the
+   * test names (git.trees, the records, each `.shawarma/` folder in the files), so a test written before s6qg still
+   * reads every tree. `[]` claims none: only the cwd, the root and writes claim.
+   */
+  claimed?: string[] | 'all'
+  /** s6qg: the working directory `$.session.cwd()` answers, when it moves during the test (tool paths still resolve against `cwd`). */
+  cwdNow?: () => string
+  /** s6qg: what a Bash call's result carries as `bashEditDiff` (raw); default: `touch <abs>` answers `{ changedFiles: [<abs>] }`. */
+  bashDiff?: unknown }
+const SESSION = 'sess-1'
 /** Porcelain as git prints it: `-z` ends each attribute with NUL and each record with one more; else newlines. */
 const render = (records: string[][], z: boolean) => z
   ? records.map(r => `${r.map(a => `${a}\0`).join('')}\0`).join('')
@@ -94,7 +107,22 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
     if (entries.size === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
     return { value: [...entries.values()] }
   })
-  on('session.cwd', () => (failing('cwd'), { value: cwd }))
+  on('session.cwd', () => (failing('cwd'), { value: git.cwdNow?.() ?? cwd }))
+  const pick = (v: string | (() => string) | undefined, fallback: string) => (typeof v === 'function' ? v() : v ?? fallback)
+  on('session.root', () => (failing('root'), { value: pick(git.root, cwd) }))
+  on('session.id', () => (failing('id'), { value: pick(git.id, SESSION) }))
+  const store = git.store ?? new Map<string, unknown>()
+  const seeded = git.claimed ?? 'all'
+  const named = seeded !== 'all' ? seeded : [...new Set([
+    ...(git.trees ?? [ROOT, WT]),
+    ...(git.records ?? []).map(r => (r[0] ?? '').slice('worktree '.length)).filter(p => p.startsWith('/')),
+    ...[...files.keys()].filter(k => k.includes('/.shawarma/')).map(k => k.slice(0, k.indexOf('/.shawarma/')) || '/'),
+  ])]
+  if (named.length > 0 && !store.has(`claims:${pick(git.id, SESSION)}`)) store.set(`claims:${pick(git.id, SESSION)}`, { trees: named, at: STARTED })
+  on('store.get', (_$, e: any) => (failing('store'), fail.delete('store.get once') && (() => { throw new Error('store.get failed') })(), { value: store.get(e.key) }) as any)
+  on('store.set', (_$, e: any) => (failing('store'), store.set(e.key, JSON.parse(JSON.stringify(e.value))), { value: undefined }) as any)
+  on('store.delete', (_$, e: any) => (store.delete(e.key), { value: undefined }) as any)
+  on('store.keys', () => ({ value: [...store.keys()] }) as any)
   on('process.run', (_$, e) => {
     log.push(`run ${e.argv.join(' ')}`)
     git.inits?.push(e.init)
@@ -146,6 +174,18 @@ function world(on: On, files: Files, cwd = ROOT, log: string[] = [], fail: Set<s
     }
     const mark = /^sh mark\.sh (.*)$/.exec(e.command ?? '')
     if (e.tool === 'Bash' && mark !== null) files.set(MARKER, { text: MARKER_TEXT(mark[1] ?? ''), mtimeMs: tick })
+    // `mark <tree> <ticket> [<ms>]`: a marker written during the call, its time the engine clock plus <ms> (default 0).
+    const markIn = /^mark (\/\S+) (\S+)(?: (-?\d+))?$/.exec(e.command ?? '')
+    if (e.tool === 'Bash' && markIn !== null) {
+      files.set(`${markIn[1]}/.shawarma/active-${markIn[2]}`, { text: `${markIn[2]}\ntrivial\n`,
+        mtimeMs: (git.now ?? STARTED + 120_000) + Number(markIn[3] ?? 0) })
+    }
+    const touch = /^touch (\/\S+)$/.exec(e.command ?? '')
+    if (e.tool === 'Bash' && touch !== null) files.set(touch[1]!, { text: '', mtimeMs: tick })
+    if (e.tool === 'Bash' && ('bashDiff' in git || touch !== null)) {
+      return { result: { stdout: '', stderr: '', interrupted: false,
+        bashEditDiff: 'bashDiff' in git ? git.bashDiff : { files: [], moreFiles: 0, changedFiles: [touch![1]] } } } as any
+    }
     return { result: { type: 'text', text: 'ok' } } as any
   })
   return clock
@@ -208,7 +248,7 @@ describe('band', () => {
     const tree = WT
     world(on, new Map([[`${tree}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]]]))
     await write($, `${tree}/.shawarma/active-${TICKET}`, MARKER_TEXT('run W0'))
-    expect(await bandText($)).toMatch(/^skills-x — the thing · run W0 · /)
+    expect(await bandText($)).toMatch(/^other tree: skills-x — the thing · run W0 · /)
   })
 
   test('marker deleted by a Bash call: the row goes', { options: ON }, async ($, on) => {
@@ -549,7 +589,7 @@ describe('review round 1', () => {
     world(on, new Map([[`${TREE}/.shawarma/active-${TICKET}`, { text: MARKER_TEXT('run OTHER'), mtimeMs: STARTED + 5 }],
       [`${TREE}/docs/plans/2026-10-16-skills-x-thing/plan.md`, plan[1]]]))
     await $.tool.call({ tool: 'Edit', file_path: `${TREE}/.shawarma/active-${TICKET}`, old_string: 'run W9', new_string: 'run W10' } as any)
-    expect(await bandText($)).toMatch(/^skills-x — the thing · run OTHER/)
+    expect(await bandText($)).toMatch(/^other tree: skills-x — the thing · run OTHER/)
   })
 
   // W3-D2: C1 controls.
@@ -664,7 +704,7 @@ describe('review round 3 (W3-R4)', () => {
     const texts = (await ui.findAll({ type: 'Text' })).map((one: any) => one.text)
     expect(texts.length).toBe(2)
     expect(texts[0]).toMatch(/^skills-x — the thing · run CWD · /)
-    expect(texts[1]).toMatch(/^skills-x · tree plan · run W1 · /)
+    expect(texts[1]).toMatch(/^other tree: skills-x · tree plan · run W1 · /)
   })
 
   test('F2 an Edit whose before-call stat fails: drawn, no label', { options: ON }, async ($, on) => {
@@ -858,7 +898,7 @@ describe('v2tm per-ticket markers', () => {
       markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)]), ROOT, [], new Set(), { trees: [ROOT, A, SIB] })
     await bash($, 'true')
     const all = await texts($)
-    expect(all.map(line => line.split(' — ')[0])).toEqual(['own-1', 'a-1', 's-1'])
+    expect(all.map(line => line.split(' — ')[0])).toEqual(['own-1', 'other tree: a-1', 'other tree: s-1'])
   })
 
   test('Q4 a cwd inside a linked worktree: that tree is own', { options: ON }, async ($, on) => {
@@ -867,14 +907,14 @@ describe('v2tm per-ticket markers', () => {
       markerAt(ROOT, 'own-1', 'docs/plans/p-own\nplan 2\n', STARTED + 30),
       markerAt(A, 'a-1', 'docs/plans/p-a\nrun W1\n', STARTED + 10)]), `${A}/sub`, [], new Set(), { trees: [ROOT, A] })
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' — ')[0])).toEqual(['a-1', 'own-1'])
+    expect((await texts($)).map(line => line.split(' — ')[0])).toEqual(['a-1', 'other tree: own-1'])
   })
 
   test('Q4 two markers with the same mtime: ticket order', { options: ON }, async ($, on) => {
     world(on, new Map([
       markerAt(WT, 'zz', 'zz\ntrivial\n', STARTED + 10), markerAt(WT, 'aa', 'aa\ntrivial\n', STARTED + 10)]))
     await bash($, 'true')
-    expect(await texts($)).toEqual(['aa · trivial · since 14:00', 'zz · trivial · since 14:00'])
+    expect(await texts($)).toEqual(['other tree: aa · trivial · since 14:00', 'other tree: zz · trivial · since 14:00'])
   })
 
   test('Q4 one Button per row, keyed per ticket; a press opens the pane on that ticket, the header lists the others', { options: ON }, async ($, on) => {
@@ -887,7 +927,7 @@ describe('v2tm per-ticket markers', () => {
     expect((await ui.findAll({ type: 'Button' })).map((one: any) => one.key)).toEqual(['row:own-1', 'row:s-1'])
     await $.ui.press({ plugin: 'shawarma-companion', key: 'row:s-1' })
     const text = await paneMd($)
-    expect(text).toMatch(/^\*\*s-1 — sibling\*\* · run W2\n\nOther tickets: own-1\n\n### Recap\n\nrecap of s-1 — sibling/)
+    expect(text).toMatch(/^other tree: \*\*s-1 — sibling\*\* · run W2\n\nOther tickets: own-1\n\n### Recap\n\nrecap of s-1 — sibling/)
   })
 
   test('Q4 /shawarma-companion opens the pane on the first row', { options: ON }, async ($, on) => {
@@ -900,7 +940,7 @@ describe('v2tm per-ticket markers', () => {
     await $.ui.press({ plugin: 'shawarma-companion', key: 'row:s-1' })
     const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
       requestId: 'shawarma-companion', props: {} } as any)
-    expect((await pane.find({ type: 'Markdown' }))?.props.text).toMatch(/^\*\*s-1 — sibling\*\*/)
+    expect((await pane.find({ type: 'Markdown' }))?.props.text).toMatch(/^other tree: \*\*s-1 — sibling\*\*/)
     await $.command.run({ command: 'shawarma-companion', args: '' } as any)
     expect((await pane.find({ type: 'Markdown' }))?.props.text).toMatch(/^\*\*own-1 — mine\*\* · plan 2\n\nOther tickets: s-1/)
   })
@@ -909,7 +949,7 @@ describe('v2tm per-ticket markers', () => {
     world(on, new Map([...planIn(SIB, 'p-s', 's-1 — sibling'), markerAt(SIB, 's-1', 'docs/plans/p-s\nrun W2\n', STARTED + 20)]),
       ROOT, [], new Set(), { trees: [ROOT, SIB] })
     await bash($, 'true')
-    expect(await bandText($)).toMatch(/^s-1 — sibling · run W2/)
+    expect(await bandText($)).toMatch(/^other tree: s-1 — sibling · run W2/)
   })
 
   test('D3 prunable and bare records skipped; locked and detached read', { options: ON }, async ($, on) => {
@@ -920,21 +960,21 @@ describe('v2tm per-ticket markers', () => {
         [`worktree ${L}`, 'HEAD 2', 'branch refs/heads/l', 'locked on a USB stick'], [`worktree ${T}`, 'HEAD 3', 'detached']],
     })
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['l', 't'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['other tree: l', 'other tree: t'])
   })
 
   test('Q2 git worktree list exits non-zero: the file-API fallback, main plus <main>/.worktrees/*, a sibling missed', { options: ON }, async ($, on) => {
     world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 3), markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2),
       markerAt(SIB, 's', 's\ntrivial\n', STARTED + 1)]), ROOT, [], new Set(), { trees: [ROOT, A, SIB], worktree: { exitCode: 129, stdout: '' } })
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['m', 'a'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['m', 'other tree: a'])
   })
 
   test('Q2 git worktree list prints garbage: the fallback', { options: ON }, async ($, on) => {
     world(on, new Map([markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2)]), ROOT, [], new Set(),
       { worktree: { exitCode: 0, stdout: 'warning: something\nnot a record\n' } })
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['a'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['other tree: a'])
   })
 
   // Q2 fallback by the file API: no process at all.
@@ -950,27 +990,27 @@ describe('v2tm per-ticket markers', () => {
     world(on, three(), ROOT, [], new Set(), NOPROC)
     const out: any = await bash($, 'true')
     expect(out?.result?.text).toBe('ok')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['m', 'a'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['m', 'other tree: a'])
   })
 
   test('Q2 process.run rejects, cwd deep in a linked worktree under .worktrees: that tree first, then main', { options: ON }, async ($, on) => {
     world(on, three(), `${A}/x/y`, [], new Set(), NOPROC)
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['a', 'm'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['a', 'other tree: m'])
   })
 
   test('Q2 process.run rejects, a linked worktree with no commondir file: gitdir/../.. is the common dir', { options: ON }, async ($, on) => {
     world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 3), markerAt(A, 'a', 'a\ntrivial\n', STARTED + 2),
       ...linkedGit(A, 'a', false)]), A, [], new Set(), NOPROC)
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['a', 'm'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['a', 'other tree: m'])
   })
 
   test('Q2 process.run rejects, cwd in a sibling worktree: its own tree, main and .worktrees/*, not other siblings', { options: ON }, async ($, on) => {
     const OTHER = '/elsewhere/repo-wb64'
     world(on, new Map([...three(), markerAt(OTHER, 'o', 'o\ntrivial\n', STARTED + 9), ...linkedGit(OTHER, 'o')]), SIB, [], new Set(), NOPROC)
     await bash($, 'true')
-    expect((await texts($)).map(line => line.split(' ')[0])).toEqual(['s', 'm', 'a'])
+    expect((await texts($)).map(line => line.split(' · ')[0])).toEqual(['s', 'other tree: m', 'other tree: a'])
   })
 
   test('Q2 process.run rejects, no .git up to /: nothing drawn', { options: ON }, async ($, on) => {
@@ -1117,7 +1157,7 @@ describe('v2tm per-ticket markers', () => {
     files.set(`${SIB}/.shawarma/active-s-1`, { text: 'docs/plans/p-s\nrun W9\n', mtimeMs: STARTED + 130_000 })
     const n0 = log.length
     await clock.advance(15_000)
-    expect((await texts($))[1]).toMatch(/^s-1 — sibling · run W9/)
+    expect((await texts($))[1]).toMatch(/^other tree: s-1 — sibling · run W9/)
     expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([`read ${ROOT}/.shawarma/active-own-1`, `read ${SIB}/.shawarma/active-s-1`])
   })
 })
@@ -1284,12 +1324,12 @@ describe('Q5 liveness (stale)', () => {
     const at = STARTED + 60_000
     const clock = world(on, new Map([markerAt(WT, 'dead', 'dead\ntrivial\n', at)]), ROOT, log, new Set(), { now: at + H12 - 20_000 })
     await bash($, 'true')
-    expect(await found($)).toEqual([{ text: 'dead · trivial · since 10-16 14:01', dim: false }])
+    expect(await found($)).toEqual([{ text: 'other tree: dead · trivial · since 10-16 14:01', dim: false }])
     await clock.advance(15_000)
     expect((await found($))[0]?.dim).toBe(false)
     const n0 = log.length
     await clock.advance(15_000)
-    expect(await found($)).toEqual([{ text: 'stale: dead · trivial · since 10-16 14:01', dim: true }])
+    expect(await found($)).toEqual([{ text: 'other tree: stale: dead · trivial · since 10-16 14:01', dim: true }])
     expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([])
   })
 
@@ -1436,7 +1476,7 @@ describe('lane 3a round 2 fixes', () => {
     await bash($, 'true')
     await band($)
     await $.ui.press({ plugin: 'shawarma-companion', key: 'row:dead' })
-    expect(await paneOf(await mountPane($))).toMatch(/^stale: \*\*dead — x\*\* · run W2\n\nOther tickets: old \(stale\)\n\n### Recap/)
+    expect(await paneOf(await mountPane($))).toMatch(/^other tree: stale: \*\*dead — x\*\* · run W2\n\nOther tickets: old \(stale\)\n\n### Recap/)
   })
 
   test('N2 an earlier-session chosen row: labelled in the pane; a current other listed bare', { options: ON }, async ($, on) => {
@@ -1608,7 +1648,7 @@ describe('lane 3a round 3 fixes', () => {
     expect(await paneText($)).toBe('No row drawn: 1 worktree not scanned')
     files.set(`${many[1]}/.shawarma/active-later`, { text: 'later\ntrivial\n', mtimeMs: STARTED + 125_000 })
     await clock.advance(15_000)
-    expect(await band($)).toEqual(['later · trivial · since 14:02', '1 worktree not scanned'])
+    expect(await band($)).toEqual(['other tree: later · trivial · since 14:02', '1 worktree not scanned'])
   })
 
   test('R3-3 only the more-row drawn: the 15 s check still runs', { options: ON }, async ($, on) => {
@@ -1619,7 +1659,7 @@ describe('lane 3a round 3 fixes', () => {
     await band($)
     files.set(`${many[1]}/.shawarma/active-later`, { text: 'later\ntrivial\n', mtimeMs: STARTED + 125_000 })
     await clock.advance(15_000)
-    expect(await band($)).toEqual(['later · trivial · since 14:02', '1 worktree not scanned'])
+    expect(await band($)).toEqual(['other tree: later · trivial · since 14:02', '1 worktree not scanned'])
   })
 
   test('R3-4 a stale malformed marker: the band row carries "stale: " as the pane does', { options: ON }, async ($, on) => {
@@ -1686,7 +1726,7 @@ describe('v2tm amendments (D11, D12)', () => {
     const log: string[] = []
     world(on, new Map([markerAt(SIB, 's-1', `${DIR}\nrun W1\n`, STARTED + 5), plan, decisions]), ROOT, log, new Set(), { trees: [ROOT, SIB] })
     await bash($, 'true')
-    expect(await band($)).toEqual(['shawarma: s-1: plan dir outside its tree'])
+    expect(await band($)).toEqual(['other tree: shawarma: s-1: plan dir outside its tree'])
     expect(outside(log, DIR)).toEqual([])
   })
 
@@ -2368,6 +2408,407 @@ describe('review round 5 (R5, mutants)', () => {
     const body: File = { text: '# w-1 — main\n\n## 1. What\n\nMAIN TREE BODY\n', mtimeMs: 1 }
     files.set(`${WL}/plan.md`, body)
     files.set(`${ROOT}/docs/plans/main/plan.md`, body)
-    expect(await paneText($)).toBe(`shawarma: w-1: plan dir outside its tree (${WT}/.shawarma/active-w-1)`)
+    expect(await paneText($)).toBe(`other tree: shawarma: w-1: plan dir outside its tree (${WT}/.shawarma/active-w-1)`)
+  })
+})
+
+describe('s6qg session-scoped rows', () => {
+  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
+  const rows = async ($: any): Promise<string[]> =>
+    ((await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND }))
+      .findAll({ type: 'Text' })) as any[]).map(one => (one.text as string).replace(/ · since.*/, ''))
+  const pane = async ($: any): Promise<string | undefined> => {
+    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return (await ui.find({ type: 'Text' }))?.text
+  }
+  const two = () => new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1')])
+
+  test('S1 Q1 an unclaimed tree\'s run folds into the more-row; the current tree\'s run is drawn', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S2 Q1 only unclaimed runs: the more-row alone, and the pane says so', { options: ON }, async ($, on) => {
+    world(on, new Map([at(WT, 'wt-1'), at(WT, 'wt-2')]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['2 runs in other worktrees'])
+    expect(await pane($)).toBe('No row drawn: 2 runs in other worktrees\nIn other worktrees: wt-1, wt-2')
+  })
+
+  test('S3 Q1 a cd into a worktree claims it; claims only grow: back in main, its run stays, labelled (Q2)', { options: ON }, async ($, on) => {
+    let now = ROOT
+    world(on, two(), ROOT, [], new Set(), { claimed: [], cwdNow: () => now })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+    now = `${WT}/src`
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['wt-1 · trivial', 'other tree: main-1 · trivial'])
+    now = ROOT
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S4 Q1 the project root\'s tree is claimed (EnterWorktree, /cd); the cwd\'s tree is current (Q2)', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [], root: WT })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S5 Q2 a cwd in no tree: the project root\'s tree is current', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [ROOT], root: WT, cwdNow: () => '/elsewhere', worktree: { exitCode: 0, stdout: render(recordsOf([ROOT, WT]), true) } })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['wt-1 · trivial', 'other tree: main-1 · trivial'])
+  })
+
+  test('S6 Q3 a Write anywhere in a worktree claims it', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [] })
+    await write($, `${WT}/src/a.ts`, 'x')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S7 Q3 a NotebookEdit claims its notebook_path\'s tree; a relative Write path resolves against the cwd', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(`${ROOT}/.worktrees/v`, 'v-1')]), ROOT, [], new Set(),
+      { claimed: [], trees: [ROOT, WT, `${ROOT}/.worktrees/v`] })
+    await $.tool.call({ tool: 'NotebookEdit', notebook_path: `${WT}/n.ipynb`, new_source: 'x' } as any)
+    await write($, '.worktrees/v/b.ts', 'x')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: v-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S8 Q3 a Bash call claims the trees of its changed files', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [] })
+    await bash($, `touch ${WT}/src/a.ts`)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  for (const [name, diff] of [['absent', undefined], ['null', null], ['a string', 'x'], ['changedFiles not a list', { changedFiles: `${WT}/a` }],
+    ['relative paths', { changedFiles: ['.worktrees/w/a'] }], ['non-strings', { changedFiles: [1, null, { p: WT }] }]] as const) {
+    test(`S9 Q3 a Bash result whose changed-files field is ${name}: no claim`, { options: ON }, async ($, on) => {
+      world(on, two(), ROOT, [], new Set(), { claimed: [], bashDiff: diff })
+      await bash($, 'true')
+      expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+    })
+  }
+
+  test('S10 Q4 claims are saved under the session id; an unchanged claim writes nothing', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store })
+    await write($, `${WT}/a`, 'x')
+    expect((store.get(`claims:${SESSION}`) as any)?.trees?.slice().sort()).toEqual([ROOT, WT])
+    expect((store.get(`claims:${SESSION}`) as any)?.at).toBe(STARTED + 120_000)
+    store.set(`claims:${SESSION}`, { ...(store.get(`claims:${SESSION}`) as any), at: 7 })
+    await bash($, 'true')
+    expect((store.get(`claims:${SESSION}`) as any).at).toBe(7)
+  })
+
+  test('S11 Q4 a resumed session (stored claims for its id) draws its worktree run at once', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>([[`claims:${SESSION}`, { trees: [WT], at: STARTED }]])
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S12 Q4 /clear: a new session id keeps the claims and saves them under the new id', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    let id = 'before'
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store, id: () => id })
+    await write($, `${WT}/a`, 'x')
+    id = 'after'
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+    expect((store.get('claims:after') as any)?.trees?.slice().sort()).toEqual([ROOT, WT])
+  })
+
+  test('S13 Q4 store entries untouched for 30 days are pruned, newer and foreign keys kept, a malformed claims entry dropped', { options: ON }, async ($, on) => {
+    const now = STARTED + 120_000
+    const day = 24 * 3600 * 1000
+    const store = new Map<string, unknown>([
+      ['claims:old', { trees: [ROOT], at: now - 31 * day }], ['claims:young', { trees: [ROOT], at: now - 29 * day }],
+      ['claims:bad', { trees: 'x', at: 1 }], ['other', { at: 0 }]])
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store })
+    await bash($, 'true')
+    expect([...store.keys()].sort()).toEqual(['claims:sess-1', 'claims:young', 'other'])
+  })
+
+  test('S14 Q4 a store that fails: the rows are still drawn from the cwd\'s claim', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(['store']), { claimed: [] })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S15 Q1 a failing project-root call claims from the cwd alone', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(['root']), { claimed: [] })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S16 Q1 a run appearing in an unclaimed tree while idle: the more-row counts it within 15 s', { options: ON }, async ($, on) => {
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial'])
+    files.set(...at(WT, 'wt-9', STARTED + 60_000))
+    await clock.advance(15_000)
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S17 S1 a Write spelled through a link claims the real tree, with one real-path stat', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, two(), ROOT, log, new Set(), { claimed: [], links: { '/lnk': ROOT } })
+    const n0 = log.length
+    await write($, '/lnk/.worktrees/w/src/a.ts', 'x')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+    expect(log.slice(n0).filter(line => line === 'stat /lnk/.worktrees/w/src resolve')).toHaveLength(1)
+  })
+
+  test('S18 S1 a Bash call changing 30 files in 30 folders outside every tree: at most 8 real-path stats, no claim', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const changed = Array.from({ length: 30 }, (_, i) => `/scratch/d${i}/f`)
+    world(on, two(), ROOT, log, new Set(), { claimed: [], bashDiff: { changedFiles: changed } })
+    const n0 = log.length
+    await bash($, 'true')
+    expect(log.slice(n0).filter(line => line.startsWith('stat /scratch/'))).toHaveLength(8)
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S19 S1 a cwd and root in no tree (no repository): no real-path stat for them', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    world(on, new Map(), '/plain', log, new Set(), { claimed: [], noRepo: true, worktree: 'reject', revparse: 'reject' })
+    await bash($, 'true')
+    const n0 = log.length
+    await bash($, 'true')
+    expect(log.slice(n0).filter(line => line.startsWith('stat /') && line.endsWith(' resolve'))).toEqual([])
+  })
+
+  test('S20 Q1 a steady unclaimed run: the 15 s check lists and reads nothing more (no refresh)', { options: ON }, async ($, on) => {
+    const log: string[] = []
+    const clock = world(on, two(), ROOT, log, new Set(), { claimed: [] })
+    await bash($, 'true')
+    const n0 = log.length
+    await clock.advance(15_000)
+    expect(log.slice(n0).filter(line => line.startsWith('read '))).toEqual([])
+  })
+
+  test('S21 Q4 session state emptied (a /clear that wipes it): the claims kept in the process still draw the run', { options: ON }, async ($, on) => {
+    let isWiped = false
+    world(on, two(), ROOT, [], new Set(), { claimed: [] })
+    on('state.get', ($s: any, e: any, next: any) => (isWiped && e.key === 'claims' ? { value: { value: undefined, version: 0 } } : next(e)))
+    await write($, `${WT}/a`, 'x')
+    isWiped = true
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+
+  test('S22 lane A9a a worktree made in the turn, then its marker written: claimed once git lists it, at the turn end', { options: ON }, async ($, on) => {
+    const NEW = `${ROOT}/.worktrees/n`
+    const trees = [ROOT, WT]
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    world(on, files, ROOT, [], new Set(), { claimed: [], trees })
+    await bash($, 'true')
+    trees.push(NEW)
+    await write($, `${NEW}/.shawarma/active-n-1`, 'n-1\ntrivial\n')
+    await turnEnd($)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: n-1 · trivial'])
+  })
+
+  test('S23 D1 a marker another tree gets during this session\'s Bash call (no changed-files list): claimed', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    await bash($, `mark ${WT} wt-7`)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-7 · trivial'])
+  })
+
+  test('S24 lane A9c a failed read of the stored claims: nothing overwritten, read again next refresh', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>([[`claims:${SESSION}`, { trees: [WT], at: STARTED }]])
+    world(on, two(), ROOT, [], new Set(['store.get once']), { claimed: [], store })
+    await bash($, 'true')
+    expect((store.get(`claims:${SESSION}`) as any).trees).toEqual([WT])
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+    expect((store.get(`claims:${SESSION}`) as any).trees.slice().sort()).toEqual([ROOT, WT])
+  })
+
+  test('S25 lane A9e two writes at once into two worktrees: both claimed', { options: ON }, async ($, on) => {
+    const V = `${ROOT}/.worktrees/v`
+    const store = new Map<string, unknown>()
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(V, 'v-1')]), ROOT, [], new Set(), { claimed: [], trees: [ROOT, WT, V], store })
+    await Promise.all([write($, `${WT}/a`, 'x'), write($, `${V}/b`, 'x')])
+    await bash($, 'true')
+    expect((store.get(`claims:${SESSION}`) as any).trees.slice().sort()).toEqual([ROOT, V, WT])
+  })
+
+  test('S26 lane A9i a /cd with no tool call: the 15 s check claims the new root', { options: ON }, async ($, on) => {
+    let root = ROOT
+    const clock = world(on, two(), ROOT, [], new Set(), { claimed: [], root: () => root })
+    await bash($, 'true')
+    root = WT
+    await clock.advance(15_000)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S27 lane A9g a subagent\'s call reading its own cwd: the current tree stays the main session\'s', { options: ON }, async ($, on) => {
+    let now = ROOT
+    world(on, two(), ROOT, [], new Set(), { claimed: [WT], cwdNow: () => now })
+    await bash($, 'true')
+    now = WT
+    await $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S28 lane finding 5 a changed file spelled with .. and //: folded before placing', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [], bashDiff: { changedFiles: [`${ROOT}/x/..//.worktrees/w/a`] } })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-1 · trivial'])
+  })
+
+  test('S29 Q4 followed: claims one session wrote are read by the next start under that id (a resume)', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store })
+    await write($, `${WT}/a`, 'x')
+    const saved = JSON.parse(JSON.stringify(store.get(`claims:${SESSION}`)))
+    expect(saved.trees.slice().sort()).toEqual([ROOT, WT])
+    expect(saved.at).toBe(STARTED + 120_000)
+  })
+
+  test('S30 Q4 prune: at most 100 other keys examined per id; an entry dated past now + 30 days deleted', { options: ON }, async ($, on) => {
+    const now = STARTED + 120_000
+    const day = 24 * 3600 * 1000
+    const store = new Map<string, unknown>([['claims:future', { trees: [ROOT], at: now + 31 * day }]])
+    for (let i = 0; i < 150; i++) store.set(`claims:old-${String(i).padStart(3, '0')}`, { trees: [ROOT], at: now - 31 * day })
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store })
+    await bash($, 'true')
+    expect(store.has('claims:future')).toBe(false)
+    expect([...store.keys()].filter(key => key.startsWith('claims:old-'))).toHaveLength(51)
+  })
+
+  test('S31 ticket item 5 the pane lists the tickets in other worktrees under a drawn row', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-2'), at(WT, 'wt-1')]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane', requestId: 'shawarma-companion', props: {} } as any)
+    expect((await ui.find({ type: 'Markdown' }))?.props.text).toBe('**main-1** · trivial\n\nIn other worktrees: wt-1, wt-2\n\nTrivial run: no brief.')
+  })
+
+  test('S32 lane A9h a turn end racing a subagent\'s Write into another tree: both trees claimed', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    const V = `${ROOT}/.worktrees/v`
+    let now = ROOT
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-1'), at(V, 'v-1')]), ROOT, [], new Set(),
+      { claimed: [], trees: [ROOT, WT, V], store, cwdNow: () => now })
+    await bash($, 'true')
+    now = WT
+    await Promise.all([$.tool.call({ tool: 'Write', file_path: `${V}/b`, content: 'x', agentId: 'ag' } as any), turnEnd($)])
+    now = ROOT
+    await bash($, 'true')
+    expect((store.get(`claims:${SESSION}`) as any).trees.slice().sort()).toEqual([ROOT, V, WT])
+  })
+
+  test('S33 lane B7a git spells the roots through a link; the cwd is real: its tree is claimed and current', { options: ON }, async ($, on) => {
+    const L = '/lnk'
+    world(on, new Map([at(L, 'main-1', STARTED + 6), at(`${L}/.worktrees/w`, 'wt-1')]), WT, [], new Set(),
+      { claimed: [], trees: [L, `${L}/.worktrees/w`], links: { [L]: ROOT } })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['wt-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S34 lane B4a2 a worktree made in the turn, its marker written, then 70 writes elsewhere: claimed at the turn end', { options: ON }, async ($, on) => {
+    const NEW = `${ROOT}/.worktrees/n`
+    const trees = [ROOT, WT]
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], trees })
+    await bash($, 'true')
+    await write($, `${NEW}/.shawarma/active-n-1`, 'n-1\ntrivial\n')
+    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1, agentId: 'a1' } as any)
+    for (let i = 0; i < 70; i++) await write($, `${ROOT}/src/d${i}/f.ts`, 'x')
+    trees.push(NEW)
+    await turnEnd($)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: n-1 · trivial'])
+  })
+
+  test('S35 lane B2e a marker dated 1.5 s before the call (file times in whole seconds): claimed', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    await bash($, `mark ${WT} wt-7 -1500`)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: wt-7 · trivial'])
+  })
+
+  test('S36 D1 a marker dated 2.5 s after the call: not claimed by the window', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    await bash($, `mark ${WT} wt-7 2500`)
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S37 lane B7f no main cwd yet, a subagent\'s call reading WT: WT is not current and not claimed by that cwd', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(), { claimed: [], cwdNow: () => WT })
+    await $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any)
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S38 lane B6d a ticket name holding a line break: the pane draws it on one line', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), [`${WT}/.shawarma/active-x\n### Fake`, { text: 'x\ntrivial\n', mtimeMs: STARTED + 5 }]]),
+      ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane', requestId: 'shawarma-companion', props: {} } as any)
+    expect((await ui.find({ type: 'Markdown' }))?.props.text).toBe('**main-1** · trivial\n\nIn other worktrees: x ### Fake\n\nTrivial run: no brief.')
+  })
+
+  test('S39 Q4 prune: one entry dated more than 30 days ahead, among few keys, is deleted', { options: ON }, async ($, on) => {
+    const day = 24 * 3600 * 1000
+    const store = new Map<string, unknown>([['claims:young', { trees: [ROOT], at: STARTED }],
+      ['claims:future', { trees: [ROOT], at: STARTED + 120_000 + 31 * day }]])
+    world(on, two(), ROOT, [], new Set(), { claimed: [], store })
+    await bash($, 'true')
+    expect([...store.keys()].sort()).toEqual(['claims:sess-1', 'claims:young'])
+  })
+
+  test('S40 lane A9b a worktree git cannot list at the turn end: its folder carries over and is claimed next turn', { options: ON }, async ($, on) => {
+    const NEW = `${ROOT}/.worktrees/n`
+    const trees = [ROOT, WT]
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], trees })
+    await bash($, 'true')
+    await write($, `${NEW}/.shawarma/active-n-1`, 'n-1\ntrivial\n')
+    await turnEnd($)
+    trees.push(NEW)
+    await turnEnd($)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: n-1 · trivial'])
+  })
+
+  test('S41 lane B7a git through a link, cwd in WT and root in main (both real): WT is current', { options: ON }, async ($, on) => {
+    const L = '/lnk'
+    world(on, new Map([at(L, 'main-1', STARTED + 6), at(`${L}/.worktrees/w`, 'wt-1')]), WT, [], new Set(),
+      { claimed: [], trees: [L, `${L}/.worktrees/w`], links: { [L]: ROOT }, root: ROOT })
+    await bash($, 'true')
+    expect(await rows($)).toEqual(['wt-1 · trivial', 'other tree: main-1 · trivial'])
+  })
+
+  test('S42 lane C3 another session rewrites its existing marker during this session\'s call: not claimed', { options: ON }, async ($, on) => {
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6), at(WT, 'wt-7', STARTED + 5)]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    await bash($, `mark ${WT} wt-7`)
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('S43 lane C6b3 git fails at the turn end: the turn\'s folders are kept and claim the worktree next turn', { options: ON }, async ($, on) => {
+    const NEW = '/elsewhere/n'
+    const trees = [ROOT, WT]
+    const git: any = { claimed: [], trees }
+    world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), git)
+    await bash($, 'true')
+    await write($, `${NEW}/.shawarma/active-n-1`, 'n-1\ntrivial\n')
+    for (let i = 0; i < 70; i++) await write($, `${ROOT}/src/d${i}/f.ts`, 'x')
+    trees.push(NEW)
+    git.worktree = 'reject'
+    await turnEnd($)
+    delete git.worktree
+    await turnEnd($)
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: n-1 · trivial'])
+  })
+
+  test('S44 lane C5d no main cwd, a subagent\'s call while the root call fails: the rows are still drawn', { options: ON }, async ($, on) => {
+    world(on, two(), ROOT, [], new Set(['root']), { claimed: [] })
+    await $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any)
+    expect((await rows($)).length).toBeGreaterThan(0)
   })
 })
