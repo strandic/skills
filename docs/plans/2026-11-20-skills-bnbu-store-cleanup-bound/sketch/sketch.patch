@@ -149,7 +149,7 @@ index 76bba35..e82dfb5 100644
  }
  
 diff --git a/tests/band.test.tsx b/tests/band.test.tsx
-index 4adf08c..8e30fb4 100644
+index 4adf08c..46a1223 100644
 --- a/tests/band.test.tsx
 +++ b/tests/band.test.tsx
 @@ -1,5 +1,6 @@
@@ -174,7 +174,7 @@ index 4adf08c..8e30fb4 100644
      world(on, two(), ROOT, [], new Set(), { claimed: [], store })
      await bash($, 'true')
      expect(store.has('claims:future')).toBe(false)
-@@ -3067,3 +3072,114 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
+@@ -3067,3 +3072,118 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
    })
  
  })
@@ -221,12 +221,16 @@ index 4adf08c..8e30fb4 100644
 +    })
 +  }
 +
-+  test('U2 store.delete never answers, 100 expired other entries: the first Bash call is held 2 s or less', { options: ON }, async ($, on) => {
++  test('U2 store.delete never answers, 100 expired other entries: the first Bash call is held 2 s or less, 2 reads asked', { options: ON }, async ($, on) => {
 +    const store = new Map<string, unknown>()
 +    for (let i = 0; i < 100; i++) store.set(`claims:o${i}`, { trees: ['/other'], at: T0 - 31 * DAY })
++    let gets = 0
 +    const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
-+      hold: { 'store.delete': () => never() } })
-+    expect(await held(clock, bash($, 'true'))).toBeLessThanOrEqual(2)
++      hold: { 'store.delete': () => never(), 'store.get': () => { gets += 1; return undefined } } })
++    const seconds = await held(clock, bash($, 'true'))
++    await settle(5)
++    // Hand count: the own read, then one other read whose delete hangs until the deadline ends the pass.
++    expect({ atMost2: seconds <= 2, gets }).toEqual({ atMost2: true, gets: 2 })
 +  })
 +
 +  test('U3 the first-inserted other entry\'s read rejects: it is kept, and the 50 expired entries after it are deleted', { options: ON }, async ($, on) => {

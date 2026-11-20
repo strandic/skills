@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-20T15:08:57Z
-updated_at: 2026-11-20T17:10:16Z
+updated_at: 2026-11-20T17:26:05Z
 ---
 
 restore() prunes up to 100 other entries, racing each store.get and store.delete against 2 s separately. Reads answering in 1.9 s hold the first writing call (or session start) about 190 s (B5, F5); a hanging store.delete holds it 200 s (B7, F7, pre-existing). Give the whole pass one deadline, or run it off the tool call's path. Found by the skills-s6qg run review, final lane (docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/reports/run/lane-3a-final/report.md); reproduction in final.test.tsx there.
@@ -37,3 +37,14 @@ Spike on base `2e63362` (mod files as `1eed2e3`), sketch `docs/plans/2026-11-20-
 unruled: D1 version — default 0.3.1 with a Fixed entry
 unruled: D2 A5 (a refused clock timer leaves every 2 s bound open, pre-existing) — default a new ticket
 unruled: D3 S30 fixture (future entry moved to index 50, assertions unchanged, passes on base and sketch) — default as sketched
+
+
+**Q3, D1–D3 ruled (owner: "Go with reco")**: Q3 A, the delete race accepted as a residual, bean skills-hybo. D1 0.3.1. D2 the refused timer to bean skills-vmhr. D3 S30 fixture as sketched.
+
+
+## Plan: brief frozen (2026-11-20)
+
+Brief: docs/plans/2026-11-20-skills-bnbu-store-cleanup-bound/plan.md. `python3 …/shawarma/freeze_check.py docs/plans/2026-11-20-skills-bnbu-store-cleanup-bound/plan.md --repo . --listing <(grep -n '^- Lesson (' docs/plans/lessons.md)` → `PASS`.
+Sketch suite `285 pass` / `0 fail`; predicted red set on the tests commit `277 pass` / `9 fail` / `Ran 286 tests across 1 file.`; R1 FAIL reading on mutant m3 `282 pass` / `3 fail`.
+
+unruled: none
