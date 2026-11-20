@@ -44,3 +44,9 @@ Rulings, from `docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/decisions.m
 - **Q4 RULING.** Claims survive `/clear`, and are saved in the mod's store under the session id so `--resume` restores them; entries untouched for 30 days are pruned. Owner: "Go with reco".
 
 Out of scope: the marker recording the session that wrote it (needs a skill-text change; retro candidate).
+
+## Plan paused: 1 question (2026-11-20)
+
+Spike in `.worktrees/s6qg-spike` (patch `docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/sketch/sketch.patch`): `claude plugin test` → `256 pass` / `0 fail`; on the base modules → `186 pass` / `67 fail` of 253 (round-3 suite, before S42–S44); tsc exit 0; validate passed. Three attack rounds (`reports/attack*/report.md`); 31 of 32 mutants killed, m16 (two claims interleaved) `NOT RUN (the test kit does not interleave)`.
+
+- **Q5 RULING — the time-window claim.** Probe P3: Bash's changed-files list is empty for writes outside the session's working tree, so a marker written by Bash from the main checkout into a worktree (shawarma's Wave 0) claims nothing by Q3's sources. The drafted fix (any marker whose time falls in one of the session's calls) claims every concurrent session within the first call (attack round 3, C3: 3 of 3 sessions claimed, executed). Spiked fix: only a marker absent from the previous listing (S23, S35 claimed; S42 another session's rewrite not claimed, executed). Touches ruling Q3, whose recorded reason ("can only fail towards claiming less (today's behaviour)") is wrong under Q1.
