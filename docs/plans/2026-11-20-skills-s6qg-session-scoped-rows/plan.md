@@ -279,4 +279,5 @@ unruled: none
 | W3-D10 | 2026-11-20 | default | §8 | — → after one abandoned write, every claim reads the store back: bean skills-s475 (limit stated in the PR, per Q7) | Final lane F4. |
 | W3-D11 | 2026-11-20 | default | §8 | — → clean-up bounded per call, not per pass (up to about 200 s): bean skills-bnbu (limit stated in the PR, per Q7) | Final lane F5, F7; F7 pre-existing. |
 | W3-D12 | 2026-11-20 | default | §8 | — → one unreadable entry stops every session's clean-up: bean skills-6y0d (limit stated in the PR, per Q7) | Final lane F6. |
+| Q8 | 2026-11-20 | the owner | §5 G1 | PASS at `0 fail` and 256 graded → `0 fail` and 277 graded (256 + 18 from Q6 + 3 from Q7) | The fix rulings added regression tests; final commit `08b188c` reads 277 pass / 0 fail. |
 

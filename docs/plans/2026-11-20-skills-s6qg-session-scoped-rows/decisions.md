@@ -27,3 +27,4 @@
 2026-11-20 | W3-D10 DEFAULT | Final lane F4 (after one abandoned write, every claim reads the store back) to bean skills-s475 and a limit in the PR, per Q7 | Q7 ended the loop.
 2026-11-20 | W3-D11 DEFAULT | Final lane F5, F7 (clean-up bounded per call, not per pass: up to about 200 s on the first call) to bean skills-bnbu and a limit in the PR, per Q7 | Q7 ended the loop; F7 is pre-existing.
 2026-11-20 | W3-D12 DEFAULT | Final lane F6 (one unreadable entry stops every session's clean-up) to bean skills-6y0d and a limit in the PR, per Q7 | Q7 ended the loop.
+2026-11-20 | Q8 RULING | G1 reads PASS at "0 fail and 277 graded": the brief's 256 plus 18 regression tests from Q6 and 3 from Q7 | Owner: "Go with reco". The added tests come from the fix rulings; the final commit reads 277 pass / 0 fail.
