@@ -1,0 +1,430 @@
+diff --git a/mods/shawarma-companion/.claude-plugin/plugin.json b/mods/shawarma-companion/.claude-plugin/plugin.json
+index a471d5b..9d1becb 100644
+--- a/mods/shawarma-companion/.claude-plugin/plugin.json
++++ b/mods/shawarma-companion/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "shawarma-companion",
+-  "version": "0.3.0",
++  "version": "0.3.1",
+   "description": "Shows the active shawarma plans and runs above the prompt, one row each: ticket, step, decisions so far.",
+   "author": { "name": "Strandic" },
+   "types": "./types/index.d.ts",
+diff --git a/mods/shawarma-companion/CHANGELOG.md b/mods/shawarma-companion/CHANGELOG.md
+index f3ee491..8f461c9 100644
+--- a/mods/shawarma-companion/CHANGELOG.md
++++ b/mods/shawarma-companion/CHANGELOG.md
+@@ -5,6 +5,17 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
+ 
+ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+ 
++## [0.3.1] - unreleased
++
++The 15-second check keeps running after a failed read (skills-cm2l, skills-0wsk).
++
++### Fixed
++- One failed read during the 15-second check no longer empties the row until the next tool call. A row whose files fail to read reads `shawarma: <ticket>: could not be read`, and the check reads it again every 15 seconds until it works (skills-cm2l).
++- A check that fails as a whole now clears the more-row's counts too, and the check keeps running, so the rows come back once the error clears (skills-0wsk).
++
++### Removed
++- The pane's `<n> markers could not be read.` line and its `<ticket>: could not be read` reason: such a marker now has its own row.
++
+ ## [0.3.0] - unreleased
+ 
+ Each session shows full rows only for the worktrees it works in (skills-s6qg).
+diff --git a/mods/shawarma-companion/README.md b/mods/shawarma-companion/README.md
+index 25e99d1..2366d04 100644
+--- a/mods/shawarma-companion/README.md
++++ b/mods/shawarma-companion/README.md
+@@ -72,11 +72,13 @@ Three parts can be added at the end when they apply:
+ 
+ If a marker is malformed, its row reads only `shawarma: <ticket>: malformed marker`, with its label in front when it has one. The pane adds the marker's path.
+ 
++If the marker, `plan.md` or `decisions.md` fails to read, the row reads only `shawarma: <ticket>: could not be read`, with its label in front when it has one. It shows nothing it read before, since that may be out of date. The 15-second check reads it again each time, for as long as the read fails, and the full row comes back at the first check after the read works again. The pane adds the marker's path.
++
+ The plan folder must be inside the marker's own tree: the tree root or a folder under it. The mod checks this in two steps. First it checks the path as written, after `.` and `..` are resolved. A path outside the tree as written counts as outside, and the mod makes no file call at it. Then it asks where the folder really is, with links followed, and checks that real path against the tree's real path. So a folder in the tree that links to a folder outside it counts as outside. To ask, the mod follows a link inside the tree to where it points. So that call can reach outside the tree, for example a slow network mount. The same holds for the pane's own real-path check and the 15-second check's question whether a folder exists. The mod finds each tree's real path once per turn. It asks for the folder's real path once each time the marker changes, and keeps the answer. It drops that answer when the folder is later found missing or unreadable, and asks again. If no real path comes back, the folder counts as outside, and the mod asks again at the next update. If no answer comes within 2 seconds, the folder counts as outside until the turn ends. So a call that never answers costs 2 seconds once per turn for each such folder or tree root, and once more after the marker is rewritten. If the mod cannot ask, for example because the folder does not exist, it lists and reads nothing in that folder for that update, and asks again at the next one. The row then says `plan dir not readable` when the folder exists, and `plan dir not found` when it does not. While the row says that, the 15-second check lists and reads nothing in that folder. The pane first asks where the folder really is. Outside the tree, it shows the `plan dir outside its tree` line. With no answer, it shows the plan as missing, and reads nothing there. Only when it finds the folder inside does the pane list and read it. The 15-second check only asks whether the folder exists, and an update runs when that changes. Some limits follow. A marker path that names the tree through a different spelling counts as outside: an absolute path through a link, such as `/tmp/…` on macOS where the tree is under `/private/tmp/…`, or a path in a different letter case on a disk that ignores case. A real path in the marker can count as outside too, when git names the tree through a link. The markers the shawarma skill writes today are relative, so these cases do not come up with them. A link changed later, while the marker stays the same, is seen only when the marker is rewritten. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
+ 
+ No row runs wider than the window. The ticket follows the labels. In a window narrower than about 40 columns the labels can push the ticket out of view. The title is cut first, then the problem text, then the end of the line. Characters that could reorder the text on screen are drawn as spaces.
+ 
+-The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds, in the trees found at the last update. Two changes wait for this session's next tool call or turn end: a worktree added since the last update, and a marker rewritten with the same file time. The band keeps what it read from `plan.md` and `decisions.md` with each file's time. So in the band, a rewrite of either file that keeps the same file time is not seen until that time changes. The pane reads both files again each time it draws. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end.
++The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds, in the trees found at the last update. Two changes wait for this session's next tool call or turn end: a worktree added since the last update, and a marker rewritten with the same file time. The band keeps what it read from `plan.md` and `decisions.md` with each file's time. So in the band, a rewrite of either file that keeps the same file time is not seen until that time changes. The pane reads both files again each time it draws. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end. One exception: when an update fails as a whole while the check runs, the band shows nothing, and the check keeps running. The rows come back at the first check after the error clears.
+ 
+ The mod does not say which session wrote a marker. A row with no label is in the current worktree, and its marker was written after this session started and less than 12 hours ago.
+ 
+@@ -86,14 +88,12 @@ Press a row to open the pane on that ticket. If that ticket's row is no longer s
+ 
+ - `<ticket>: no longer active`: its tree was scanned and the marker was not there.
+ - `<ticket>: not shown (past the 20-row limit)`: the marker is there, but it is not among the 20 rows shown.
+-- `<ticket>: could not be read`: the marker is there, but its files could not be read.
+ - `<ticket>: not shown (not in the last scan)`: its tree was not scanned, or no scan has run since the mod loaded.
+ 
+ When no row is shown, the pane says the first of these that applies:
+ 
+ - `Shawarma state could not be read.`: the last scan failed.
+ - `No scan has run since the mod loaded.`
+-- `1 marker could not be read.` or `<n> markers could not be read.`: the last scan found markers, but their files could not be read.
+ - `No row drawn:` followed by the more-row's text, then `In other worktrees:` and their tickets when there are any.
+ - `No shawarma marker in the last scan.`
+ 
+diff --git a/mods/shawarma-companion/hooks/register.tsx b/mods/shawarma-companion/hooks/register.tsx
+index 76bba35..12581a8 100644
+--- a/mods/shawarma-companion/hooks/register.tsx
++++ b/mods/shawarma-companion/hooks/register.tsx
+@@ -101,16 +101,15 @@ let lastListed: string | null = null
+  * What the last scan found, for the pane's reasons (round 2 N1, round 3):
+  * `none` until a refresh ran since load, `failed` when the last one threw.
+  * `trees` are the trees whose `.shawarma` listing answered; `paths` every
+- * listed marker; `unread` the picked markers whose files failed to read.
++ * listed marker. A picked marker that fails to read is a row (cm2l Q1).
+  */
+-type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string>; unread: Set<string> }
+-const NO_SCAN = (status: 'none' | 'failed'): Scan => ({ status, trees: new Set(), paths: new Set(), unread: new Set() })
++type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string> }
++const NO_SCAN = (status: 'none' | 'failed'): Scan => ({ status, trees: new Set(), paths: new Set() })
+ let lastScan: Scan = NO_SCAN('none')
+ 
+ /** Why the chosen marker is not drawn, from facts the last scan holds only. */
+ function reasonFor(want: string): string {
+   if (lastScan.status !== 'ok') return 'not shown (not in the last scan)'
+-  if (lastScan.unread.has(want)) return 'could not be read'
+   if (lastScan.paths.has(want)) return `not shown (past the ${MAX_ROWS}-row limit)`
+   const tree = want.slice(0, want.lastIndexOf('/.shawarma/')) || '/'
+   return lastScan.trees.has(tree) ? 'no longer active' : 'not shown (not in the last scan)'
+@@ -537,10 +536,14 @@ function pick(found: Found[], trees: Trees, left: number, claims: ReadonlySet<st
+   return { picked, others, signature: `${picked.map(keyOf).join('\n')}\n#${mine.length - picked.length}\n#${left}\n#${others.length}` }
+ }
+ 
++/** cm2l Q1: the problem a row reads when its marker, plan dir or plan files fail to read. */
++export const UNREAD = 'could not be read'
++
+ /**
+  * Every row, in drawing order: the listings are ordered first (own tree,
+  * newest, ticket), then at most MAX_ROWS markers are read; the rest only
+- * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
++ * counted (Q6). A row whose files fail to read is drawn as an UNREAD problem
++ * row: its ticket, nothing it would have read (cm2l Q1).
+  */
+ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = false): Promise<{ rows: Snapshot[];
+   hidden: { markers: number; trees: number; others: number; otherTickets: string[] }; listed: string; scan: Scan }> {
+@@ -550,7 +553,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub =
+   const claims = await claim($, trees, found, isSub)
+   const { picked, others, signature: listed } = pick(found, trees, scan.left, claims)
+   const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
+-  const facts: Scan = { status: 'ok', trees: answered, unread: new Set(), paths: new Set(found.map(pathOf)) }
++  const facts: Scan = { status: 'ok', trees: answered, paths: new Set(found.map(pathOf)) }
+   const hidden = { markers: found.length - others.length - picked.length, trees: scan.left, others: others.length,
+     otherTickets: [...new Set(others.map(one => one.ticket))].sort().slice(0, MAX_ROWS) }
+   for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
+@@ -565,8 +568,14 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub =
+       $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
+       return null
+     })
+-    if (row !== null) rows.push(row)
+-    else facts.unread.add(under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))
++    if (row !== null) {
++      rows.push(row)
++      continue
++    }
++    const marker = under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
++    rows.push({ ticket: one.ticket, marker, tree: one.root, since: one.at, isEarlier: !(one.at > startedAt + 1),
++      isStale: isStaleAt(one.at, now), decisions: 0, planDir: '', planAt: null, decisionsAt: null, title: '', step: '',
++      problem: UNREAD, isOtherTree: one.root !== trees.own })
+   }
+   return { rows, hidden, listed, scan: facts }
+ }
+@@ -586,7 +595,17 @@ async function refresh($: EngineInterface, trees: Trees | null = null, list: Lis
+   lastScan = next.scan
+   await update($, rowsAtom, () => next.rows)
+   await update($, hiddenAtom, () => next.hidden)
+-  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null)
++  // cm2l Q3: a failed refresh while the check runs keeps it running, so the rows come back once the error clears.
++  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null
++    || (next.scan.status === 'failed' && check !== null))
++}
++
++/** cm2l Q3: a check that throws acts as a failed refresh: no rows, no counts, the scan failed; the check goes on. */
++async function failed($: EngineInterface): Promise<void> {
++  lastScan = NO_SCAN('failed')
++  lastListed = null
++  await update($, rowsAtom, () => [])
++  await update($, hiddenAtom, () => ({ markers: 0, trees: 0, others: 0, otherTickets: [] as string[] }))
+ }
+ 
+ /** Starts the check when a row or the more-row is drawn (round 3 R3-3), stops it when neither is. */
+@@ -595,10 +614,7 @@ function watch($: EngineInterface, isDrawn: boolean): void {
+     check?.cancel()
+     check = null
+   } else if (check === null) {
+-    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => {
+-      lastScan = NO_SCAN('failed')
+-      return update($, rowsAtom, () => [])
+-    }))
++    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => failed($)).catch(() => undefined))
+   }
+ }
+ 
+@@ -614,7 +630,9 @@ function watch($: EngineInterface, isDrawn: boolean): void {
+ async function stale($: EngineInterface): Promise<void> {
+   const rows = await read($, rowsAtom)
+   const hidden = await read($, hiddenAtom)
+-  if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null) return watch($, false)
++  if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null && lastScan.status !== 'failed') {
++    return watch($, false)
++  }
+   if (lastTrees === null) return refresh($)
+   const trees = lastTrees
+   const list = lister($)
+@@ -626,9 +644,16 @@ async function stale($: EngineInterface): Promise<void> {
+   let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
+   for (const row of rows) {
+     if (isChanged) break
++    // cm2l Q2: a row that could not be read is read again each pass, for as long as it fails.
++    if (row.problem === UNREAD) {
++      isChanged = true
++      continue
++    }
+     if (row.planDir === '') continue
+     if (row.problem?.startsWith('plan dir not') === true) {
+-      isChanged = (await $.fs.exists(row.planDir)) !== row.problem.startsWith('plan dir not readable')
++      // cm2l: an exists that rejects starts the refresh, which draws the row as UNREAD.
++      const isThere = await $.fs.exists(row.planDir).catch(() => null)
++      isChanged = isThere === null || isThere !== row.problem.startsWith('plan dir not readable')
+       continue
+     }
+     const entries = await list(row.planDir)
+@@ -777,9 +802,7 @@ export const register: Register = (on, options) => {
+     if (rows.length === 0) {
+       const hidden = await read($, hiddenAtom)
+       const more = moreText(hidden.markers, hidden.trees, hidden.others ?? 0)
+-      const unread = lastScan.unread.size
+       const line = lastScan.status === 'none' ? 'No scan has run since the mod loaded.'
+-        : unread > 0 ? `${unread} ${unread === 1 ? 'marker' : 'markers'} could not be read.`
+         : more !== null ? `No row drawn: ${more}` : 'No shawarma marker in the last scan.'
+       const away = hidden.otherTickets ?? []
+       return <Text dimColor>{clean(away.length === 0 ? line : `${line}\nIn other worktrees: ${away.map(one => clean(one)).join(', ')}`, true)}</Text>
+diff --git a/mods/shawarma-companion/tests/band.test.tsx b/mods/shawarma-companion/tests/band.test.tsx
+index 4adf08c..9d342bb 100644
+--- a/mods/shawarma-companion/tests/band.test.tsx
++++ b/mods/shawarma-companion/tests/band.test.tsx
+@@ -1607,7 +1607,8 @@ describe('lane 3a round 3 fixes', () => {
+     await $.ui.press({ plugin: 'shawarma-companion', key: 'row:a' })
+     fail.add(`read ${ROOT}/.shawarma/active-a`)
+     await bash($, 'true')
+-    expect(await paneText($)).toBe('a: could not be read')
++    // cm2l Q1: the unread marker is a problem row, chosen and drawn as one.
++    expect(await paneText($)).toBe('shawarma: a: could not be read (/repo/.shawarma/active-a)\nOther tickets: b')
+   })
+ 
+   test('R3-1 the chosen marker deleted, every tree scanned: "no longer active"', { options: ON }, async ($, on) => {
+@@ -1900,17 +1901,17 @@ describe('review round 2 (R1, R2, mutants)', () => {
+     expect(resolves(n0)).toEqual([`stat ${ROOT}/docs/plans/p resolve`])
+   })
+ 
+-  test('R2 the only marker could not be read: the pane says so', { options: ON }, async ($, on) => {
++  test('R2 the only marker could not be read: the pane says so (cm2l Q1: as its row)', { options: ON }, async ($, on) => {
+     world(on, new Map([markerAt(ROOT, 'u-1', 'u-1\ntrivial\n', STARTED + 5)]), ROOT, [], new Set([`read ${ROOT}/.shawarma/active-u-1`]), { trees: [ROOT] })
+     await bash($, 'true')
+-    expect(await paneText($)).toBe('1 marker could not be read.')
++    expect(await paneText($)).toBe('shawarma: u-1: could not be read (/repo/.shawarma/active-u-1)')
+   })
+ 
+-  test('R2 two markers could not be read: the count', { options: ON }, async ($, on) => {
++  test('R2 two markers could not be read: both rows (cm2l Q1)', { options: ON }, async ($, on) => {
+     world(on, new Map([markerAt(ROOT, 'u-1', 'u-1\ntrivial\n', STARTED + 5), markerAt(ROOT, 'u-2', 'u-2\ntrivial\n', STARTED + 6)]), ROOT, [],
+       new Set([`read ${ROOT}/.shawarma/active-u-1`, `read ${ROOT}/.shawarma/active-u-2`]), { trees: [ROOT] })
+     await bash($, 'true')
+-    expect(await paneText($)).toBe('2 markers could not be read.')
++    expect(await paneText($)).toBe('shawarma: u-2: could not be read (/repo/.shawarma/active-u-2)\nOther tickets: u-1')
+   })
+ 
+   test('isInside and ownTree: a / boundary; a root of / holds every path (mutants d6, d10)', async () => {
+@@ -2050,7 +2051,7 @@ describe('review round 3 (R3)', () => {
+     expect(await band($)).toEqual(['shawarma: s-1: plan dir outside its tree'])
+   })
+ 
+-  test('21 markers, the 20 picked unreadable, one hidden: the unread sentence comes first (lane r2 L3, mutant m10)', { options: ON }, async ($, on) => {
++  test('21 markers, the 20 picked unreadable, one hidden: 20 problem rows, then the more-row (cm2l Q1)', { options: ON }, async ($, on) => {
+     const files: Files = new Map()
+     const fail = new Set<string>()
+     for (let i = 0; i < 21; i += 1) {
+@@ -2060,8 +2061,10 @@ describe('review round 3 (R3)', () => {
+     }
+     world(on, files, ROOT, [], fail, { trees: [ROOT] })
+     await bash($, 'true')
+-    expect(await band($)).toEqual(['+1 more not shown'])
+-    expect(await paneText($)).toBe('20 markers could not be read.')
++    expect(await band($)).toEqual([
++      ...Array.from({ length: 20 }, (_, i) => `shawarma: u-${String(20 - i).padStart(2, '0')}: could not be read`), '+1 more not shown'])
++    expect(await paneText($)).toBe('shawarma: u-20: could not be read (/repo/.shawarma/active-u-20)\nOther tickets: '
++      + Array.from({ length: 19 }, (_, i) => `u-${String(19 - i).padStart(2, '0')}`).join(', '))
+   })
+ })
+ 
+@@ -3067,3 +3070,167 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
+   })
+ 
+ })
++
++describe('cm2l: the 15 s check survives a failed pass', () => {
++  const DEC = `${DIR}/decisions.md`
++  const dec = (n: number, at: number): [string, File] =>
++    [DEC, { text: Array.from({ length: n }, (_, i) => `2026-11-20 | Q${i + 1} RULING | A | x\n`).join(''), mtimeMs: at }]
++  const pane = async ($: any): Promise<string> => {
++    const view = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane', requestId: 'shawarma-companion',
++      props: {} } as any)
++    return (await view.findAll({ type: 'Text' })).map((one: any) => one.text as string).join('\n')
++  }
++
++  test('C1 decisions.md fails to read once in the check: a problem row, then the full row within 15 s', { options: ON }, async ($, on) => {
++    const fail = new Set<string>()
++    const files = new Map([plan, dec(1, 1)])
++    const clock = world(on, files, ROOT, [], fail)
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    expect(await bandText($)).toBe('skills-x — the thing · run W1 · since 14:01 · 1 decision')
++    files.set(...dec(2, 2))
++    fail.add(`read ${DEC}`)
++    await clock.advance(15_000)
++    expect(await bandText($)).toBe('shawarma: skills-x: could not be read')
++    fail.delete(`read ${DEC}`)
++    await clock.advance(15_000)
++    expect(await bandText($)).toBe('skills-x — the thing · run W1 · since 14:01 · 2 decisions')
++  })
++
++  test('C2 a read that keeps failing: the problem row stays, read again once each 15 s (Q2)', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const fail = new Set<string>()
++    const files = new Map([plan, dec(1, 1)])
++    const clock = world(on, files, ROOT, log, fail)
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    files.set(...dec(2, 2))
++    fail.add(`read ${DEC}`)
++    await clock.advance(15_000)
++    const n0 = log.length
++    await clock.advance(60_000)
++    expect(log.slice(n0).filter(line => line === `read ${DEC}`).length).toBe(4)
++    expect(await bandText($)).toBe('shawarma: skills-x: could not be read')
++  })
++
++  test('C3 the check\'s exists rejects once on a not-found row: the check goes on and follows a later marker change', { options: ON }, async ($, on) => {
++    const st = { boom: false }
++    const files = new Map<string, File>()
++    const clock = world(on, files, ROOT, [], new Set(), { hold: { 'fs.exists': (e: any) =>
++      (st.boom && e.path === DIR ? (st.boom = false, Promise.reject(new Error('EACCES'))) : undefined) } })
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    expect(await bandText($)).toMatch(/plan dir not found/)
++    st.boom = true
++    await clock.advance(15_000)
++    // The row as before the failed call: the step and the problem, both hand-written (lane flag on a copied prefix).
++    expect(await bandText($)).toMatch(/· run W1 ·/)
++    expect(await bandText($)).toMatch(/· plan dir not found: \/repo\/docs\/plans\/2026-10-16-skills-x-thing$/)
++    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 200_000 })
++    await clock.advance(15_000)
++    expect(await bandText($)).toMatch(/· run W2 ·/)
++  })
++
++  test('C4 (skills-0wsk) a check that throws: no row, no more-row, the pane says so; both back within 15 s', { options: ON }, async ($, on) => {
++    const st = { boom: false }
++    const files = new Map([plan, [`${WT}/.shawarma/active-skills-y`, { text: 'skills-y\ntrivial\n', mtimeMs: STARTED + 70_000 }] as [string, File]])
++    const clock = world(on, files, ROOT, [], new Set(), { claimed: [ROOT], hold: { 'clock.now': () =>
++      (st.boom ? (st.boom = false, Promise.reject(new Error('clock failed'))) : undefined) } })
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    const BIG = { ...BAND, maxRows: 8, scroll: { offset: 0, bodyRows: 8 } }
++    const band = async (): Promise<string[]> =>
++      (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
++        .findAll({ type: 'Text' })).map((one: any) => one.text as string)
++    await clock.advance(15_000)
++    expect(await band()).toEqual(['skills-x — the thing · run W1 · since 14:01 · 0 decisions', '1 run in another worktree'])
++    st.boom = true
++    await clock.advance(15_000)
++    expect(await band()).toEqual([])
++    expect(await pane($)).toBe('Shawarma state could not be read.')
++    await clock.advance(15_000)
++    expect(await band()).toEqual(['skills-x — the thing · run W1 · since 14:01 · 0 decisions', '1 run in another worktree'])
++  })
++
++  test('C5 a refresh that fails inside the check: the check goes on and draws the row again', { options: ON }, async ($, on) => {
++    const fail = new Set<string>()
++    const files = new Map([plan])
++    const clock = world(on, files, ROOT, [], fail)
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 200_000 })
++    fail.add('usage')
++    await clock.advance(15_000)
++    expect(await bandText($)).toBe(undefined)
++    fail.delete('usage')
++    await clock.advance(15_000)
++    expect(await bandText($)).toMatch(/^skills-x — the thing · run W2 ·/)
++  })
++
++  for (const site of ['marker', 'plan.md', 'exists'] as const) {
++    test(`C6 ${site} fails once in the check: the problem row, then the full row within 15 s (Q1, lane A1)`, { options: ON }, async ($, on) => {
++      const fail = new Set<string>()
++      const st = { boom: false }
++      const files = new Map([plan, dec(1, 1)])
++      const clock = world(on, files, ROOT, [], fail, { hold: { 'fs.exists': (e: any) =>
++        (st.boom && e.path === DIR ? (st.boom = false, Promise.reject(new Error('EACCES'))) : undefined) } })
++      await write($, MARKER, MARKER_TEXT('run W1'))
++      files.set(MARKER, { text: MARKER_TEXT('run W2'), mtimeMs: STARTED + 125_000 })
++      files.set(`${DIR}/plan.md`, { text: '# skills-x — the new thing\n', mtimeMs: 3 })
++      if (site === 'marker') fail.add(`read ${MARKER}`)
++      if (site === 'plan.md') fail.add(`read ${DIR}/plan.md`)
++      if (site === 'exists') { fail.add(`list ${DIR}`); st.boom = true }
++      await clock.advance(15_000)
++      expect(await bandText($)).toBe('shawarma: skills-x: could not be read')
++      fail.clear()
++      await clock.advance(15_000)
++      expect(await bandText($)).toBe('skills-x — the new thing · run W2 · since 14:02 · 1 decision')
++    })
++  }
++
++  test('C7 labels on an unreadable row: other tree, earlier session (lane A2)', { options: ON }, async ($, on) => {
++    const Y = `${WT}/.shawarma/active-skills-y`
++    const Z = `${ROOT}/.shawarma/active-skills-z`
++    const fail = new Set<string>([`read ${Y}`, `read ${Z}`])
++    const files = new Map<string, File>([[Y, { text: 'skills-y\ntrivial\n', mtimeMs: STARTED + 70_000 }],
++      [Z, { text: 'skills-z\ntrivial\n', mtimeMs: STARTED - 60_000 }]])
++    world(on, files, ROOT, [], fail)
++    await bash($, 'true')
++    const BIG = { ...BAND, maxRows: 8, scroll: { offset: 0, bodyRows: 8 } }
++    const band = (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
++      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
++    expect(band).toEqual(['earlier session: shawarma: skills-z: could not be read', 'other tree: shawarma: skills-y: could not be read'])
++  })
++
++  test('C8 the command opens the pane on an unreadable first row (lane A10)', { options: ON }, async ($, on) => {
++    const fail = new Set<string>()
++    world(on, new Map([plan]), ROOT, [], fail)
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    fail.add(`read ${MARKER}`)
++    await bash($, 'true')
++    await $.command.run({ command: 'shawarma-companion', args: '' } as any)
++    expect(await pane($)).toBe(`shawarma: skills-x: could not be read (${MARKER})`)
++  })
++
++  for (const n of [20, 40]) {
++    test(`C9 cost: ${n} unreadable trivial markers, one tree: 21 fs calls per check pass (Q2, lane A9)`, { options: ON }, async ($, on) => {
++      const log: string[] = []
++      const files: Files = new Map()
++      const fail = new Set<string>()
++      for (let i = 0; i < n; i += 1) files.set(`${ROOT}/.shawarma/active-c-${i}`, { text: `c-${i}\ntrivial\n`, mtimeMs: STARTED + 100 + i })
++      const clock = world(on, files, ROOT, log, fail, { trees: [ROOT] })
++      for (let i = 0; i < n; i += 1) fail.add(`read ${ROOT}/.shawarma/active-c-${i}`)
++      await bash($, 'true')
++      await clock.advance(15_000)
++      const n0 = log.length
++      await clock.advance(60_000)
++      // Each pass: one listing of the tree's .shawarma, then one marker read per drawn row, at most 20 rows.
++      expect((log.length - n0) / 4).toBe(1 + 20)
++    })
++  }
++
++  test('G1 a refresh that fails with no check running starts none', { options: ON }, async ($, on) => {
++    const log: string[] = []
++    const fail = new Set<string>(['usage'])
++    const clock = world(on, new Map([plan]), ROOT, log, fail)
++    await write($, MARKER, MARKER_TEXT('run W1'))
++    const n0 = log.length
++    await clock.advance(60_000)
++    expect(log.length).toBe(n0)
++  })
++})

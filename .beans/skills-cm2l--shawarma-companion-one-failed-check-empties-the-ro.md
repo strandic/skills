@@ -21,3 +21,12 @@ Rulings (decisions.md):
 - **Q3 = A.** skills-0wsk folded in: a check that fails as a whole clears the rows and the other-runs counts, marks the scan failed, and keeps checking.
 
 Error directions: (1) a row shows `could not be read` or nothing while the run's files are readable — an inconvenience, gone within 15 s; (2) a row shows a step, title or count from before a failed read — wrong output. The frozen rule never errs the second way.
+
+## Plan paused: 3 questions (2026-11-20)
+
+Spike on `1eed2e3` (sketch `docs/plans/2026-11-20-skills-cm2l-check-survives-a-failed-pass/sketch/sketch.patch`, 5 files). `CLAUDE_CONFIG_DIR=$HOME/.claude-personal claude-personal plugin test mods/shawarma-companion`: sketch `290 pass` / `0 fail`; base modules with the sketch's tests `274 pass` / `16 fail` (4 changed tests, 12 new red); nearest wrong fix (problem row never re-read) `281 pass` / `2 fail` (C1, C2, at 283 tests). `plugin validate`: `✔ Validation passed`. tsc 6.0.3 on the 2.1.325 types: exit 0. Attack lane: `reports/attack/report.md`.
+
+- **Q4 (RULING)** fold lane finding A1+: one failed listing of the plan dir in a check leaves `… · 0 decisions · plan dir not readable: …` until the next tool call. Variant `sketch/q4-variant.md`: recovers in one pass; reverses test N11.
+- **Q5 (RULING)** the `0 decisions` such a row shows while decisions.md holds rulings: fold or new ticket.
+- **Q6 (RULING)** the four existing tests whose expectations Q1 flips, and the pane's `<n> markers could not be read.` line removed.
+- Defaults: D1 version 0.3.1; D2 new ticket for a refused `clock.every` period (the check stops for good, the band keeps old content; lane A11a); D3 a note on skills-y1gt (a hanging read keeps the old count while pending; lane A8).
