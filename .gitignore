@@ -9,3 +9,9 @@ evals/*/results/
 
 # Session transcripts a replay case leaves behind
 evals/*/**/[0-9a-f]*-[0-9a-f]*.jsonl
+
+# Planning lane reports: the written reports (.md) are tracked; probe scripts,
+# raw output and readings stay local (docs/plans/README.md, "Lane reports").
+/docs/plans/*/reports/**
+!/docs/plans/*/reports/**/
+!/docs/plans/*/reports/**/*.md
