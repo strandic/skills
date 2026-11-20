@@ -101,16 +101,15 @@ let lastListed: string | null = null
  * What the last scan found, for the pane's reasons (round 2 N1, round 3):
  * `none` until a refresh ran since load, `failed` when the last one threw.
  * `trees` are the trees whose `.shawarma` listing answered; `paths` every
- * listed marker; `unread` the picked markers whose files failed to read.
+ * listed marker. A picked marker that fails to read is a row (cm2l Q1).
  */
-type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string>; unread: Set<string> }
-const NO_SCAN = (status: 'none' | 'failed'): Scan => ({ status, trees: new Set(), paths: new Set(), unread: new Set() })
+type Scan = { status: 'none' | 'ok' | 'failed'; trees: Set<string>; paths: Set<string> }
+const NO_SCAN = (status: 'none' | 'failed'): Scan => ({ status, trees: new Set(), paths: new Set() })
 let lastScan: Scan = NO_SCAN('none')
 
 /** Why the chosen marker is not drawn, from facts the last scan holds only. */
 function reasonFor(want: string): string {
   if (lastScan.status !== 'ok') return 'not shown (not in the last scan)'
-  if (lastScan.unread.has(want)) return 'could not be read'
   if (lastScan.paths.has(want)) return `not shown (past the ${MAX_ROWS}-row limit)`
   const tree = want.slice(0, want.lastIndexOf('/.shawarma/')) || '/'
   return lastScan.trees.has(tree) ? 'no longer active' : 'not shown (not in the last scan)'
@@ -563,10 +562,14 @@ function pick(found: Found[], trees: Trees, left: number, claims: ReadonlySet<st
   return { picked, others, signature: `${picked.map(keyOf).join('\n')}\n#${mine.length - picked.length}\n#${left}\n#${others.length}` }
 }
 
+/** cm2l Q1: the problem a row reads when its marker, plan dir or plan files fail to read. */
+export const UNREAD = 'could not be read'
+
 /**
  * Every row, in drawing order: the listings are ordered first (own tree,
  * newest, ticket), then at most MAX_ROWS markers are read; the rest only
- * counted (Q6). A row whose files fail to read is left out (D5 b: draws less).
+ * counted (Q6). A row whose files fail to read is drawn as an UNREAD problem
+ * row: its ticket, nothing it would have read (cm2l Q1).
  */
 async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = false): Promise<{ rows: Snapshot[];
   hidden: { markers: number; trees: number; others: number; otherTickets: string[] }; listed: string; scan: Scan }> {
@@ -576,7 +579,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
   const claims = await claim($, trees, found, isSub)
   const { picked, others, signature: listed } = pick(found, trees, scan.left, claims)
   const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
-  const facts: Scan = { status: 'ok', trees: answered, unread: new Set(), paths: new Set(found.map(pathOf)) }
+  const facts: Scan = { status: 'ok', trees: answered, paths: new Set(found.map(pathOf)) }
   const hidden = { markers: found.length - others.length - picked.length, trees: scan.left, others: others.length,
     otherTickets: [...new Set(others.map(one => one.ticket))].sort().slice(0, MAX_ROWS) }
   for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
@@ -591,8 +594,14 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
       $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
       return null
     })
-    if (row !== null) rows.push(row)
-    else facts.unread.add(under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`))
+    if (row !== null) {
+      rows.push(row)
+      continue
+    }
+    const marker = under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
+    rows.push({ ticket: one.ticket, marker, tree: one.root, since: one.at, isEarlier: !(one.at > startedAt + 1),
+      isStale: isStaleAt(one.at, now), decisions: 0, planDir: '', planAt: null, decisionsAt: null, title: '', step: '',
+      problem: UNREAD, isOtherTree: one.root !== trees.own })
   }
   return { rows, hidden, listed, scan: facts }
 }
@@ -612,7 +621,17 @@ async function refresh($: EngineInterface, trees: Trees | null = null, list: Lis
   lastScan = next.scan
   await update($, rowsAtom, () => next.rows)
   await update($, hiddenAtom, () => next.hidden)
-  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null)
+  // cm2l Q3: a failed refresh while the check runs keeps it running, so the rows come back once the error clears.
+  watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null
+    || (next.scan.status === 'failed' && check !== null))
+}
+
+/** cm2l Q3: a check that throws acts as a failed refresh: no rows, no counts, the scan failed; the check goes on. */
+async function failed($: EngineInterface): Promise<void> {
+  lastScan = NO_SCAN('failed')
+  lastListed = null
+  await update($, rowsAtom, () => [])
+  await update($, hiddenAtom, () => ({ markers: 0, trees: 0, others: 0, otherTickets: [] as string[] }))
 }
 
 /** Starts the check when a row or the more-row is drawn (round 3 R3-3), stops it when neither is. */
@@ -621,10 +640,7 @@ function watch($: EngineInterface, isDrawn: boolean): void {
     check?.cancel()
     check = null
   } else if (check === null) {
-    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => {
-      lastScan = NO_SCAN('failed')
-      return update($, rowsAtom, () => [])
-    }))
+    check = $.clock.every(CHECK_MS, () => void stale($).catch(() => failed($)).catch(() => undefined))
   }
 }
 
@@ -640,7 +656,9 @@ function watch($: EngineInterface, isDrawn: boolean): void {
 async function stale($: EngineInterface): Promise<void> {
   const rows = await read($, rowsAtom)
   const hidden = await read($, hiddenAtom)
-  if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null) return watch($, false)
+  if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null && lastScan.status !== 'failed') {
+    return watch($, false)
+  }
   if (lastTrees === null) return refresh($)
   const trees = lastTrees
   const list = lister($)
@@ -652,9 +670,17 @@ async function stale($: EngineInterface): Promise<void> {
   let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
   for (const row of rows) {
     if (isChanged) break
+    // cm2l Q2: a row that could not be read is read again each pass, for as long as it fails; so is a plan dir that did
+    // not list (Q4): the refresh asks its real path first, as at any update, then lists it.
+    if (row.problem === UNREAD || row.problem?.startsWith('plan dir not readable') === true) {
+      isChanged = true
+      continue
+    }
     if (row.planDir === '') continue
     if (row.problem?.startsWith('plan dir not') === true) {
-      isChanged = (await $.fs.exists(row.planDir)) !== row.problem.startsWith('plan dir not readable')
+      // cm2l: an exists that rejects starts the refresh, which draws the row as UNREAD.
+      const isThere = await $.fs.exists(row.planDir).catch(() => null)
+      isChanged = isThere === null || isThere !== row.problem.startsWith('plan dir not readable')
       continue
     }
     const entries = await list(row.planDir)
@@ -803,9 +829,7 @@ export const register: Register = (on, options) => {
     if (rows.length === 0) {
       const hidden = await read($, hiddenAtom)
       const more = moreText(hidden.markers, hidden.trees, hidden.others ?? 0)
-      const unread = lastScan.unread.size
       const line = lastScan.status === 'none' ? 'No scan has run since the mod loaded.'
-        : unread > 0 ? `${unread} ${unread === 1 ? 'marker' : 'markers'} could not be read.`
         : more !== null ? `No row drawn: ${more}` : 'No shawarma marker in the last scan.'
       const away = hidden.otherTickets ?? []
       return <Text dimColor>{clean(away.length === 0 ? line : `${line}\nIn other worktrees: ${away.map(one => clean(one)).join(', ')}`, true)}</Text>
