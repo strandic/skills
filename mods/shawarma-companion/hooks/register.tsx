@@ -62,6 +62,15 @@ export const WINDOW_SLACK_MS = 2_000
 const windows: { from: number; to: number }[] = []
 export const MAX_WINDOWS = 64
 /**
+ * skills-5w5c: the spans of the writing calls the engine has not ended or
+ * abandoned, main session and subagents. Nothing evicts one from this set: the
+ * call's end removes it, before anything it awaits, and so does `next.signal`
+ * aborting (an interrupt, a hook above answering first, this hook out of
+ * budget). So a turn end or newer calls cannot drop the span of a call still
+ * running. `windows` and `turnWindows` keep their own copy as before.
+ */
+const openWindows = new Set<{ from: number; to: number }>()
+/**
  * Lane round 3 C3: the marker paths of the last listing. Only a marker absent
  * from it whose time falls in a call span claims its tree, so another session's
  * rewrites of its own marker during this session's calls claim nothing. Null
@@ -248,7 +257,7 @@ async function claim($: EngineInterface, trees: Trees, found: readonly Found[], 
       : realRoots.filter(one => isInside(one.real, real)).sort((a, b) => b.real.length - a.real.length)[0]
     if (hit !== undefined) held.add(hit.root)
   }
-  const spans = [...windows, ...turnWindows]
+  const spans = [...windows, ...turnWindows, ...openWindows]
   const seen = lastSeen
   const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
   for (const one of found) {
@@ -771,8 +780,14 @@ export const register: Register = (on, options) => {
     const span = { from: await $.clock.now(), to: Number.POSITIVE_INFINITY }
     remember(windows, [span], MAX_WINDOWS, () => false)
     remember(turnWindows, [span], MAX_TURN, () => false)
+    openWindows.add(span)
+    const release = () => { openWindows.delete(span) }
+    if (next.signal.aborted) release()
+    else next.signal.addEventListener('abort', release, { once: true })
     // N1: a closed span is remembered again as the newest, so a long call's span outlives newer calls and a turn end.
     const result = await next(e).finally(async () => {
+      // skills-5w5c: released first, so a clock read that fails or never answers cannot keep it in openWindows.
+      release()
       span.to = await $.clock.now()
       remember(windows, [span], MAX_WINDOWS, (a, b) => a === b)
       remember(turnWindows, [span], MAX_TURN, (a, b) => a === b)
