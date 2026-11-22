@@ -2,7 +2,7 @@
 /**
  * runmeter: what each Claude Code session that started lanes cost, and which model each lane ran on, read
  * from Claude Code transcripts and, with --prs, from gh. Prints counts, durations, days and model names;
- * with --labels also the first two words of the command that opened each session. Transcripts may hold
+ * with --labels also the first two words of the command that opened each session and each of its parts. Transcripts may hold
  * private data: no other message text is printed, and --prompts writes prompts to a folder, never to stdout.
  *
  *   node scripts/runmeter.mjs <projects dir> <project key> [--since <YYYY-MM-DD>] [--until <YYYY-MM-DD>] [--json] [--labels] [--prs <repo dir>] [--prompts <out dir>] [--plans|--retro|--replay <regex>]
@@ -138,19 +138,40 @@ export function commandWords(d) {
  * plantime's `classify` reads as `human`. A run of owner records is one turn. Records that only accompany
  * (`defer`, `compaction`) neither start nor end a turn.
  */
-export function owner(recs) {
+export function owner(recs, partOf = null) {
   const kinds = new Map();
-  let turns = 0, inTurn = false, label = '';
+  const byPart = new Map(); // part -> turns; a turn counts in the part of its last owner record
+  let turns = 0, inTurn = false, label = '', at = null;
   for (const d of recs) {
     const k = classify(d, kinds, PLANTIME_RX);
     if (k === 'defer' || k === 'compaction') continue;
     if (k === 'human') {
+      const p = partOf ? partOf(d) : 0;
       if (!inTurn) turns++;
+      else if (p !== at) byPart.set(at, byPart.get(at) - 1);
+      if (!inTurn || p !== at) byPart.set(p, (byPart.get(p) ?? 0) + 1);
+      at = p;
       if (!label) label = cleanLabel(commandWords(d));
     }
     inTurn = k === 'human';
   }
-  return { turns, label };
+  return partOf ? { turns, label, byPart } : { turns, label };
+}
+
+/**
+ * Where a session's runs start (2b). Each owner record that is a skill command opens a part; part 0 holds what
+ * comes before the first one. Read over all of the session's records, whatever the window. Returns each
+ * command's time and label, and each record's part.
+ */
+export function cuts(recs) {
+  const kinds = new Map(), part = new Map(), starts = [];
+  for (const d of recs) {
+    if (classify(d, kinds, PLANTIME_RX) === 'human' && SKILL_COMMAND.test(textOf(d.message?.content))) starts.push({ t: ts(d.timestamp), label: cleanLabel(commandWords(d)) });
+    part.set(d, starts.length);
+  }
+  // The commands are in time order (records() sorts them), so a lane's part is found by halving.
+  const partAt = (t) => { let lo = 0, hi = starts.length; while (lo < hi) { const m = (lo + hi) >> 1; if (starts[m].t <= t) lo = m + 1; else hi = m; } return lo; };
+  return { starts, partOf: (d) => part.get(d) ?? 0, partAt };
 }
 
 // --- lanes and sessions -----------------------------------------------------------------------
@@ -223,7 +244,7 @@ export function readLane(path, rx) {
     launchedWithDefaults: typeof meta.launchedWithDefaults === 'boolean' ? meta.launchedWithDefaults : null,
     recordsNotRead: bad,
   };
-  return { lane, prompt, t0 };
+  return { lane, prompt, t0, t1: ts(recs[recs.length - 1].timestamp) };
 }
 
 /**
@@ -248,7 +269,13 @@ export function readSession(path, rx, since = null, until = null) {
   if (skipped === files.length) throw new Error('no readable lane');
   if (!lanes.length || !recs.length) return null;
   lanes.sort((a, b) => a.t0 - b.t0);
-  const u = usage(recs), o = owner(recs);
+  const c = cuts(all);
+  const u = usage(recs), o = owner(recs, c.partOf);
+  for (const r of lanes) {
+    r.lane.part = c.partAt(r.t0);
+    const next = c.starts[r.lane.part]; // the command that opens the next part
+    r.lane.crossesCommand = next !== undefined && r.t1 > next.t;
+  }
   const t0 = ts(recs[0].timestamp);
   const id = short(basename(path));
   const session = {
@@ -264,10 +291,50 @@ export function readSession(path, rx, since = null, until = null) {
     tokens: u.tokens,
     laneTokens: lanes.reduce((sum, r) => addTokens(sum, r.lane.tokens), zero()),
     lanes: lanes.map((r) => r.lane),
+    parts: parts(recs, lanes.map((r) => r.lane), c, o.byPart),
     laneFilesSkipped: skipped,
     recordsNotRead: lanes.reduce((n, r) => n + r.lane.recordsNotRead, bad),
   };
   return { session, t0, prompts: lanes.map((r) => ({ session: id, agent: r.lane.agent, text: r.prompt })) };
+}
+
+/**
+ * A session's parts (2c), oldest first. A message counts in the part of its first record; a lane, whole, in the
+ * part where its first record falls; a turn in the part of its last owner record. A part a command opened is always
+ * kept, even when it holds nothing else; part 0 is left out when it has no message, no turn and no lane.
+ */
+export function parts(recs, lanes, c, turnsByPart) {
+  const recsOf = new Map(), firstPart = new Map(), span = new Map(); // span: the part's own records, before messages move
+  for (const d of recs) {
+    let p = c.partOf(d);
+    const t = ts(d.timestamp), [lo, hi] = span.get(p) ?? [t, t];
+    span.set(p, [Math.min(lo, t), Math.max(hi, t)]);
+    const id = d.type === 'assistant' && typeof d.message?.id === 'string' ? d.message.id : null;
+    if (id !== null) { if (firstPart.has(id)) p = firstPart.get(id); else firstPart.set(id, p); }
+    if (!recsOf.has(p)) recsOf.set(p, []);
+    recsOf.get(p).push(d);
+  }
+  const lanesOf = new Map();
+  for (const l of lanes) { if (!lanesOf.has(l.part)) lanesOf.set(l.part, []); lanesOf.get(l.part).push(l); }
+  const out = [];
+  for (const p of [...new Set([...recsOf.keys(), ...lanesOf.keys(), ...turnsByPart.keys()])].sort((a, b) => a - b)) {
+    const own = recsOf.get(p) ?? [], its = lanesOf.get(p) ?? [];
+    const u = usage(own), turns = turnsByPart.get(p) ?? 0;
+    if (p === 0 && !u.messages && !turns && !its.length) continue;
+    const [lo, hi] = span.get(p) ?? [];
+    out.push({
+      part: p,
+      day: lo !== undefined ? dayOf(lo) : its[0].day,
+      label: p > 0 ? c.starts[p - 1].label || null : null,
+      minutes: lo !== undefined ? minutes(hi - lo) : 0,
+      ownerTurns: turns,
+      messages: u.messages,
+      tokens: u.tokens,
+      lanes: its.length,
+      laneTokens: its.reduce((sum, l) => addTokens(sum, l.tokens), zero()),
+    });
+  }
+  return out;
 }
 
 /** Every session with a lane, from every project folder whose name holds the key, oldest first. A folder that cannot
@@ -293,7 +360,7 @@ export function collect(projectsDir, key, { rx, since = null, until = null, labe
   }
   if (files.projectFoldersSkipped === folders.length) throw new Unusable(`no matching project folder is readable: ${why(failure)}`);
   found.sort((a, b) => a.t0 - b.t0);
-  if (!labels) for (const r of found) r.session.label = null;
+  if (!labels) for (const r of found) { r.session.label = null; for (const p of r.session.parts) p.label = null; }
   return { sessions: found.map((r) => r.session), prompts: found.flatMap((r) => r.prompts), files };
 }
 
@@ -319,7 +386,7 @@ export function laneTable(sessions) {
 
 export function totals(sessions, files) {
   const t = { ...files, sessions: sessions.length, lanes: 0, lanesByKind: Object.fromEntries(KINDS.map((k) => [k, 0])), ownerTurns: 0,
-    sessionMinutes: 0, laneMinutes: 0, tokens: zero(), laneTokens: zero(), laneFilesSkipped: 0, recordsNotRead: 0 };
+    sessionMinutes: 0, laneMinutes: 0, tokens: zero(), laneTokens: zero(), lanesCrossingCommand: 0, laneFilesSkipped: 0, recordsNotRead: 0 };
   for (const s of sessions) {
     t.ownerTurns += s.ownerTurns;
     t.sessionMinutes += s.minutes;
@@ -327,7 +394,7 @@ export function totals(sessions, files) {
     addTokens(t.laneTokens, s.laneTokens);
     t.laneFilesSkipped += s.laneFilesSkipped;
     t.recordsNotRead += s.recordsNotRead;
-    for (const l of s.lanes) { t.lanes++; t.lanesByKind[l.kind]++; t.laneMinutes += l.minutes; }
+    for (const l of s.lanes) { t.lanes++; t.lanesByKind[l.kind]++; t.laneMinutes += l.minutes; if (l.crossesCommand) t.lanesCrossingCommand++; }
   }
   return { ...t, sessionMinutes: round1(t.sessionMinutes), laneMinutes: round1(t.laneMinutes) };
 }
@@ -458,6 +525,19 @@ function sessionLine(s) {
     `owner turns ${s.ownerTurns}`, `lanes ${s.lanes.length}`, `orchestrator tokens ${tokensText(s.tokens)}`, `lane tokens ${tokensText(s.laneTokens)}`].join(' · ');
 }
 
+function partLine(p) {
+  return [`  # part ${p.part}${p.label ? ` [${p.label}]` : ''} ${p.day}`, `${p.minutes}m`, `messages ${p.messages}`, `owner turns ${p.ownerTurns}`, `lanes ${p.lanes}`,
+    `orchestrator tokens ${tokensText(p.tokens)}`, `lane tokens ${tokensText(p.laneTokens)}`].join(' · ');
+}
+
+/** A session's line, then its lanes; with two parts or more, each part's line before its lanes. */
+function sessionLines(s) {
+  if (s.parts.length < 2) return [sessionLine(s), ...s.lanes.map(laneLine)];
+  const lanesOf = new Map();
+  for (const l of s.lanes) { if (!lanesOf.has(l.part)) lanesOf.set(l.part, []); lanesOf.get(l.part).push(l); }
+  return [sessionLine(s), ...s.parts.flatMap((p) => [partLine(p), ...(lanesOf.get(p.part) ?? []).map(laneLine)])];
+}
+
 function laneLine(l) {
   const defaults = l.launchedWithDefaults === null ? [] : [`launched with defaults: ${l.launchedWithDefaults ? 'yes' : 'no'}`];
   return [`   ${l.agent} ${l.day} ${l.kind} ${l.agentType}`, `launch ${l.launchModel}`, `requested ${list(l.requested)}`, `resolved ${list(l.resolved)}`, `effort ${list(l.effort)}`,
@@ -472,6 +552,7 @@ function totalLines(t) {
     `# TOTAL: sessions with lanes ${t.sessions} (session files ${t.sessionFiles}, project folders ${t.projectFolders}) · lanes ${t.lanes} (${kinds}) · owner turns ${t.ownerTurns} · session minutes ${t.sessionMinutes} · lane minutes ${t.laneMinutes} (summed, overlap not removed)`,
     `  orchestrator tokens ${tokensText(t.tokens)}`,
     `  lane tokens ${tokensText(t.laneTokens)}`,
+    ...(t.lanesCrossingCommand ? [`  lanes that end under a later command: ${t.lanesCrossingCommand}`] : []),
     ...(unread.length ? [`  ${unread.join(' · ')}`] : []),
   ];
 }
@@ -487,7 +568,7 @@ function prLines(p) {
 export function render(report) {
   return [
     ...tableLines(report.lanesByHalfMonth),
-    ...report.sessions.flatMap((s) => [sessionLine(s), ...s.lanes.map(laneLine)]),
+    ...report.sessions.flatMap(sessionLines),
     ...totalLines(report.totals),
     ...(report.prs ? prLines(report.prs) : []),
     ...(report.promptFilesWritten === undefined ? [] : [`prompts: ${report.promptFilesWritten} files written`]),

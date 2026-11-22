@@ -4,11 +4,11 @@
 
 The tool measures sessions, not runs. A session is one Claude Code conversation, kept in one transcript file. A run is the work that follows one skill command, such as `/shawarma plan t-0001`. A lane is a subagent that the session started. The session that starts the lanes is the orchestrator. The owner is the person who types in the session.
 
-A session that started at least one lane is printed. A session may hold more than one run, because the owner can give several commands in one session. The tool does not split them. See [Limits](#limits).
+A session that started at least one lane is printed. A session may hold more than one run, because the owner can give several commands in one session. The tool cuts such a session into parts, one per skill command, and prints each part's figures under the session's line. See [Parts](#parts).
 
 The tool never changes a transcript. It adds no rule to the skill and nothing for the orchestrator to remember. It can measure every past session whose transcripts are still on the machine.
 
-It prints counts, durations, days and model names. With `--labels` it also prints the first two words of the command that opened each session. It prints no other message text, because transcripts may hold private data. See [Privacy rules](#privacy-rules).
+It prints counts, durations, days and model names. With `--labels` it also prints the first two words of the command that opened each session, and of the command that opened each of its parts. It prints no other message text, because transcripts may hold private data. See [Privacy rules](#privacy-rules).
 
 ## What each figure is for
 
@@ -98,7 +98,7 @@ Exit codes:
 
 ## What it prints
 
-The text output has four parts. With `--prs` the pull requests follow them, and with `--prompts` a last line gives the number of prompt files written. `--json` prints the same figures under the keys shown. The JSON also holds a few figures that the text leaves out; they are marked "JSON only".
+The text output has four sections. With `--prs` the pull requests follow them, and with `--prompts` a last line gives the number of prompt files written. `--json` prints the same figures under the keys shown. The JSON also holds a few figures that the text leaves out; they are marked "JSON only".
 
 A value that is missing prints as `?` and is still counted. The same holds for a value that is not one plain word (see [Privacy rules](#privacy-rules)). In JSON, a missing single value is the string `?` and a missing list is empty.
 
@@ -152,6 +152,7 @@ Only sessions with at least one lane are printed, oldest first. `--json` key: `s
 | messages | `messages` | The session's own assistant messages. Each message id counts once. |
 | owner turns | `ownerTurns` | See [Owner turns](#owner-turns). |
 | lanes | `lanes` | The number of lanes. In JSON, the lanes themselves. |
+| JSON only | `parts` | The session's parts. See [Parts](#parts). |
 | orchestrator tokens | `tokens` | The four token figures of the session's own messages. See [Tokens](#tokens). |
 | lane tokens | `laneTokens` | The four token figures, each summed over the session's lanes. |
 | JSON only | `laneFilesSkipped`, `recordsNotRead` | This session's share of the two totals of the same name. |
@@ -175,6 +176,8 @@ Under each session, its lanes, oldest first.
 | messages | `messages` | The lane's assistant messages. Each message id counts once. |
 | tokens | `tokens` | The four token figures. See [Tokens](#tokens). |
 | launched with defaults | `launchedWithDefaults` | `yes` or `no` when the meta file has `launchedWithDefaults`. Not printed (JSON `null`) when it does not. |
+| JSON only | `part` | The number of the part the lane counts in. See [Parts](#parts). |
+| JSON only | `crossesCommand` | `true` when the lane's last record comes after the command that opens the next part. |
 | JSON only | `recordsNotRead` | The lane file's share of the total of the same name. |
 
 ### 4. Totals
@@ -193,6 +196,7 @@ Under each session, its lanes, oldest first.
 | project folders skipped | `projectFoldersSkipped` | Those of the project folders that could not be listed, such as one the account may not read. The others are still measured. |
 | session files skipped | `sessionFilesSkipped` | Session files that have lane files but could not be measured: unreadable, no usable record, or no readable lane. |
 | lane files skipped | `laneFilesSkipped` | Lane files that could not be read or hold no usable record. |
+| lanes that end under a later command | `lanesCrossingCommand` | The lanes whose `crossesCommand` is `true`. Printed only when it is not zero. |
 | records not read | `recordsNotRead` | Lines that are not JSON, and user or assistant records with no real timestamp, in the files that were read. |
 
 The four "skipped" and "not read" figures are printed only when they are not zero. A folder or file that cannot be read has no date, so the date window applies to them only in part: `projectFoldersSkipped` covers every project folder, `sessionFilesSkipped` covers every session file, `laneFilesSkipped` covers every lane file of the sessions printed, and `recordsNotRead` covers the session files of the sessions printed and their kept lanes.
@@ -233,15 +237,47 @@ An owner record is a record that `classify()` in `scripts/plantime.mjs` reads as
 - The command that opens the session is a turn. So the figure counts the times the owner spoke, asked or unasked, except for those typed reasons.
 - Only the session file is read. Nothing the owner does inside a lane is counted.
 
+## Parts
+
+A part is the work that follows one skill command: one run. The tool cuts each session at each skill command the owner typed. These are the commands that [Session label](#session-label) reads, whatever the skill and whether or not they give a label. A built-in command, a skill that the model started, and a command typed as plain text do not cut.
+
+- Part 0 holds what comes before the first skill command. Part 1 starts at the first one, part 2 at the second, and so on, counted over the whole session file.
+- A message counts in the part where its first record falls.
+- An owner turn counts in the part of its last owner record. Text typed just before a command, with no answer between them, counts in the command's part.
+- A lane counts whole in the part where its first record falls. A lane whose last record comes after the next part's command is counted in the totals as a lane that ends under a later command. A lane that ends at the very instant of that command does not.
+- A part that a command opened is always kept, even when it holds nothing but its command. Part 0 is left out when it holds no message, no owner turn and no lane.
+- A part's figures add up to the session's: owner turns, messages, lanes and each token figure. Minutes do not, see [Minutes](#minutes).
+- With `--labels`, a part opened by a command that gives a label prints that label. Part 0 never has one.
+
+In text, a session with two parts or more prints a line per part under the session line, each part's lanes under it:
+
+```
+  # part 1 [plan t-0001] 2026-11-01 · 11m · messages 2 · owner turns 2 · lanes 1 · orchestrator tokens in 30 out 30 cache-write 30 cache-read 30 · lane tokens in 2 out 0 cache-write 0 cache-read 0
+```
+
+A session with one part prints as it did: the session line, then its lanes. In JSON, every session has `parts`:
+
+| Figure | `--json` key | Meaning |
+|---|---|---|
+| part | `part` | Its number. |
+| day | `day` | The day of its first record; the day of its first lane when it has no record. |
+| label | `label` | Printed only with `--labels`; `null` otherwise. |
+| minutes, owner turns, messages, lanes | `minutes`, `ownerTurns`, `messages`, `lanes` | As for the session, over the part. `lanes` is a count. |
+| orchestrator tokens, lane tokens | `tokens`, `laneTokens` | As for the session, over the part. |
+
+With `--since` and `--until`, the cuts are read over the whole session file, and each part's figures over the records inside the window. A part whose command comes before the window keeps its number and its label. The session's label stays the first label inside the window, so it can differ from the label of its first part.
+
 ## Minutes
 
 Minutes run from the first usable record to the last, for a session file or a lane file. They are wall-clock minutes, with one decimal.
+
+A part's minutes run from its first record to its last. The time between a part's last record and the next command belongs to no part, so a session's part minutes can add up to less than its own.
 
 They include all waiting: the owner thinking, a session left open overnight, a lane waiting on a command or on the orchestrator. A session that is resumed over several days counts those days. To see where time went inside a plan, use `scripts/plantime.mjs`.
 
 ## Session label
 
-A label says which command opened the session. For `/shawarma plan t-0001` the label is `plan t-0001`.
+A label says which command opened the session, or a part of it (see [Parts](#parts)). For `/shawarma plan t-0001` the label is `plan t-0001`.
 
 A label is printed only with `--labels`. Without the flag there is none: the text output shows no label, and the JSON `label` is `null`. The label is off by default because it is text the owner typed. It can hold a ticket id or a name. It is the only message text the tool ever prints.
 
@@ -401,7 +437,7 @@ How the files are written:
 
 1. The output holds counts, durations, days, model ids, effort values, agent type names, pull request numbers, and the first 8 characters of session and agent ids. It holds no message text, no prompt and no full id. Rule 2 says what happens to a value that looks like a path.
 2. A value read from a record or a meta file is printed only when it is one plain word. A plain word is 60 characters at most. It is made of letters from `A` to `Z` and `a` to `z`, digits, and `_ . : @ [ ] -`. It may also hold one `/`, but not as its first or last character. So a model id such as `vendor/model` prints. A path such as `/home/u/x` or `a/b/c` does not. Anything that is not a plain word prints as `?`. A value of two parts, such as `a/b`, is a plain word and prints.
-3. The session label is the one exception to rule 1. It is printed only with `--labels`. It is two words at most, filtered as described under [Session label](#session-label).
+3. The labels of sessions and parts are the one exception to rule 1. It is printed only with `--labels`. It is two words at most, filtered as described under [Session label](#session-label).
 4. An error message never names a path. A file error is reported by its code, such as `ENOENT`.
 5. An unexpected failure prints the error's name only, because its message could quote a record.
 6. `--prompts` is the only output that holds whole prompts. Its folder must be new or empty, and outside any git repository. See [Prompt files](#prompt-files).
@@ -419,7 +455,7 @@ Read the output before you share it:
 - **Formats change.** The field names were checked on Claude Code 2.1.3xx. Older transcripts lack some keys, such as `requestedModel`. A later version may rename a field. A missing value prints as `?` and is still counted; it never stops the tool.
 - **One machine.** The tool reads the transcripts of the machine it runs on. Sessions held on another machine, or in the cloud, are not seen.
 - **The key is a substring.** It can match a sibling project whose folder name holds it. Check the `project folders` count in the totals.
-- **A session is a file, not a run.** A session that holds several commands, or is resumed over several days, is one line. With `--labels`, its label comes from its first skill command only. Splitting a session at each command is ticket `skills-cb5t`.
+- **A part is a command, not a whole run.** A run resumed in a new session file, or after `/clear`, is a part of that new session. A run that the owner started with typed text instead of a skill command has no part of its own.
 - **Messages copied between files.** A message id is counted once per file. If Claude Code copies a message into a second transcript, it is counted in each.
 - **Lane kind is a guess.** See [Lane kind](#lane-kind).
 - **Model class is read from the name.** A model whose id holds none of the three words is `other`, whatever it is.
