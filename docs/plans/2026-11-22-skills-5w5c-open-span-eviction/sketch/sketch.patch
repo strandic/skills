@@ -1,0 +1,193 @@
+diff --git a/README.md b/README.md
+index 2494e48..640cfc6 100644
+--- a/README.md
++++ b/README.md
+@@ -33,7 +33,7 @@ A session claims a worktree when:
+ - its project root is in it. `EnterWorktree` and `/cd` move the project root.
+ - one of its Write, Edit or NotebookEdit calls writes a file in it. A path written through a link, such as `/tmp/…` on macOS, is checked through its real path.
+ - one of its Bash calls changes a file in it, as Claude Code reports it. Claude Code reports only the changes in the working tree the session is in.
+-- a marker in it was written during one of the session's own Write, Edit, NotebookEdit or Bash calls, by any tool. This catches a marker a Bash command writes into another worktree. A marker another session writes at that same moment is claimed too.
++- a marker in it was written during one of the session's own Write, Edit, NotebookEdit or Bash calls, by any tool. This catches a marker a Bash command writes into another worktree. A marker another session writes at that same moment is claimed too. A call counts until the engine ends or abandons it, however long it runs, so a long subagent call claims a new marker it writes partway through. A call that never ends keeps counting: until then, a new marker another session adds in a scanned worktree is claimed too.
+ 
+ The mod checks the working directory and the project root at each update and every 15 seconds while a row is shown. It checks the folders of the last 64 files the session wrote at each update, so a worktree made and written in the same turn is claimed once git lists it. Subagents' calls count, but a subagent's own working directory does not.
+ 
+diff --git a/hooks/register.tsx b/hooks/register.tsx
+index 42903ec..27c034e 100644
+--- a/hooks/register.tsx
++++ b/hooks/register.tsx
+@@ -61,6 +61,15 @@ export const WINDOW_SLACK_MS = 2_000
+  */
+ const windows: { from: number; to: number }[] = []
+ export const MAX_WINDOWS = 64
++/**
++ * skills-5w5c: the spans of the writing calls the engine has not ended or
++ * abandoned, main session and subagents. Nothing evicts one from this set: the
++ * call's end removes it, before anything it awaits, and so does `next.signal`
++ * aborting (an interrupt, a hook above answering first, this hook out of
++ * budget). So a turn end or newer calls cannot drop the span of a call still
++ * running. `windows` and `turnWindows` keep their own copy as before.
++ */
++const openWindows = new Set<{ from: number; to: number }>()
+ /**
+  * Lane round 3 C3: the marker paths of the last listing. Only a marker absent
+  * from it whose time falls in a call span claims its tree, so another session's
+@@ -239,7 +248,7 @@ async function claim($: EngineInterface, trees: Trees, found: readonly Found[],
+       : realRoots.filter(one => isInside(one.real, real)).sort((a, b) => b.real.length - a.real.length)[0]
+     if (hit !== undefined) held.add(hit.root)
+   }
+-  const spans = [...windows, ...turnWindows]
++  const spans = [...windows, ...turnWindows, ...openWindows]
+   const seen = lastSeen
+   const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
+   for (const one of found) {
+@@ -740,8 +749,14 @@ export const register: Register = (on, options) => {
+     const span = { from: await $.clock.now(), to: Number.POSITIVE_INFINITY }
+     remember(windows, [span], MAX_WINDOWS, () => false)
+     remember(turnWindows, [span], MAX_TURN, () => false)
++    openWindows.add(span)
++    const release = () => { openWindows.delete(span) }
++    if (next.signal.aborted) release()
++    else next.signal.addEventListener('abort', release, { once: true })
+     // N1: a closed span is remembered again as the newest, so a long call's span outlives newer calls and a turn end.
+     const result = await next(e).finally(async () => {
++      // skills-5w5c: released first, so a clock read that fails or never answers cannot keep it in openWindows.
++      release()
+       span.to = await $.clock.now()
+       remember(windows, [span], MAX_WINDOWS, (a, b) => a === b)
+       remember(turnWindows, [span], MAX_TURN, (a, b) => a === b)
+diff --git a/tests/band.test.tsx b/tests/band.test.tsx
+index d92edae..3553f85 100644
+--- a/tests/band.test.tsx
++++ b/tests/band.test.tsx
+@@ -3428,3 +3428,131 @@ describe('skills-lhwh: the pane lists only the dated rows the band counts', () =
+     expect(await open($, on, '# skills-x decisions\n\n')).toBe('_None recorded._')
+   })
+ })
++
++describe('skills-5w5c: a running call keeps its span until it ends', () => {
++  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
++  const rows = async ($: any): Promise<string[]> =>
++    ((await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND }))
++      .findAll({ type: 'Text' })) as any[]).map(one => (one.text as string).replace(/ · since.*/, ''))
++  const T0 = STARTED + 120_000
++  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
++  const never = () => new Promise<never>(() => undefined)
++  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
++  /** A main turn end, then 64 main writes: the long call's span is out of both capped lists. */
++  const evict = async ($: any) => {
++    await turnEnd($)
++    for (let i = 0; i < 64; i++) await write($, `${ROOT}/src/f${i}.ts`, 'x')
++  }
++
++  test('V1 a long subagent call writes its marker mid-call after a turn end and 64 writes; the 15 s check lists it: own run, during and after', { options: ON }, async ($, on) => {
++    let release!: () => void
++    const gate = new Promise<void>(r => (release = r))
++    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
++    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
++      after: (e: any) => (e.command === 'long' ? gate : undefined) })
++    await bash($, 'true')
++    const call = $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any)
++    await settle()
++    await evict($)
++    await clock.advance(10_000)
++    files.set(...at(WT, 'wt-7', T0 + 10_000))
++    await clock.advance(15_000)
++    await settle()
++    const during = await rows($)
++    release()
++    await call
++    await bash($, 'true')
++    expect({ during, after: await rows($) }).toEqual({
++      during: ['main-1 · trivial', 'other tree: wt-7 · trivial'],
++      after: ['main-1 · trivial', 'other tree: wt-7 · trivial'] })
++  })
++
++  test('V2 two long subagent calls; the first ends, the second writes its marker after the eviction: own run', { options: ON }, async ($, on) => {
++    let release1!: () => void
++    let release2!: () => void
++    const gate1 = new Promise<void>(r => (release1 = r))
++    const gate2 = new Promise<void>(r => (release2 = r))
++    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
++    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
++      after: (e: any) => (e.command === 'long1' ? gate1 : e.command === 'long2' ? gate2 : undefined) })
++    await bash($, 'true')
++    const call1 = $.tool.call({ tool: 'Bash', command: 'long1', agentId: 'a1' } as any)
++    const call2 = $.tool.call({ tool: 'Bash', command: 'long2', agentId: 'a2' } as any)
++    await settle()
++    await evict($)
++    release1()
++    await call1
++    await clock.advance(10_000)
++    files.set(...at(WT, 'wt-8', T0 + 10_000))
++    await clock.advance(15_000)
++    await settle()
++    const during = await rows($)
++    release2()
++    await call2
++    expect(during).toEqual(['main-1 · trivial', 'other tree: wt-8 · trivial'])
++  })
++
++  test('V3 a hook above answers a long call first while the call beneath never ends: its span is released; another session\'s marker after the eviction is not claimed', {
++    options: ON,
++    plugins: [{ name: 'above', tier: 'prepend', register(up: any) {
++      up('tool.call', async ($: any, e: any, next: any) => {
++        if (e.command !== 'long') return next(e)
++        return Promise.race([next(e), $.clock.sleep(5_000).then(() => ({ result: { type: 'text', text: 'answered above' } }))])
++      })
++    } }] } as any, async ($, on) => {
++    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
++    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
++      after: (e: any) => (e.command === 'long' ? never() : undefined) })
++    await bash($, 'true')
++    let answer: unknown = 'pending'
++    void $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any).then((v: any) => { answer = v?.result?.text })
++    await settle()
++    await clock.advance(6_000)
++    await settle()
++    await evict($)
++    await clock.advance(60_000)
++    files.set(...at(WT, 'other-1', T0 + 66_000))
++    await clock.advance(15_000)
++    await settle()
++    expect({ answer, rows: await rows($) }).toEqual({ answer: 'answered above', rows: ['main-1 · trivial', '1 run in another worktree'] })
++  })
++
++  test('V4 a long call whose end-time read fails closes its span: another session\'s marker after the eviction is not claimed', { options: ON }, async ($, on) => {
++    let release!: () => void
++    const gate = new Promise<void>(r => (release = r))
++    let nowFails = 0
++    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
++    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
++      after: (e: any) => (e.command === 'long' ? gate : undefined),
++      hold: { 'clock.now': () => (nowFails > 0 ? (nowFails -= 1, Promise.reject(new Error('clock'))) : undefined) } })
++    await bash($, 'true')
++    const call = $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any).catch(() => undefined)
++    await settle()
++    nowFails = 1
++    release()
++    await call
++    nowFails = 0
++    await evict($)
++    await clock.advance(60_000)
++    files.set(...at(WT, 'other-1', T0 + 60_000))
++    await clock.advance(15_000)
++    await settle()
++    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
++  })
++
++  test('V5 accepted (Q1): a subagent call that never ends keeps its span open, past a turn end and 64 writes: another session\'s marker is claimed', { options: ON }, async ($, on) => {
++    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
++    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
++      after: (e: any) => (e.command === 'hang' ? never() : undefined) })
++    await bash($, 'true')
++    void $.tool.call({ tool: 'Bash', command: 'hang', agentId: 'a1' } as any)
++    await settle()
++    await evict($)
++    await turnEnd($)
++    await clock.advance(600_000)
++    files.set(...at(WT, 'other-1', T0 + 600_000))
++    await clock.advance(15_000)
++    await settle()
++    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: other-1 · trivial'])
++  })
++})
