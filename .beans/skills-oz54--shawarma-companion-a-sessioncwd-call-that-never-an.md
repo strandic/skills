@@ -1,7 +1,7 @@
 ---
 # skills-oz54
 title: 'shawarma-companion: a session.cwd call that never answers holds the tool call forever; the README says session calls give up after 2 s'
-status: todo
+status: in-progress
 type: bug
 priority: normal
 tags:
@@ -82,3 +82,7 @@ unruled: D7 rebase on skills-lhwh before picking the version — default keep
 Brief frozen: `docs/plans/2026-11-22-skills-oz54-session-calls-bound/plan.md`. Waiting for `run`.
 
 unruled: none
+
+## Run (2026-11-22)
+
+Go given. Branch `fix/oz54-session-bound` in `.worktrees/oz54`, from `origin/main` `c3c525d` (mod 0.3.3, skills-cm2l and skills-lhwh merged since the plan's base `f1ed7f4`).
