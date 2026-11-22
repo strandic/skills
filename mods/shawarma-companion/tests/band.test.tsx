@@ -3324,6 +3324,17 @@ describe('cm2l: the 15 s check survives a failed pass', () => {
     })
   }
 
+  test('C11 a stale unreadable row keeps its stale label, which wins over earlier session (review 3b F1)', { options: ON }, async ($, on) => {
+    const S = `${ROOT}/.shawarma/active-skills-s`
+    const files = new Map<string, File>([[S, { text: 'skills-s\ntrivial\n', mtimeMs: STARTED + 120_000 - 13 * 3_600_000 }]])
+    world(on, files, ROOT, [], new Set([`read ${S}`]))
+    await bash($, 'true')
+    const BIG = { ...BAND, maxRows: 8, scroll: { offset: 0, bodyRows: 8 } }
+    const band = (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BIG } as any))
+      .findAll({ type: 'Text' })).map((one: any) => one.text as string)
+    expect(band).toEqual(['stale: shawarma: skills-s: could not be read'])
+  })
+
   test('C7 labels on an unreadable row: other tree, earlier session (lane A2)', { options: ON }, async ($, on) => {
     const Y = `${WT}/.shawarma/active-skills-y`
     const Z = `${ROOT}/.shawarma/active-skills-z`
