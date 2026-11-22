@@ -223,11 +223,12 @@ export type Decisions = { decisions: number }
  * Every other line (heading, table header, wrapped text) is skipped.
  */
 export function parseDecisions(text: string): Decisions {
-  let decisions = 0
-  for (const line of lines(text)) {
-    if (/^\d{4}-\d{2}-\d{2}\s*\|/.test(line.trim().replace(/^\|\s*/, ''))) decisions += 1
-  }
-  return { decisions }
+  return { decisions: decisionRows(text).length }
+}
+
+/** The lines parseDecisions counts, as written, in file order. */
+export function decisionRows(text: string): string[] {
+  return lines(text).filter(line => /^\d{4}-\d{2}-\d{2}\s*\|/.test(line.trim().replace(/^\|\s*/, '')))
 }
 
 /** `# <ticket> — <title>` from plan.md's first line, else null. */
