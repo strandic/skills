@@ -88,3 +88,5 @@ unruled: none
 Go given. Branch `fix/oz54-session-bound` in `.worktrees/oz54`, from `origin/main` `c3c525d` (mod 0.3.3, skills-cm2l and skills-lhwh merged since the plan's base `f1ed7f4`).
 
 **W3 (review)**: review 3a found a wrong label on the rebased base: after a lost read, the 15 s check redrew from the trees found before a move (`[m, other tree: w]` while in w; 270 reads in 6 912 runs). Owner ruled W3-R1 B (the check finds the trees again) and W3-R2 (README and CHANGELOG wording). Tests `8785cd4` (V14 red, V15), fix `3391a63`; suite `316 pass` / `0 fail`. Fix-review lane running.
+
+**W3 round 3**: the fix review found the check's own lost read left the rows drawn up to 15 s, and a 2 s false pane line ("plan dir outside its tree"). Owner ruled W3-R3 C. Tests `05533c7` (V16, V17 red), fix `29f8f15`; suite `318 pass` / `0 fail`. Filed skills-f7a9 (a turn end's lost read loses a worktree claim; pre-existing) and skills-9u5j (labels from before a move while a slow read is in flight; pre-existing). Fix-review lane on round 3 running.
