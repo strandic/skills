@@ -794,8 +794,9 @@ export const register: Register = (on, options) => {
     if (isMain) await readMainCwd($)
     await refresh($, null, lister($), !isMain)
     // B4a2: the main turn's end placed this turn's folders and spans against a fresh git list; the last 64 carry
-    // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn.
-    if (isMain && lastTrees?.isFromGit === true) {
+    // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn. W3-R4: so does a turn
+    // end whose cwd read was lost, since its refresh listed nothing.
+    if (isMain && !isCwdLost && lastTrees?.isFromGit === true) {
       turnFolders.splice(0)
       turnWindows.splice(0)
     }
