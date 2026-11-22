@@ -5,19 +5,23 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.3.1] - unreleased
+## [0.3.2] - unreleased
 
 The 15-second check keeps running after a failed read (skills-cm2l, skills-0wsk).
 
 ### Fixed
-- The clean-up of saved entries older than 30 days held the first update of a session for up to about 400 seconds when the store answered slowly; it now stops 2 seconds after it starts, so the first update waits at most about 6 seconds for the store: 2 for the session's own entry, 2 for the clean-up, 2 to save its claims (skills-bnbu).
-- One saved entry that could not be read stopped every session's clean-up, so the store grew without bound; that entry is now skipped, and sessions usually start the clean-up at different entries (skills-6y0d). An entry that reads as unset (no value) is skipped too, not deleted.
 - One failed read during the 15-second check no longer empties the row until the next tool call. A row whose files fail to read reads `shawarma: <ticket>: could not be read`, and the check reads it again every 15 seconds until it works (skills-cm2l).
 - One failed listing of a plan folder during the 15-second check no longer leaves `plan dir not readable` until the next tool call: each check updates such a row in full, asking the folder's real path before listing it (skills-cm2l).
 - A check that fails as a whole now clears the more-row's counts too, and the check keeps running, so the rows come back once the error clears (skills-0wsk).
 
 ### Removed
 - The pane's `<n> markers could not be read.` line and its `<ticket>: could not be read` reason: such a marker now has its own row.
+
+## [0.3.1] - unreleased
+
+### Fixed
+- The clean-up of saved entries older than 30 days held the first update of a session for up to about 400 seconds when the store answered slowly; it now stops 2 seconds after it starts, so the first update waits at most about 6 seconds for the store: 2 for the session's own entry, 2 for the clean-up, 2 to save its claims (skills-bnbu).
+- One saved entry that could not be read stopped every session's clean-up, so the store grew without bound; that entry is now skipped, and sessions usually start the clean-up at different entries (skills-6y0d). An entry that reads as unset (no value) is skipped too, not deleted.
 
 ## [0.3.0] - unreleased
 
