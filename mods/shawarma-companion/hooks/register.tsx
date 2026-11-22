@@ -74,8 +74,9 @@ let mainCwd: string | null = null
  * skills-oz54 Q1: set when a read of the main working directory gave up or failed
  * (after a tool call, at a turn end, in the 15 s check); cleared when a main read
  * answers or a session starts. While set, every refresh draws nothing, a
- * subagent's or the check's included, so no row is labelled by a folder the
- * session may have left (attack B1, B4 d).
+ * subagent's or the check's included, and the trees found before are dropped, so
+ * the next refresh finds them again from the directory it reads (attack B1, B4 d;
+ * W3-R1: the 15 s check reads it and redraws).
  */
 let isCwdLost = false
 /**
@@ -621,6 +622,7 @@ async function readMainCwd($: EngineInterface): Promise<void> {
   const read = await bounded($, $.session.cwd()).catch(() => null)
   mainCwd = read
   isCwdLost = read === null
+  if (isCwdLost) lastTrees = null
 }
 
 /**
@@ -682,7 +684,11 @@ async function stale($: EngineInterface): Promise<void> {
   if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null && lastScan.status !== 'failed') {
     return watch($, false)
   }
-  if (lastTrees === null) return refresh($)
+  if (lastTrees === null) {
+    // W3-R1: after a lost read, the check reads the directory again and finds the trees from it.
+    if (isCwdLost) await readMainCwd($)
+    return refresh($)
+  }
   const trees = lastTrees
   const list = lister($)
   const scan = scanned(trees)
