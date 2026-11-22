@@ -14,3 +14,4 @@
 2026-11-22 | W3-Db RULING | A: the doc comments of `refresh` and `stale` and the `problem` field's doc in types/index.d.ts corrected; reco A | each was false after the change
 2026-11-22 | W3-Dc RULING | A: §6's cost bound corrected in §9 to 50 tree listings + 5 calls × 20 rows (150) per pass, 130 measured at 50 trees and 20 rows; reco A | the lane measured above the stated 121
 2026-11-22 | W3-Dd DEFAULT | the `refresh` doc comment says a failed pass also draws nothing; the `problem` doc names every cause of `could not be read` and the fields such a row keeps | the fix-review lane ran both sentences (P5, P1, P2) and found them incomplete; prose only
+2026-11-22 | W4-Da DEFAULT | the one uncaptured test failure a review lane saw in 10 suite runs goes to ticket skills-4yek; the PR ships with G1 read 292 / 0 | not reproduced in 12 repeated runs at the head; the code under review is identical to the commit before it

@@ -39,3 +39,9 @@ Q4–Q6 and D1–D3 ruled "go with reco" (decisions.md). Brief: `docs/plans/2026
 `freeze_check.py docs/plans/2026-11-20-skills-cm2l-check-survives-a-failed-pass/plan.md --repo .worktrees/cm2l-spike --listing <grep -n '^- Lesson (' docs/plans/lessons.md, empty> --ticket <this bean>`: `PASS`.
 
 unruled: none
+
+## Run (2026-11-22)
+
+Branch `fix/cm2l-check-survives-failure`, worktree `.worktrees/cm2l`. Tests commit `ddfc39d` red as predicted (`273 pass` / `18 fail`, the 18 by name). Fix `40a85c6` is the frozen sketch exactly. Review: lanes 3a and 3b, then two fix-review lanes (reports under `docs/plans/2026-11-20-skills-cm2l-check-survives-a-failed-pass/reports/`). Ruled at the round-1 stop: W3-R1 (ticket skills-3hy6), W3-R2 (ticket skills-lm8d), W3-P1, W3-Da (test C11), W3-Db, W3-Dc; defaults W3-Dd and W4-Da (ticket skills-4yek). Gate on the final commit: G1 `292 pass` / `0 fail` / `Ran 292 tests`, G2 `✔ Validation passed`, G3 tsc exit 0. `check_pr.py` FAIL only on P11 lines judged false (the gate command names the mod folder, so the contract's own files are flagged): ticket skills-c971. PR opened from the branch; the human merges.
+
+Defaults listed at the gate stop: W3-Dd (docs of `refresh` and `problem` completed), W4-Da (one uncaptured failure in a lane's 10 suite runs → skills-4yek).
