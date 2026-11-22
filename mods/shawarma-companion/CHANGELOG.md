@@ -5,6 +5,11 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.3] - unreleased
+
+### Fixed
+- The pane drew every line of `decisions.md` as a bullet, so its `# <ticket> decisions` heading and blank lines showed as `- # …` and an empty `-`. It now lists only the dated rows the band counts, and reads `_None recorded._` when there are none (skills-lhwh).
+
 ## [0.3.2] - unreleased
 
 The 15-second check keeps running after a failed read (skills-cm2l, skills-0wsk).

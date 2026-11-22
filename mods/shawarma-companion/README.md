@@ -103,7 +103,7 @@ The command `/shawarma-companion` opens the pane on the first row. The pane show
 - the other tickets shown in the band, each with `(stale)` or `(earlier session)` when that applies;
 - `In other worktrees:` and the tickets of the worktrees the session has not claimed, at most 20, sorted;
 - the recap: section 1 of `plan.md`;
-- the decisions: the lines of `decisions.md`;
+- the decisions: the dated rows of `decisions.md`, the same lines the band counts, one per bullet as written. Headings, blank lines and other lines are left out. With no dated row, or no `decisions.md`, it reads `_None recorded._`;
 - the amendments: section 9 of `plan.md`;
 - the predicted red set: the `Predicted red set` line of section 4 of `plan.md`.
 

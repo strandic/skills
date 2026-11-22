@@ -3,7 +3,7 @@ import type { EngineInterface, FsEntry, Register, Timer } from 'claude-code'
 
 import type { Snapshot } from '../types'
 import {
-  CLAIM_TTL_MS, MARKER_PREFIX, changedFiles, claimKey, pruneStart, clean, lines, order, ownTree, parseClaimed, parentOf, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
+  CLAIM_TTL_MS, MARKER_PREFIX, changedFiles, claimKey, pruneStart, clean, order, ownTree, parseClaimed, parentOf, decisionRows, parseDecisions, parseGitdir, parseMarker, parseTitle, parseWorktrees,
   MAX_ROWS, MAX_TREES, isInside, isStaleAt, labelOf, moreText, redSet, resolvePath, rowText, section, ticketOf, under,
 } from './model'
 
@@ -875,11 +875,12 @@ export const register: Register = (on, options) => {
       return <Text dimColor>{clean(`The plan files could not be read: ${files}`)}</Text>
     }
     const [plan, decisions] = files
+    const dated = decisions === null ? [] : decisionRows(decisions)
     const parts = [
       `${label}**${row.title}** · ${row.step}`,
       ...(header === null ? [] : [header]),
       plan === null ? '_No brief yet: the plan is in progress._' : `### Recap\n\n${section(plan, 1) ?? '_§1 not found._'}`,
-      `### Decisions\n\n${decisions === null ? '_None recorded._' : lines(decisions.trim()).map(line => `- ${line}`).join('\n')}`,
+      `### Decisions\n\n${dated.length === 0 ? '_None recorded._' : dated.map(line => `- ${line}`).join('\n')}`,
       ...(plan === null ? [] : [
         `### Amendments\n\n${section(plan, 9) ?? '_§9 not found._'}`,
         `### Red set\n\n${redSet(plan) ?? '_No predicted red set in §4._'}`,
