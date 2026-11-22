@@ -86,3 +86,5 @@ unruled: none
 ## Run (2026-11-22)
 
 Go given. Branch `fix/oz54-session-bound` in `.worktrees/oz54`, from `origin/main` `c3c525d` (mod 0.3.3, skills-cm2l and skills-lhwh merged since the plan's base `f1ed7f4`).
+
+**W3 (review)**: review 3a found a wrong label on the rebased base: after a lost read, the 15 s check redrew from the trees found before a move (`[m, other tree: w]` while in w; 270 reads in 6 912 runs). Owner ruled W3-R1 B (the check finds the trees again) and W3-R2 (README and CHANGELOG wording). Tests `8785cd4` (V14 red, V15), fix `3391a63`; suite `316 pass` / `0 fail`. Fix-review lane running.
