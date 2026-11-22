@@ -2093,6 +2093,36 @@ class ReviewRound11(unittest.TestCase):
         plan = plan.replace("`python3 -m pot` reads", "`python3 -m pot tools/gate_lid.py` reads")
         self.assertTrue(p11({"tools/gate_lid.py": "print('spill=1')\n"}), "the gate script")
 
+    # P11: a file §3 names under a folder a gate rule runs is the contract's own change
+    def test_p11_a_file_section_3_names_under_a_gate_folder_is_no_gate_change(self):
+        plan = GOOD_BRIEF.replace("`python3 tools/gate_lid.py` reads",
+                                  "`python3 -m pytest tools/kitchen` reads")
+        plan = plan.replace("| `pot.py` | orchestrator", "| `tools/kitchen/pot.py` | orchestrator")
+        self.assertNotEqual(plan.count("`tools/kitchen/pot.py`"), 0)
+
+        def p11(change):
+            with tmp() as d:
+                repo = new_repo(Path(d) / "repo")
+                commit(repo, "plan(soup-1): the brief", "2026-10-18T09:00:00",
+                       {"tools/kitchen/pot.py": "lid = False\n",
+                        "tools/kitchen/gate_lid.py": "print('spill=0')\n"})
+                freeze = git(repo, "rev-parse", "HEAD")
+                commit(repo, "fix: the lid", "2026-10-18T10:00:00", change)
+                return ids(run_cp(GOOD_BODY.replace("abc1234", freeze), plan, repo=repo), "P11")
+        self.assertEqual(p11({"tools/kitchen/pot.py": "lid = True\n"}), [],
+                         "§3 names tools/kitchen/pot.py")
+        out = p11({"tools/kitchen/pot.py": "lid = True\n",
+                   "tools/kitchen/gate_lid.py": "print('spill=1')\n"})
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("tools/kitchen/gate_lid.py", out[0])
+        plan = plan.replace("| `tools/kitchen/pot.py` | orchestrator",
+                            "| `tools/kitchen/pot.py`, `lid.py` | orchestrator")
+        self.assertEqual(p11({"tools/kitchen/lid.py": "x\n"}), [], "lid.py under pot.py's folder")
+        plan = GOOD_BRIEF.replace("`python3 tools/gate_lid.py` reads",
+                                  "`python3 -m pytest tools/kitchen` reads")
+        out = p11({"tools/kitchen/pot.py": "lid = True\n"})
+        self.assertEqual(len(out), 1, "§3's bare pot.py is the root file, not the gate's")
+
     # F12: each exact count fails, whatever floor the rule holds elsewhere
     def test_f12_a_floor_elsewhere_does_not_clear_an_exact_count(self):
         mixed = suite_rule("python3 -m pytest -q", "`passed: 41`; also `ran ≥ 40`",
