@@ -1,0 +1,1 @@
+2026-11-22 | Q1 RULING | A — a lane counts whole in the part where its first record falls; the totals print a count of lanes that end under a later command; reco A | owner: "A, go with reco". Matches the --since/--until rule (a lane kept whole by its first record); 0 of 263 local lanes cross a command under any anchor
