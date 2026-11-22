@@ -3400,3 +3400,31 @@ describe('cm2l: the 15 s check survives a failed pass', () => {
     expect(log.length).toBe(n0)
   })
 })
+
+describe('skills-lhwh: the pane lists only the dated rows the band counts', () => {
+  const paneText = async ($: any): Promise<string> => {
+    const pane = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane',
+      requestId: 'shawarma-companion', props: {} } as any)
+    return (await pane.find({ type: 'Markdown' }))?.props.text ?? ''
+  }
+  const open = async ($: any, on: any, text: string) => {
+    world(on, new Map([[MARKER, { text: MARKER_TEXT('run W1'), mtimeMs: STARTED + 5 }], plan,
+      [`${DIR}/decisions.md`, { text, mtimeMs: 0 }]]), ROOT, [])
+    await bash($, 'true')
+    await bandText($)
+    await $.ui.press({ plugin: 'shawarma-companion', key: `row:${TICKET}` })
+    return (await paneText($)).split('### Decisions\n\n')[1]?.split('\n\n')[0]
+  }
+
+  test('L1 heading, blank, header and wrapped lines are not drawn as bullets', { options: ON }, async ($, on) => {
+    expect(await open($, on, [
+      '# skills-x decisions', '', '`<date> | <label> | <decision> | <why>`',
+      '2026-10-21 | Q1 RULING | a | b', '| date | label | decision | why |', '| ---- | ----- | -------- | --- |',
+      '| 2026-10-24 | D1 DEFAULT | g | h |', '  wrapped text of the row above', '', '2026-10-25 | D2 DEFAULT | c | d', '',
+    ].join('\n'))).toBe('- 2026-10-21 | Q1 RULING | a | b\n- | 2026-10-24 | D1 DEFAULT | g | h |\n- 2026-10-25 | D2 DEFAULT | c | d')
+  })
+
+  test('L2 a decisions.md with no dated row reads none recorded', { options: ON }, async ($, on) => {
+    expect(await open($, on, '# skills-x decisions\n\n')).toBe('_None recorded._')
+  })
+})
