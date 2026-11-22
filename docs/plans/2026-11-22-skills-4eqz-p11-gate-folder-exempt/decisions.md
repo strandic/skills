@@ -1,0 +1,1 @@
+2026-11-22 | D1 DEFAULT | a file found under a gate folder is exempt only when §3 names its exact path; a later name in a §3 cell is also read under the first name's folder | the plain in_s3 suffix match silences P11 on a real gate file whose base name a §3 row names bare (probe: §3 `pot.py`, gate file tools/kitchen/pot.py changed → no P11 line)
