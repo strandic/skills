@@ -49,3 +49,21 @@ unruled: D2 late context figure draws no row that drawing — default accept
 unruled: D3 a give-up is asked again at each update — default accept
 unruled: D4 three pre-existing gaps — default file three new tickets
 unruled: D5 V7 precondition — default keep
+
+**Q1, D1–D5 ruled (owner: "Go with reco")**: Q1 A, a working-directory call that gives up forgets the known directory and that update draws nothing. D1 0.3.3 after PR 13. D2 a late context figure draws no row that drawing. D3 a give-up is asked again at each update. D4 three new tickets. D5 V7 keeps its precondition.
+
+## Plan paused: 1 question (2026-11-22)
+
+Re-spiked on Q1 A; brief written at `docs/plans/2026-11-22-skills-oz54-session-calls-bound/plan.md`, `freeze_check.py` PASS (F10 on this note), not frozen until Q2.
+- Attack lane round 2 (`reports/attack2/report.md`): forgetting the directory alone gave two new wrong labels — after a forget a subagent's event labelled the trees by the project root (12 of 12 rows), and a turn end's give-up during a running 15 s check redrew from the trees found before a move (48 of 6 912 runs). The sketch now marks the directory lost (`isCwdLost`) until a main read answers or a session starts; while lost every refresh draws nothing. Re-run of the lane's 6 912-run enumeration on it: 0 label differences from the instant control, 5 292 absences.
+- `CLAUDE_CONFIG_DIR=$HOME/.claude-personal claude plugin test mods/shawarma-companion`: sketch `297 pass` / `0 fail` / `Ran 297` ×3; base modules with the new tests `287 pass` / `11 fail` / `Ran 298` (V1–V6, V8, V9, V10, V13, "the file ran to its end"). 14 of 14 mutants red. `tsc` exit 0; `claude plugin validate` `✔ Validation passed`.
+- Per the orchestrator: the sketch no longer changes the version or the changelog (3 files: register.tsx, the tests, README); the brief names every function touched.
+- Tickets filed (D4): skills-mizx, skills-laqh, skills-rb3j.
+
+> **What this is about:** Your ruling D1 set this change to version 0.3.3, after PR 13 merges. Since then the orchestrator has said two more companion plans (skills-1tr4, skills-lhwh) share the version and the changelog, and that no plan should pick a number or write a changelog entry: the run picks the next free version after rebasing on whatever merged first. A, amend D1: the version and the changelog entry are set at run time, after rebasing, to the next free patch version (recommended; the sketch already leaves them out). B, keep 0.3.3: the run must merge right after PR 13, and the other two streams renumber.
+
+**Q2 (RULING, open)**: amend D1, A or B.
+
+> **What this is about:** Ruling Q1 said a give-up forgets the known working directory and "that update draws nothing". Round 2 showed one update was not enough: the next subagent event or a check already running then drew wrong labels. The sketch keeps the band empty until the main session's working directory is read again (the next main tool call or turn end, or a session start). A: keep this (recommended; executed, 0 wrong labels in 6 912 runs; the cost is a longer empty band after a failed read). B: forget for one update only (executed: 12 + 48 wrong-label rows).
+
+unruled: D6 band empty until the main directory is read again — default keep
