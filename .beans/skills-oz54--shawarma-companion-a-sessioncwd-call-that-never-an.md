@@ -72,3 +72,5 @@ unruled: D6 band empty until the main directory is read again — default keep
 
 unruled: D6 band empty until the main directory is read again — default keep
 unruled: D7 rebase on skills-lhwh before picking the version — default keep
+
+**D7 update (relayed by skills-orch)**: skills-lhwh opened PR 14 as companion 0.3.3, adding tests at the end of band.test.tsx. At run time, rebase on main after PR 14 merges and take the next version then (0.3.4 or later). The new describe block here also sits at the end of that file: expect a rebase conflict and keep both blocks.
