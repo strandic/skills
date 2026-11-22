@@ -2,3 +2,6 @@
 2026-11-22 | D1 DEFAULT | README claim rules: two sentences (a call counts until the engine ends or abandons it; a call that never ends claims other sessions' new markers) | first wording false for rewrites, back-dated markers, the 50-tree cap, an abandoned call (attack2 L5)
 2026-11-22 | D2 DEFAULT | Release the span also when next.signal aborts | without it a hook above answering first keeps the span open after the call ended (attack K7c: other tree: other-1), outside Q1; V3 pins it; a tool still writing beneath an abandoned call is not claimed, as on the base
 2026-11-22 | D3 DEFAULT | New ticket, not folded: an ended call's span stays open in windows/turnWindows (abandoned call; failed end-time clock read) | pre-existing, same on the base (attack K1b, attack2 K4a: base 123/147, sketch 127/147)
+2026-11-22 | D1 RULING | A: the README's two claim-rule sentences as written (2d) | reco A; owner's go (`run skills-5w5c`).
+2026-11-22 | D2 RULING | A: release the span also when next.signal aborts (2b ii) | reco A; owner's go (`run skills-5w5c`).
+2026-11-22 | D3 RULING | A: a new ticket for an ended call's span kept open in windows/turnWindows, not folded | reco A; owner's go (`run skills-5w5c`).
