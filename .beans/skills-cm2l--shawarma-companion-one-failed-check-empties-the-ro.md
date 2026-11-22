@@ -1,13 +1,13 @@
 ---
 # skills-cm2l
 title: 'shawarma-companion: one failed check empties the row until the next tool call'
-status: in-progress
+status: completed
 type: bug
 priority: normal
 tags:
     - shawarma
 created_at: 2026-11-01T06:52:49Z
-updated_at: 2026-11-20T17:10:09Z
+updated_at: 2026-11-22T08:47:34Z
 ---
 
 In mods/shawarma-companion, a single fs error during the 15 s check (for example EACCES on decisions.md once) clears the row and stops the check. The row stays empty until the next tool call or turn end, even after the error goes away. Allowed by the skills-pi0y brief §6 (an empty row), but the check could keep running and redraw. Found by the skills-pi0y fix-review lane (F7).
@@ -45,3 +45,5 @@ unruled: none
 Branch `fix/cm2l-check-survives-failure`, worktree `.worktrees/cm2l`. Tests commit `ddfc39d` red as predicted (`273 pass` / `18 fail`, the 18 by name). Fix `40a85c6` is the frozen sketch exactly. Review: lanes 3a and 3b, then two fix-review lanes (reports under `docs/plans/2026-11-20-skills-cm2l-check-survives-a-failed-pass/reports/`). Ruled at the round-1 stop: W3-R1 (ticket skills-3hy6), W3-R2 (ticket skills-lm8d), W3-P1, W3-Da (test C11), W3-Db, W3-Dc; defaults W3-Dd and W4-Da (ticket skills-4yek). Gate on the final commit: G1 `292 pass` / `0 fail` / `Ran 292 tests`, G2 `✔ Validation passed`, G3 tsc exit 0. `check_pr.py` FAIL only on P11 lines judged false (the gate command names the mod folder, so the contract's own files are flagged): ticket skills-c971. PR opened from the branch; the human merges.
 
 Defaults listed at the gate stop: W3-Dd (docs of `refresh` and `problem` completed), W4-Da (one uncaptured failure in a lane's 10 suite runs → skills-4yek).
+
+Fixed in shawarma-companion 0.3.2 (PR 13, merged 2026-11-22).
