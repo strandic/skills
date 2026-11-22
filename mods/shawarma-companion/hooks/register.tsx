@@ -606,7 +606,10 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
   return { rows, hidden, listed, scan: facts }
 }
 
-/** Never throws: a failed discovery or read draws nothing rather than a stale row. */
+/**
+ * Never throws: a failed discovery draws nothing, and a row whose files fail to read is drawn as
+ * `could not be read`, never with a value read earlier.
+ */
 async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<void> {
   const next = await (async () => {
     const at = trees ?? (await discover($, isSub))
@@ -648,10 +651,12 @@ function watch($: EngineInterface, isDrawn: boolean): void {
  * Lists only: each tree's `.shawarma` and each drawn plan dir, at most W + M
  * calls, no read and no stat (Q3). A refresh, reusing those listings, only
  * when a marker appeared, went or changed time, or a drawn plan dir's plan.md
- * or decisions.md did. A plan dir the row says is not found or not readable
- * was not confirmed inside its tree since it was last found missing or
- * unreadable: it is not listed, only asked whether
- * it exists, and a change in that (found now, or gone) starts the refresh (R4).
+ * or decisions.md did. A row that could not be read, or whose plan dir is not
+ * readable, starts the refresh every pass (cm2l Q2, Q4); the refresh asks the
+ * plan dir's real path before it lists it. A plan dir the row says is not found
+ * was not confirmed inside its tree since it was last found missing: it is not
+ * listed, only asked whether it exists, and a change in that (found now), or a
+ * failed ask, starts the refresh (R4).
  */
 async function stale($: EngineInterface): Promise<void> {
   const rows = await read($, rowsAtom)
@@ -678,7 +683,7 @@ async function stale($: EngineInterface): Promise<void> {
     }
     if (row.planDir === '') continue
     if (row.problem?.startsWith('plan dir not') === true) {
-      // cm2l: an exists that rejects starts the refresh, which draws the row as UNREAD.
+      // cm2l: an exists that rejects starts the refresh, which draws the row again from what it reads now.
       const isThere = await $.fs.exists(row.planDir).catch(() => null)
       isChanged = isThere === null || isThere !== row.problem.startsWith('plan dir not readable')
       continue
