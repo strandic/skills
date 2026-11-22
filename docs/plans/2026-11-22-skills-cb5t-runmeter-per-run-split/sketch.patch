@@ -1,7 +1,135 @@
+diff --git a/scripts/runmeter.md b/scripts/runmeter.md
+index a395026..fe8ea36 100644
+--- a/scripts/runmeter.md
++++ b/scripts/runmeter.md
+@@ -4,11 +4,11 @@
+ 
+ The tool measures sessions, not runs. A session is one Claude Code conversation, kept in one transcript file. A run is the work that follows one skill command, such as `/shawarma plan t-0001`. A lane is a subagent that the session started. The session that starts the lanes is the orchestrator. The owner is the person who types in the session.
+ 
+-A session that started at least one lane is printed. A session may hold more than one run, because the owner can give several commands in one session. The tool does not split them. See [Limits](#limits).
++A session that started at least one lane is printed. A session may hold more than one run, because the owner can give several commands in one session. The tool cuts such a session into parts, one per skill command, and prints each part's figures under the session's line. See [Parts](#parts).
+ 
+ The tool never changes a transcript. It adds no rule to the skill and nothing for the orchestrator to remember. It can measure every past session whose transcripts are still on the machine.
+ 
+-It prints counts, durations, days and model names. With `--labels` it also prints the first two words of the command that opened each session. It prints no other message text, because transcripts may hold private data. See [Privacy rules](#privacy-rules).
++It prints counts, durations, days and model names. With `--labels` it also prints the first two words of the command that opened each session, and of the command that opened each of its parts. It prints no other message text, because transcripts may hold private data. See [Privacy rules](#privacy-rules).
+ 
+ ## What each figure is for
+ 
+@@ -98,7 +98,7 @@ Exit codes:
+ 
+ ## What it prints
+ 
+-The text output has four parts. With `--prs` the pull requests follow them, and with `--prompts` a last line gives the number of prompt files written. `--json` prints the same figures under the keys shown. The JSON also holds a few figures that the text leaves out; they are marked "JSON only".
++The text output has four sections. With `--prs` the pull requests follow them, and with `--prompts` a last line gives the number of prompt files written. `--json` prints the same figures under the keys shown. The JSON also holds a few figures that the text leaves out; they are marked "JSON only".
+ 
+ A value that is missing prints as `?` and is still counted. The same holds for a value that is not one plain word (see [Privacy rules](#privacy-rules)). In JSON, a missing single value is the string `?` and a missing list is empty.
+ 
+@@ -152,6 +152,7 @@ Only sessions with at least one lane are printed, oldest first. `--json` key: `s
+ | messages | `messages` | The session's own assistant messages. Each message id counts once. |
+ | owner turns | `ownerTurns` | See [Owner turns](#owner-turns). |
+ | lanes | `lanes` | The number of lanes. In JSON, the lanes themselves. |
++| JSON only | `parts` | The session's parts. See [Parts](#parts). |
+ | orchestrator tokens | `tokens` | The four token figures of the session's own messages. See [Tokens](#tokens). |
+ | lane tokens | `laneTokens` | The four token figures, each summed over the session's lanes. |
+ | JSON only | `laneFilesSkipped`, `recordsNotRead` | This session's share of the two totals of the same name. |
+@@ -175,6 +176,8 @@ Under each session, its lanes, oldest first.
+ | messages | `messages` | The lane's assistant messages. Each message id counts once. |
+ | tokens | `tokens` | The four token figures. See [Tokens](#tokens). |
+ | launched with defaults | `launchedWithDefaults` | `yes` or `no` when the meta file has `launchedWithDefaults`. Not printed (JSON `null`) when it does not. |
++| JSON only | `part` | The number of the part the lane counts in. See [Parts](#parts). |
++| JSON only | `crossesCommand` | `true` when the lane's last record comes after the command that opens the next part. |
+ | JSON only | `recordsNotRead` | The lane file's share of the total of the same name. |
+ 
+ ### 4. Totals
+@@ -193,6 +196,7 @@ Under each session, its lanes, oldest first.
+ | project folders skipped | `projectFoldersSkipped` | Those of the project folders that could not be listed, such as one the account may not read. The others are still measured. |
+ | session files skipped | `sessionFilesSkipped` | Session files that have lane files but could not be measured: unreadable, no usable record, or no readable lane. |
+ | lane files skipped | `laneFilesSkipped` | Lane files that could not be read or hold no usable record. |
++| lanes that end under a later command | `lanesCrossingCommand` | The lanes whose `crossesCommand` is `true`. Printed only when it is not zero. |
+ | records not read | `recordsNotRead` | Lines that are not JSON, and user or assistant records with no real timestamp, in the files that were read. |
+ 
+ The four "skipped" and "not read" figures are printed only when they are not zero. A folder or file that cannot be read has no date, so the date window applies to them only in part: `projectFoldersSkipped` covers every project folder, `sessionFilesSkipped` covers every session file, `laneFilesSkipped` covers every lane file of the sessions printed, and `recordsNotRead` covers the session files of the sessions printed and their kept lanes.
+@@ -233,15 +237,47 @@ An owner record is a record that `classify()` in `scripts/plantime.mjs` reads as
+ - The command that opens the session is a turn. So the figure counts the times the owner spoke, asked or unasked, except for those typed reasons.
+ - Only the session file is read. Nothing the owner does inside a lane is counted.
+ 
++## Parts
++
++A part is the work that follows one skill command: one run. The tool cuts each session at each skill command the owner typed. These are the commands that [Session label](#session-label) reads, whatever the skill and whether or not they give a label. A built-in command, a skill that the model started, and a command typed as plain text do not cut.
++
++- Part 0 holds what comes before the first skill command. Part 1 starts at the first one, part 2 at the second, and so on, counted over the whole session file.
++- A message counts in the part where its first record falls.
++- An owner turn counts in the part of its last owner record. Text typed just before a command, with no answer between them, counts in the command's part.
++- A lane counts whole in the part where its first record falls. A lane whose last record comes after the next part's command is counted in the totals as a lane that ends under a later command. A lane that ends at the very instant of that command does not.
++- A part that a command opened is always kept, even when it holds nothing but its command. Part 0 is left out when it holds no message, no owner turn and no lane.
++- A part's figures add up to the session's: owner turns, messages, lanes and each token figure. Minutes do not, see [Minutes](#minutes).
++- With `--labels`, a part opened by a command that gives a label prints that label. Part 0 never has one.
++
++In text, a session with two parts or more prints a line per part under the session line, each part's lanes under it:
++
++```
++  # part 1 [plan t-0001] 2026-11-01 · 11m · messages 2 · owner turns 2 · lanes 1 · orchestrator tokens in 30 out 30 cache-write 30 cache-read 30 · lane tokens in 2 out 0 cache-write 0 cache-read 0
++```
++
++A session with one part prints as it did: the session line, then its lanes. In JSON, every session has `parts`:
++
++| Figure | `--json` key | Meaning |
++|---|---|---|
++| part | `part` | Its number. |
++| day | `day` | The day of its first record; the day of its first lane when it has no record. |
++| label | `label` | Printed only with `--labels`; `null` otherwise. |
++| minutes, owner turns, messages, lanes | `minutes`, `ownerTurns`, `messages`, `lanes` | As for the session, over the part. `lanes` is a count. |
++| orchestrator tokens, lane tokens | `tokens`, `laneTokens` | As for the session, over the part. |
++
++With `--since` and `--until`, the cuts are read over the whole session file, and each part's figures over the records inside the window. A part whose command comes before the window keeps its number and its label. The session's label stays the first label inside the window, so it can differ from the label of its first part.
++
+ ## Minutes
+ 
+ Minutes run from the first usable record to the last, for a session file or a lane file. They are wall-clock minutes, with one decimal.
+ 
++A part's minutes run from its first record to its last. The time between a part's last record and the next command belongs to no part, so a session's part minutes can add up to less than its own.
++
+ They include all waiting: the owner thinking, a session left open overnight, a lane waiting on a command or on the orchestrator. A session that is resumed over several days counts those days. To see where time went inside a plan, use `scripts/plantime.mjs`.
+ 
+ ## Session label
+ 
+-A label says which command opened the session. For `/shawarma plan t-0001` the label is `plan t-0001`.
++A label says which command opened the session, or a part of it (see [Parts](#parts)). For `/shawarma plan t-0001` the label is `plan t-0001`.
+ 
+ A label is printed only with `--labels`. Without the flag there is none: the text output shows no label, and the JSON `label` is `null`. The label is off by default because it is text the owner typed. It can hold a ticket id or a name. It is the only message text the tool ever prints.
+ 
+@@ -401,7 +437,7 @@ How the files are written:
+ 
+ 1. The output holds counts, durations, days, model ids, effort values, agent type names, pull request numbers, and the first 8 characters of session and agent ids. It holds no message text, no prompt and no full id. Rule 2 says what happens to a value that looks like a path.
+ 2. A value read from a record or a meta file is printed only when it is one plain word. A plain word is 60 characters at most. It is made of letters from `A` to `Z` and `a` to `z`, digits, and `_ . : @ [ ] -`. It may also hold one `/`, but not as its first or last character. So a model id such as `vendor/model` prints. A path such as `/home/u/x` or `a/b/c` does not. Anything that is not a plain word prints as `?`. A value of two parts, such as `a/b`, is a plain word and prints.
+-3. The session label is the one exception to rule 1. It is printed only with `--labels`. It is two words at most, filtered as described under [Session label](#session-label).
++3. The labels of sessions and parts are the one exception to rule 1. It is printed only with `--labels`. It is two words at most, filtered as described under [Session label](#session-label).
+ 4. An error message never names a path. A file error is reported by its code, such as `ENOENT`.
+ 5. An unexpected failure prints the error's name only, because its message could quote a record.
+ 6. `--prompts` is the only output that holds whole prompts. Its folder must be new or empty, and outside any git repository. See [Prompt files](#prompt-files).
+@@ -419,7 +455,7 @@ Read the output before you share it:
+ - **Formats change.** The field names were checked on Claude Code 2.1.3xx. Older transcripts lack some keys, such as `requestedModel`. A later version may rename a field. A missing value prints as `?` and is still counted; it never stops the tool.
+ - **One machine.** The tool reads the transcripts of the machine it runs on. Sessions held on another machine, or in the cloud, are not seen.
+ - **The key is a substring.** It can match a sibling project whose folder name holds it. Check the `project folders` count in the totals.
+-- **A session is a file, not a run.** A session that holds several commands, or is resumed over several days, is one line. With `--labels`, its label comes from its first skill command only. Splitting a session at each command is ticket `skills-cb5t`.
++- **A part is a command, not a whole run.** A run resumed in a new session file, or after `/clear`, is a part of that new session. A run that the owner started with typed text instead of a skill command has no part of its own.
+ - **Messages copied between files.** A message id is counted once per file. If Claude Code copies a message into a second transcript, it is counted in each.
+ - **Lane kind is a guess.** See [Lane kind](#lane-kind).
+ - **Model class is read from the name.** A model whose id holds none of the three words is `other`, whatever it is.
 diff --git a/scripts/runmeter.mjs b/scripts/runmeter.mjs
-index 192067d..3db906a 100644
+index 192067d..e503c42 100644
 --- a/scripts/runmeter.mjs
 +++ b/scripts/runmeter.mjs
+@@ -2,7 +2,7 @@
+ /**
+  * runmeter: what each Claude Code session that started lanes cost, and which model each lane ran on, read
+  * from Claude Code transcripts and, with --prs, from gh. Prints counts, durations, days and model names;
+- * with --labels also the first two words of the command that opened each session. Transcripts may hold
++ * with --labels also the first two words of the command that opened each session and each of its parts. Transcripts may hold
+  * private data: no other message text is printed, and --prompts writes prompts to a folder, never to stdout.
+  *
+  *   node scripts/runmeter.mjs <projects dir> <project key> [--since <YYYY-MM-DD>] [--until <YYYY-MM-DD>] [--json] [--labels] [--prs <repo dir>] [--prompts <out dir>] [--plans|--retro|--replay <regex>]
 @@ -138,19 +138,40 @@ export function commandWords(d) {
   * plantime's `classify` reads as `human`. A run of owner records is one turn. Records that only accompany
   * (`defer`, `compaction`) neither start nor end a turn.
@@ -83,11 +211,11 @@ index 192067d..3db906a 100644
  
 +/**
 + * A session's parts (2c), oldest first. A message counts in the part of its first record; a lane, whole, in the
-+ * part where its first record falls; a turn in the part of its last owner record. A part with no message, no
-+ * turn and no lane is left out.
++ * part where its first record falls; a turn in the part of its last owner record. A part a command opened is always
++ * kept, even when it holds nothing else; part 0 is left out when it has no message, no turn and no lane.
 + */
 +export function parts(recs, lanes, c, turnsByPart) {
-+  const recsOf = new Map(), firstPart = new Map(), span = new Map(); // span: the part's own records, before any message moves
++  const recsOf = new Map(), firstPart = new Map(), span = new Map(); // span: the part's own records, before messages move
 +  for (const d of recs) {
 +    let p = c.partOf(d);
 +    const t = ts(d.timestamp), [lo, hi] = span.get(p) ?? [t, t];
@@ -103,7 +231,7 @@ index 192067d..3db906a 100644
 +  for (const p of [...new Set([...recsOf.keys(), ...lanesOf.keys(), ...turnsByPart.keys()])].sort((a, b) => a - b)) {
 +    const own = recsOf.get(p) ?? [], its = lanesOf.get(p) ?? [];
 +    const u = usage(own), turns = turnsByPart.get(p) ?? 0;
-+    if (!u.messages && !turns && !its.length) continue;
++    if (p === 0 && !u.messages && !turns && !its.length) continue;
 +    const [lo, hi] = span.get(p) ?? [];
 +    out.push({
 +      part: p,
@@ -163,7 +291,7 @@ index 192067d..3db906a 100644
 +function sessionLines(s) {
 +  if (s.parts.length < 2) return [sessionLine(s), ...s.lanes.map(laneLine)];
 +  const lanesOf = new Map();
-+  for (const l of s.lanes) lanesOf.set(l.part, [...(lanesOf.get(l.part) ?? []), l]);
++  for (const l of s.lanes) { if (!lanesOf.has(l.part)) lanesOf.set(l.part, []); lanesOf.get(l.part).push(l); }
 +  return [sessionLine(s), ...s.parts.flatMap((p) => [partLine(p), ...(lanesOf.get(p.part) ?? []).map(laneLine)])];
 +}
 +
@@ -188,10 +316,41 @@ index 192067d..3db906a 100644
      ...(report.prs ? prLines(report.prs) : []),
      ...(report.promptFilesWritten === undefined ? [] : [`prompts: ${report.promptFilesWritten} files written`]),
 diff --git a/scripts/test/runmeter.test.mjs b/scripts/test/runmeter.test.mjs
-index ccc6d1d..40d7959 100644
+index ccc6d1d..29226f0 100644
 --- a/scripts/test/runmeter.test.mjs
 +++ b/scripts/test/runmeter.test.mjs
-@@ -1276,3 +1276,130 @@ test('doc: scripts/runmeter.md names every --json key', () => {
+@@ -640,15 +640,17 @@ test('--json: one document with the same figures', () => {
+   const { lanes, ...s1 } = r.sessions[0];
+   assert.deepEqual(s1, { id: 'aaaaaaaa', day: '2026-09-20', label: null, minutes: 90, models: ['claude-opus-5-5'], modelClasses: ['opus'], effort: ['high', 'max'], ownerTurns: 3, messages: 3,
+     tokens: { input: 60, output: 600, cacheWrite: 6000, cacheRead: 60000 }, laneTokens: { input: 110, output: 1506, cacheWrite: 10079, cacheRead: 100712 },
++    parts: [{ part: 1, day: '2026-09-20', label: null, minutes: 89, ownerTurns: 3, messages: 3, tokens: { input: 60, output: 600, cacheWrite: 6000, cacheRead: 60000 },
++      lanes: 4, laneTokens: { input: 110, output: 1506, cacheWrite: 10079, cacheRead: 100712 } }],
+     laneFilesSkipped: 0, recordsNotRead: 0 });
+   assert.deepEqual(lanes[0], { agent: 'a1a1a1a1', kind: 'plan/run', agentType: 'general-purpose', launchModel: 'sonnet', requested: [], resolved: ['claude-sonnet-5'],
+     modelClass: 'sonnet', effort: ['high'], day: '2026-09-20', minutes: 12.5, messages: 2, tokens: { input: 8, output: 502, cacheWrite: 73, cacheRead: 704 },
+-    launchedWithDefaults: true, recordsNotRead: 0 });
++    launchedWithDefaults: true, recordsNotRead: 0, part: 1, crossesCommand: false });
+   assert.deepEqual(lanes.map((l) => [l.kind, l.modelClass]), [['plan/run', 'sonnet'], ['retro', 'opus'], ['replay', 'haiku'], ['plan/run', 'unknown']]);
+   assert.deepEqual(r.sessions[1].modelClasses, ['other']);
+   assert.deepEqual(r.totals, { projectFolders: 2, projectFoldersSkipped: 0, sessionFiles: 3, sessionFilesSkipped: 0, sessions: 2, lanes: 7, lanesByKind: { 'plan/run': 4, retro: 1, replay: 1, other: 1 },
+     ownerTurns: 5, sessionMinutes: 1535, laneMinutes: 23.5, tokens: { input: 63, output: 630, cacheWrite: 6300, cacheRead: 63000 },
+-    laneTokens: { input: 114, output: 1514, cacheWrite: 10091, cacheRead: 100728 }, laneFilesSkipped: 0, recordsNotRead: 0 });
++    laneTokens: { input: 114, output: 1514, cacheWrite: 10091, cacheRead: 100728 }, lanesCrossingCommand: 0, laneFilesSkipped: 0, recordsNotRead: 0 });
+   assert.deepEqual(totals([], { projectFolders: 1, sessionFiles: 0, sessionFilesSkipped: 0 }).lanesByKind, { 'plan/run': 0, retro: 0, replay: 0, other: 0 });
+   rmSync(f.root, { recursive: true });
+ });
+@@ -1229,8 +1231,8 @@ test('doc: the reference measures sessions, and says where a session is not a ru
+   assert.ok(!DOC.includes('A run is one Claude Code session'));
+   const intro = DOC.slice(0, DOC.indexOf('\n## What each figure is for\n'));
+   for (const said of ['A session that started at least one lane is printed', 'may hold more than one run']) assert.ok(intro.includes(said), said);
+-  assert.ok(DOC.includes('- **A session is a file, not a run.** A session that holds several commands, or is resumed over several days, is one line.'));
+-  assert.ok(DOC.includes('Splitting a session at each command is ticket `skills-cb5t`.'));
++  assert.ok(DOC.includes('The tool cuts such a session into parts, one per skill command'));
++  assert.ok(!DOC.includes('The tool does not split them.'));
+   // The key is a substring: the reference says to check the count of folders it matched.
+   const key = DOC.split('\n').find((line) => line.startsWith('| `<project key>` |'));
+   assert.ok(key.includes('sibling') && key.includes('`project folders`'), key);
+@@ -1276,3 +1278,161 @@ test('doc: scripts/runmeter.md names every --json key', () => {
    assert.ok(keys.size >= 55, `found ${keys.size} keys`);
    assert.deepEqual([...keys].filter((k) => !DOC.includes(`\`${k}\``)), []);
  });
@@ -320,5 +479,36 @@ index ccc6d1d..40d7959 100644
 +  const [s] = json(f, '--labels', '--since', E).sessions;
 +  assert.equal(s.label, 'run t-0001', 'the session label: the first command inside the window, as before');
 +  assert.deepEqual(shape(s).map((p) => p.slice(0, 7)), [[1, 'plan t-0001', E, 1, 1, 1, 1], [2, 'run t-0001', E, 1, 1, 1, 1]]);
++  rmSync(f.root, { recursive: true });
++});
++
++test('parts: two commands in one turn, and commands at one instant, each keep their part; a lane ending at a command\'s instant does not cross it', () => {
++  const f = fixture();
++  const D = '2026-11-01';
++  const T = (m) => at(D, m);
++  f.write(`projects/${MAIN}/${S1}.jsonl`, [
++    human(T(0)), asst(T(1), { id: 'o0' }),
++    skill(T(10), 'plan t-1'), asst(T(11), { id: 'o1' }),
++    skill(T(40), 'run t-1'), skill(T(40), 'run t-2'), // one turn, one instant
++    asst(T(41), { id: 'o2' }),
++  ]);
++  const sub = `projects/${MAIN}/${S1}/subagents`;
++  f.write(`${sub}/${agent('a1')}.jsonl`, [prompt(T(10), P1), asst(T(12))]); // starts at a command's instant
++  f.write(`${sub}/${agent('b2')}.jsonl`, [prompt(T(20), P1), asst(T(40))]); // ends at the next command's instant
++  f.write(`${sub}/${agent('c3')}.jsonl`, [prompt(T(20), P1), asst(new Date(Date.parse(T(40)) + 1).toISOString())]); // 1 ms past it
++  const r = json(f, '--labels');
++  const [s] = r.sessions;
++  assert.deepEqual(s.parts.map((p) => [p.part, p.label, p.ownerTurns, p.messages, p.lanes]),
++    [[0, null, 1, 1, 0], [1, 'plan t-1', 1, 1, 3], [2, 'run t-1', 0, 0, 0], [3, 'run t-2', 1, 1, 0]]);
++  assert.deepEqual(s.lanes.map((l) => [l.agent, l.part, l.crossesCommand]), [['a1a1a1a1', 1, false], ['b2b2b2b2', 1, false], ['c3c3c3c3', 1, true]]);
++  assert.equal(r.totals.lanesCrossingCommand, 1);
++  rmSync(f.root, { recursive: true });
++});
++
++test('parts: the session line stays the total, with the base figures, when its session is cut', () => {
++  const f = runs();
++  const lines = text(f);
++  assert.equal(lines[4], '## aaaaaaaa 2026-11-01 · 70m · orchestrator claude-opus-5-5 · effort ? · messages 5 · owner turns 5 · lanes 3 · '
++    + 'orchestrator tokens in 101 out 101 cache-write 101 cache-read 101 · lane tokens in 7 out 0 cache-write 0 cache-read 0');
 +  rmSync(f.root, { recursive: true });
 +});

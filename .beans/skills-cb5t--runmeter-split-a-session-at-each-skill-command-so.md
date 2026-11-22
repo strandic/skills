@@ -22,3 +22,24 @@ Research (plan step 1, aggregates over this repo's transcripts, CLI 2.1.295–2.
 Error directions: a lane or turn counted in the wrong part overstates one run and understates the next; the session total stays right. A cut at a command that is not a run makes a part too many; a missed cut merges two runs (today's behaviour).
 
 - **Q1 RULING — A** ("A, go with reco"): a lane counts whole in the part where its first record falls. The totals print a count of lanes that end under a later command.
+
+## Plan (2026-11-22)
+
+Brief: `docs/plans/2026-11-22-skills-cb5t-runmeter-per-run-split/plan.md` (frozen). Sketch executed on base `5eaa942`: `node --test scripts/test/runmeter.test.mjs` → tests 63 · fail 0. Gate R2 (`gate/parts-sum.mjs`, 1463 sequences): PASS; mutants m1, m3 FAIL. Predicted red set on the tests commit: 9 (T1–T7, the `--json` shape test, the doc "session is not a run" test).
+
+Attack lane findings folded into the sketch: two commands in one turn no longer drop a part (T7); text output no longer copies a growing list per lane.
+
+Freeze: `python3 freeze_check.py docs/plans/2026-11-22-skills-cb5t-runmeter-per-run-split/plan.md --repo .worktrees/cb5t-main` → `PASS`. Run without `--listing`: the house lessons file has no `- Lesson (<tag>):` lines, so the tool reads it as unusable; lessons checked by hand in the brief's header.
+
+> **What this is about:** how the parts are cut and printed, in the cases the ticket and the one ruling leave open. Each line below is a default: silence accepts it, an answer changes it. Readings: the brief's §2 Partition and Attack readings, tests T1–T8. An answer that changes one becomes a §9 row before `run`.
+
+unruled: D1 a message counts in the part of its first record — default as §2 2c
+unruled: D2 an owner turn counts in the part of its last owner record — default as §2 2a
+unruled: D3 a part a command opened is always kept; part 0 is dropped when it has no message, turn or lane — default as §2 2c
+unruled: D4 cuts read over the whole file; figures over the window; a part keeps its command's label before the window — default as §2 2b, 2c
+unruled: D5 part lines only for a session of two parts or more, no model or effort per part — default as §2 2f
+unruled: D6 part 0 before the first command, part N the Nth owner skill command in the file — default as §2 2b
+unruled: D7 every owner-typed skill command cuts, any skill, labelled or not — default as §2 2b
+unruled: D8 part minutes run over the part's own records; parts' minutes can sum below the session's — default as §2 2c
+unruled: D9 the crossing count prints in text only when not zero, always in JSON — default as §2 2e
+unruled: D10 a lane ending at the next command's exact instant does not cross it (strict `>`) — default as §2 2d
