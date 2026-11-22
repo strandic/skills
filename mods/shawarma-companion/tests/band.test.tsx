@@ -3581,6 +3581,38 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     expect({ seen, after: await band($) }).toEqual({ seen: [[], [], []], after: ['w · trivial · since 14:00', 'other tree: m · trivial · since 14:00'] })
   })
 
+  // W3-R1 (review 3a F1): the 15 s check after a lost read must find the trees again, not reuse those found before a move.
+  test('V14 after a move, a cwd read given up, then the 15 s check with the cwd answering: the rows are labelled by the new folder', { options: ON }, async ($, on) => {
+    let late = false
+    let dir = ROOT
+    let clock: any
+    const hold = { 'session.cwd': () => (late ? clock.sleep(3_000).then(() => undefined) : undefined) }
+    clock = world(on, new Map([at(ROOT, 'm'), at(WT, 'w')]), ROOT, [], new Set(), { cwdNow: () => dir, claimed: [ROOT, WT], root: ROOT, hold })
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    await bash($, 'true')
+    dir = WT
+    late = true
+    void bash($, 'true')
+    for (let i = 0; i < 10; i++) { await clock.advance(1_000); await settle(3) }
+    const lost = await band($)
+    late = false
+    for (let i = 0; i < 10; i++) { await clock.advance(1_000); await settle(3) }
+    expect({ lost, afterCheck: await band($) }).toEqual({ lost: [], afterCheck: ['w · trivial · since 14:00', 'other tree: m · trivial · since 14:00'] })
+  })
+
+  // W3-R1: the rows come back at the first check that reads the directory, with no tool call or turn end (README :40).
+  test('V15 a cwd read rejected after a Bash call, no move: nothing drawn, then the 15 s check draws the rows again', { options: ON }, async ($, on) => {
+    let fail = false
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => (fail ? Promise.reject(new Error('x')) : undefined) } })
+    await bash($, 'true')
+    fail = true
+    await bash($, 'true')
+    const lost = await band($)
+    fail = false
+    await clock.advance(15_000); await settle(30); await clock.advance(15_000); await settle(30)
+    expect({ lost, afterCheck: await band($) }).toEqual({ lost: [], afterCheck: ['m · trivial · since 14:00'] })
+  })
+
   test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
     const fired: number[] = []
     const tapped = ((name: string, ...args: any[]) => {
