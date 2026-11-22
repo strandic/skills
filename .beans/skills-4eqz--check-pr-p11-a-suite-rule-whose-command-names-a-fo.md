@@ -1,7 +1,7 @@
 ---
 # skills-4eqz
 title: 'check_pr P11: a suite rule whose command names a folder flags the contract''s own files as changed gate tools'
-status: in-progress
+status: completed
 type: bug
 priority: normal
 tags:
@@ -40,3 +40,7 @@ Trivial go; D1 stood as a DEFAULT. Branch `fix/4eqz-p11-gate-folder`, tests comm
 - `check_pr.py <this ticket> <body> --repo .worktrees/4eqz --tests-commit f0a68ee` (strandic 0.11.0): `PASS`.
 - DEFAULT rows: D1. Findings filed: `skills-ehhw` (P11 misses a one-segment gate folder), `skills-rm6v` (a rename under a gate folder reads as an unnamed changed file).
 - Rebased 2026-11-22 onto `origin/main` `c3c525d` (the first head was cut from a local main holding other sessions' unpushed commits; GitHub showed a conflict in another stream's bean). PR 15 now carries plan note `88c55bb`, tests `3a27431`, fix `6973c97`; `git range-diff` shows both code commits `=`. Re-read at `6973c97`: base `Ran 150 tests` / `OK`, head `Ran 151 tests` / `OK`, red on the tests commit as predicted, PR 12 case `FAIL (6)` → `PASS`, check_pr `PASS`. GitHub: `MERGEABLE CLEAN`.
+
+## Merged (2026-11-22)
+
+PR 15 merged as `445b10e`. Follow-ups: `skills-ehhw`, `skills-rm6v`.
