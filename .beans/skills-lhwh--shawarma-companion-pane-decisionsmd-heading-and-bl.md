@@ -1,7 +1,7 @@
 ---
 # skills-lhwh
 title: 'shawarma-companion pane: decisions.md heading and blank lines drawn as bullets'
-status: todo
+status: in-progress
 type: bug
 tags:
     - shawarma
@@ -23,3 +23,6 @@ Awaiting go. The change is the ticket's own words: the pane lists only the dated
 
 unruled: none
 
+## Run (2026-11-22)
+
+Go given. Branch `fix/lhwh-pane-dated-rows` in `.worktrees/lhwh-run`, from `origin/main` `c20eb39` (mod 0.3.2, skills-cm2l merged since triage).
