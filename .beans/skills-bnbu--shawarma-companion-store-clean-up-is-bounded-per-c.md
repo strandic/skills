@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-20T15:08:57Z
-updated_at: 2026-11-20T18:08:33Z
+updated_at: 2026-11-22T07:50:31Z
 ---
 
 restore() prunes up to 100 other entries, racing each store.get and store.delete against 2 s separately. Reads answering in 1.9 s hold the first writing call (or session start) about 190 s (B5, F5); a hanging store.delete holds it 200 s (B7, F7, pre-existing). Give the whole pass one deadline, or run it off the tool call's path. Found by the skills-s6qg run review, final lane (docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/reports/run/lane-3a-final/report.md); reproduction in final.test.tsx there.
@@ -54,3 +54,7 @@ unruled: none
 
 - W1 tests commit 0dcae65: 277 pass / 9 fail / Ran 286 (as §4 predicted). W2 code commit 3f5c376 (same as the sketch): 285 pass / 0 fail / Ran 285; base 039320d 277 / 0 / 277; plugin validate passed; tsc 6.0.3 exit 0.
 - W3 lanes 3a and 3b (reports/run/lane-3a, lane-3b): no code defect. Docs claim 'at most about 4 seconds' is false (6 s: the claims save has its own 2 s; probe heldMs=5700); 'reads as empty' overstates. Run paused: RULING W3-1 on the README/CHANGELOG wording; DEFAULTs W3-2 (add guard K9), W3-3 (no test for m7). New tickets skills-rph2 (clock off by 30 days deletes live entries), skills-4y27 (Windows paths read as malformed).
+
+
+- W3 rulings W3-1 to W3-4 and W4 rulings W4-1, W4-2 (owner: 'Go with reco'), in §9 and decisions.md. Gate at head f0c62af: R1 286 pass / 0 fail / Ran 286 — PASS; validate passed; tsc exit 0. check_pr: FAIL on P11 only (6 lines, judged false: R1 names the mod folder and the checker does not exempt §3 files under it), ticket skills-4eqz; pasted under Verification.
+- PR: https://github.com/strandic/skills/pull/12 — tables Verification, Decisions, Findings there. No DEFAULT rows (every item was answered). New tickets: skills-rph2, skills-4y27, skills-oz54, skills-4eqz.
