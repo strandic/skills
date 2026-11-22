@@ -67,3 +67,8 @@ Re-spiked on Q1 A; brief written at `docs/plans/2026-11-22-skills-oz54-session-c
 > **What this is about:** Ruling Q1 said a give-up forgets the known working directory and "that update draws nothing". Round 2 showed one update was not enough: the next subagent event or a check already running then drew wrong labels. The sketch keeps the band empty until the main session's working directory is read again (the next main tool call or turn end, or a session start). A: keep this (recommended; executed, 0 wrong labels in 6 912 runs; the cost is a longer empty band after a failed read). B: forget for one update only (executed: 12 + 48 wrong-label rows).
 
 unruled: D6 band empty until the main directory is read again — default keep
+
+**D7 (DEFAULT, relayed by skills-orch)**: the owner ordered skills-lhwh (decisions pane) to run and merge first among the companion streams. At run time this change rebases on it, then picks the version and the changelog entry. This rules out Q2 B (keep 0.3.3); Q2 stays open for your answer.
+
+unruled: D6 band empty until the main directory is read again — default keep
+unruled: D7 rebase on skills-lhwh before picking the version — default keep

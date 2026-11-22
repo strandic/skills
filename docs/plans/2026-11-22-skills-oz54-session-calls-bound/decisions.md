@@ -4,3 +4,4 @@
 2026-11-22 | D3 RULING | A: a session call that gave up is asked again at each update (no memory until the turn end); reco A | Owner: "Go with reco". An engine fault; the README states the cost.
 2026-11-22 | D4 RULING | A: file three new tickets for pre-existing gaps (the 15 s check does not re-read the current tree; a subagent call whose root read fails counts the own run as in another worktree; an unhandled rejection in existing tests); reco A | Owner: "Go with reco".
 2026-11-22 | D5 RULING | A: test V7 also checks that a 2 s timer was asked for; reco A | Owner: "Go with reco". Without it V7 passed on the base.
+2026-11-22 | D7 DEFAULT | At run time, rebase on skills-lhwh (merges first among companion streams), then pick the version and the changelog entry | Owner order relayed by skills-orch; it makes Q2 B (keep 0.3.3) unworkable.
