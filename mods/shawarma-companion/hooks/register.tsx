@@ -71,6 +71,14 @@ let lastSeen: Set<string> | null = null
 /** The main session's working directory, last read outside a subagent's hook (lane A9g). */
 let mainCwd: string | null = null
 /**
+ * skills-oz54 Q1: set when a read of the main working directory gave up or failed
+ * (after a tool call, at a turn end, in the 15 s check); cleared when a main read
+ * answers or a session starts. While set, every refresh draws nothing, a
+ * subagent's or the check's included, so no row is labelled by a folder the
+ * session may have left (attack B1, B4 d).
+ */
+let isCwdLost = false
+/**
  * s6qg S1: a written folder in no tree as written (a Write spelled through a
  * link, `/tmp/…` for `/private/tmp/…`) has its real path asked, at most this many
  * folders per refresh, each answer kept until the turn ends; past the cap, or
@@ -152,7 +160,7 @@ const realDirs = new Map<string, { at: number; dir: string; real: string }>()
 const lateDirs = new Map<string, { at: number; dir: string }>()
 
 const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
-/** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
+/** Every `$.process.run`, store call and session call gives up after this; a timeout is a failed list (lane 3a F9) or a failed call (skills-oz54). */
 export const RUN_MS = 2_000
 
 /** How a call raced against RUN_MS ended: its value, a rejection, or no answer in time. */
@@ -215,7 +223,7 @@ async function claim($: EngineInterface, trees: Trees, found: readonly Found[], 
   const held = new Set([...lastClaims, ...(await read($, claimsAtom))])
   const before = held.size
   // B7f: a subagent's hook reads its own cwd: with no main cwd known yet, the root alone.
-  const cwd = mainCwd ?? (isSub ? null : await $.session.cwd().catch(() => null))
+  const cwd = mainCwd ?? (isSub ? null : await bounded($, $.session.cwd()).catch(() => null))
   const root = await bounded($, $.session.root()).catch(() => null)
   // S1: the engine gives the cwd and the root as real paths (probed): placed as written, else against each root's real path (B7a).
   for (const path of [cwd, root]) {
@@ -392,7 +400,9 @@ async function planFiles($: EngineInterface, dir: string): Promise<[string | nul
  */
 async function discover($: EngineInterface, isSub = false): Promise<Trees> {
   // B7f: in a subagent's hook with no main cwd known, discover from the project root.
-  const cwd = mainCwd ?? (isSub ? await $.session.root().catch(() => $.session.cwd()) : await $.session.cwd())
+  const cwd = mainCwd ?? (isSub
+    ? await bounded($, $.session.root()).catch(() => bounded($, $.session.cwd()))
+    : await bounded($, $.session.cwd()))
   const hit = worktrees.get(cwd)
   if (hit !== undefined) return hit
   const git = await run($, ['git', 'worktree', 'list', '--porcelain', '-z'], cwd)
@@ -413,7 +423,7 @@ async function discover($: EngineInterface, isSub = false): Promise<Trees> {
   const probe: Trees = { ...found, reals }
   let own = byReal(probe, cwd) ?? found.own
   if (own === null) {
-    const root = await $.session.root().catch(() => null)
+    const root = await bounded($, $.session.root()).catch(() => null)
     own = root === null ? null : byReal(probe, root) ?? ownTree(root, found.roots)
   }
   const trees: Trees = { ...found, own, reals, isFromGit: listed !== null }
@@ -585,7 +595,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
   for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
   for (const marker of lateDirs.keys()) if (!facts.paths.has(marker)) lateDirs.delete(marker)
   if (picked.length === 0) return { rows: [], hidden, listed, scan: facts }
-  const { startedAt } = await $.session.usage()
+  const { startedAt } = await bounded($, $.session.usage())
   const now = await $.clock.now()
   const rows: Snapshot[] = []
   for (const one of picked) {
@@ -606,6 +616,13 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
   return { rows, hidden, listed, scan: facts }
 }
 
+/** Q1: the main working directory read again; a give-up or a failure forgets it and marks it lost. */
+async function readMainCwd($: EngineInterface): Promise<void> {
+  const read = await bounded($, $.session.cwd()).catch(() => null)
+  mainCwd = read
+  isCwdLost = read === null
+}
+
 /**
  * Never throws: a failed discovery or pass draws nothing, and a row whose files fail to read is drawn as
  * `could not be read`, never with a value read earlier.
@@ -613,6 +630,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
 async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<void> {
   const next = await (async () => {
     const at = trees ?? (await discover($, isSub))
+    if (isCwdLost) throw new Error('working directory not read')
     lastTrees = at
     return snapshot($, at, list, isSub)
   })().catch((err: unknown) => {
@@ -669,7 +687,7 @@ async function stale($: EngineInterface): Promise<void> {
   const list = lister($)
   const scan = scanned(trees)
   // A9i: the timer reads the session's own directory; a `/cd` with no tool call is claimed here.
-  mainCwd = await $.session.cwd().catch(() => mainCwd)
+  await readMainCwd($)
   const found = await markersOf(list, scan.roots)
   const claims = await claim($, trees, found)
   let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
@@ -719,6 +737,7 @@ export const register: Register = (on, options) => {
     storedFor = null
     restoredFor = null
     mainCwd = e.cwd
+    isCwdLost = false
     if (options.pane === true) {
       await $.command
         .register({
@@ -734,7 +753,7 @@ export const register: Register = (on, options) => {
   on('tool.call', async ($, e, next) => {
     if (!WRITERS.has(e.tool)) return next(e)
     // The hook's own cwd: a subagent's in a subagent's call (d.ts `$.session.cwd`), for its relative paths.
-    const cwd = await $.session.cwd().catch(() => null)
+    const cwd = await bounded($, $.session.cwd()).catch(() => null)
     // Lane 3a F1, F2: the span is open while the call runs, so a refresh during it (the 15 s check, a parallel
     // call) already counts a marker the call writes.
     const span = { from: await $.clock.now(), to: Number.POSITIVE_INFINITY }
@@ -747,7 +766,7 @@ export const register: Register = (on, options) => {
       remember(turnWindows, [span], MAX_TURN, (a, b) => a === b)
     })
     const isMain = (e as { agentId?: unknown }).agentId === undefined
-    if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
+    if (isMain) await readMainCwd($)
     // Q3: a file tool's path (relative to the cwd read before the call) or a Bash call's changed files claim their trees.
     const input = e as { file_path?: unknown; notebook_path?: unknown }
     const path = e.tool === 'NotebookEdit' ? input.notebook_path : e.tool === 'Bash' ? undefined : input.file_path
@@ -765,7 +784,7 @@ export const register: Register = (on, options) => {
     lateDirs.clear()
     folderReals.clear()
     const isMain = (e as { agentId?: unknown }).agentId === undefined
-    if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
+    if (isMain) await readMainCwd($)
     await refresh($, null, lister($), !isMain)
     // B4a2: the main turn's end placed this turn's folders and spans against a fresh git list; the last 64 carry
     // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn.
@@ -793,7 +812,7 @@ export const register: Register = (on, options) => {
     watch($, true)
     const context =
       options.context === true
-        ? await $.session.usage().then(usage => usage.context.percent, () => null)
+        ? await bounded($, $.session.usage()).then(usage => usage.context.percent, () => null)
         : undefined
     if (context === null) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
