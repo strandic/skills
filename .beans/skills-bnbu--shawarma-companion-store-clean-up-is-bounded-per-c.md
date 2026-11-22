@@ -7,7 +7,7 @@ priority: normal
 tags:
     - shawarma
 created_at: 2026-11-20T15:08:57Z
-updated_at: 2026-11-20T17:48:02Z
+updated_at: 2026-11-20T18:08:33Z
 ---
 
 restore() prunes up to 100 other entries, racing each store.get and store.delete against 2 s separately. Reads answering in 1.9 s hold the first writing call (or session start) about 190 s (B5, F5); a hanging store.delete holds it 200 s (B7, F7, pre-existing). Give the whole pass one deadline, or run it off the tool call's path. Found by the skills-s6qg run review, final lane (docs/plans/2026-11-20-skills-s6qg-session-scoped-rows/reports/run/lane-3a-final/report.md); reproduction in final.test.tsx there.
@@ -48,3 +48,9 @@ Brief: docs/plans/2026-11-20-skills-bnbu-store-cleanup-bound/plan.md. `python3 โ
 Sketch suite `285 pass` / `0 fail`; predicted red set on the tests commit `277 pass` / `9 fail` / `Ran 286 tests across 1 file.`; R1 FAIL reading on mutant m3 `282 pass` / `3 fail`.
 
 unruled: none
+
+
+## Run (2026-11-20)
+
+- W1 tests commit 0dcae65: 277 pass / 9 fail / Ran 286 (as ยง4 predicted). W2 code commit 3f5c376 (same as the sketch): 285 pass / 0 fail / Ran 285; base 039320d 277 / 0 / 277; plugin validate passed; tsc 6.0.3 exit 0.
+- W3 lanes 3a and 3b (reports/run/lane-3a, lane-3b): no code defect. Docs claim 'at most about 4 seconds' is false (6 s: the claims save has its own 2 s; probe heldMs=5700); 'reads as empty' overstates. Run paused: RULING W3-1 on the README/CHANGELOG wording; DEFAULTs W3-2 (add guard K9), W3-3 (no test for m7). New tickets skills-rph2 (clock off by 30 days deletes live entries), skills-4y27 (Windows paths read as malformed).
