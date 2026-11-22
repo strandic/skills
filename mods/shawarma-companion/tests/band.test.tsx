@@ -3186,4 +3186,21 @@ describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped, 
     expect([start!('sess-1', 151), start!('sess-1', 51), start!('a', 152), start!('', 5), start!('sess-1', 1), start!('x', 0)])
       .toEqual([6, 26, 36, 1, 0, 0])
   })
+  test('K9 (review W3-2) after the first Bash call and a 10 s advance, no 2 s timer resolves: the pass cancels its deadline', { options: ON }, async ($, on) => {
+    const store = new Map<string, unknown>()
+    for (let i = 0; i < 5; i++) store.set(`claims:o${i}`, { trees: ['/other'], at: T0 - 1000 })
+    const fired: number[] = []
+    // The clock.after handler, wrapped: each 2 s timer that resolves is recorded.
+    const tapped = ((name: string, ...args: any[]) => {
+      if (name === 'clock.after') {
+        const h = args[args.length - 1]
+        args[args.length - 1] = async (...a: any[]) => { const r = await h(...a); if (a[1]?.ms === 2_000) fired.push(a[1].ms); return r }
+      }
+      return (on as any)(name, ...args)
+    }) as any
+    const clock = world(tapped, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store })
+    await bash($, 'true')
+    await clock.advance(10_000)
+    expect(fired.length).toBe(0)
+  })
 })
