@@ -3753,3 +3753,131 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     expect({ asked: asked > 0, fired: fired.length }).toEqual({ asked: true, fired: 0 })
   })
 })
+
+describe('skills-5w5c: a running call keeps its span until it ends', () => {
+  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
+  const rows = async ($: any): Promise<string[]> =>
+    ((await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND }))
+      .findAll({ type: 'Text' })) as any[]).map(one => (one.text as string).replace(/ · since.*/, ''))
+  const T0 = STARTED + 120_000
+  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
+  const never = () => new Promise<never>(() => undefined)
+  const turnEnd = ($: any) => $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+  /** A main turn end, then 64 main writes: the long call's span is out of both capped lists. */
+  const evict = async ($: any) => {
+    await turnEnd($)
+    for (let i = 0; i < 64; i++) await write($, `${ROOT}/src/f${i}.ts`, 'x')
+  }
+
+  test('V1 a long subagent call writes its marker mid-call after a turn end and 64 writes; the 15 s check lists it: own run, during and after', { options: ON }, async ($, on) => {
+    let release!: () => void
+    const gate = new Promise<void>(r => (release = r))
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (e.command === 'long' ? gate : undefined) })
+    await bash($, 'true')
+    const call = $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any)
+    await settle()
+    await evict($)
+    await clock.advance(10_000)
+    files.set(...at(WT, 'wt-7', T0 + 10_000))
+    await clock.advance(15_000)
+    await settle()
+    const during = await rows($)
+    release()
+    await call
+    await bash($, 'true')
+    expect({ during, after: await rows($) }).toEqual({
+      during: ['main-1 · trivial', 'other tree: wt-7 · trivial'],
+      after: ['main-1 · trivial', 'other tree: wt-7 · trivial'] })
+  })
+
+  test('V2 two long subagent calls; the first ends, the second writes its marker after the eviction: own run', { options: ON }, async ($, on) => {
+    let release1!: () => void
+    let release2!: () => void
+    const gate1 = new Promise<void>(r => (release1 = r))
+    const gate2 = new Promise<void>(r => (release2 = r))
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (e.command === 'long1' ? gate1 : e.command === 'long2' ? gate2 : undefined) })
+    await bash($, 'true')
+    const call1 = $.tool.call({ tool: 'Bash', command: 'long1', agentId: 'a1' } as any)
+    const call2 = $.tool.call({ tool: 'Bash', command: 'long2', agentId: 'a2' } as any)
+    await settle()
+    await evict($)
+    release1()
+    await call1
+    await clock.advance(10_000)
+    files.set(...at(WT, 'wt-8', T0 + 10_000))
+    await clock.advance(15_000)
+    await settle()
+    const during = await rows($)
+    release2()
+    await call2
+    expect(during).toEqual(['main-1 · trivial', 'other tree: wt-8 · trivial'])
+  })
+
+  test('V3 a hook above answers a long call first while the call beneath never ends: its span is released; another session\'s marker after the eviction is not claimed', {
+    options: ON,
+    plugins: [{ name: 'above', tier: 'prepend', register(up: any) {
+      up('tool.call', async ($: any, e: any, next: any) => {
+        if (e.command !== 'long') return next(e)
+        return Promise.race([next(e), $.clock.sleep(5_000).then(() => ({ result: { type: 'text', text: 'answered above' } }))])
+      })
+    } }] } as any, async ($, on) => {
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (e.command === 'long' ? never() : undefined) })
+    await bash($, 'true')
+    let answer: unknown = 'pending'
+    void $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any).then((v: any) => { answer = v?.result?.text })
+    await settle()
+    await clock.advance(6_000)
+    await settle()
+    await evict($)
+    await clock.advance(60_000)
+    files.set(...at(WT, 'other-1', T0 + 66_000))
+    await clock.advance(15_000)
+    await settle()
+    expect({ answer, rows: await rows($) }).toEqual({ answer: 'answered above', rows: ['main-1 · trivial', '1 run in another worktree'] })
+  })
+
+  test('V4 a long call whose end-time read fails closes its span: another session\'s marker after the eviction is not claimed', { options: ON }, async ($, on) => {
+    let release!: () => void
+    const gate = new Promise<void>(r => (release = r))
+    let nowFails = 0
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (e.command === 'long' ? gate : undefined),
+      hold: { 'clock.now': () => (nowFails > 0 ? (nowFails -= 1, Promise.reject(new Error('clock'))) : undefined) } })
+    await bash($, 'true')
+    const call = $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any).catch(() => undefined)
+    await settle()
+    nowFails = 1
+    release()
+    await call
+    nowFails = 0
+    await evict($)
+    await clock.advance(60_000)
+    files.set(...at(WT, 'other-1', T0 + 60_000))
+    await clock.advance(15_000)
+    await settle()
+    expect(await rows($)).toEqual(['main-1 · trivial', '1 run in another worktree'])
+  })
+
+  test('V5 accepted (Q1): a subagent call that never ends keeps its span open, past a turn end and 64 writes: another session\'s marker is claimed', { options: ON }, async ($, on) => {
+    const files = new Map([at(ROOT, 'main-1', STARTED + 6)])
+    const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
+      after: (e: any) => (e.command === 'hang' ? never() : undefined) })
+    await bash($, 'true')
+    void $.tool.call({ tool: 'Bash', command: 'hang', agentId: 'a1' } as any)
+    await settle()
+    await evict($)
+    await turnEnd($)
+    await clock.advance(600_000)
+    files.set(...at(WT, 'other-1', T0 + 600_000))
+    await clock.advance(15_000)
+    await settle()
+    expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: other-1 · trivial'])
+  })
+})
