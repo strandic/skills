@@ -11,3 +11,5 @@ updated_at: 2026-11-22T07:51:13Z
 ---
 
 Seen in the skills-cm2l run (2026-11-22). A fix-review lane ran `claude-personal plugin test` on a copy of the mod at a651a69 ten times: run 1 read 291 pass / 1 fail, the test not captured; runs 2–10 read 292 / 0. The orchestrator then ran it 12 times in the worktree at fd422fe: 292 pass / 0 fail each. Possibly the timing-dependent teardown rejection lane 3b saw on the base (`a rejection nothing handled: … $.state.get refused: no hooks module of that name is loaded`), or a clock-sensitive test. To do: loop the suite until a failure is captured, name the test.
+
+Second sighting (2026-11-22, skills-cm2l rebase review lane): the first run of a fresh `git archive` copy of the pre-rebase branch read 290 pass / 2 fail, names not captured; the next 9 runs read 292 / 0. Both sightings were the first run of a freshly copied mod folder: try a cold first run when chasing it.
