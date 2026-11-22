@@ -165,5 +165,9 @@ Mutants for 3b (each patched into the sketch, `claude plugin test` on the final 
 
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
 |---|---|---|---|---|---|
+| W3-1 | 2026-11-22 | the owner | §2 2f (README, CHANGELOG) | "waits at most about 4 seconds for the store: 2 for the session's own entry, 2 for the clean-up" → "about 6 seconds …, 2 to save its claims"; "reads as empty" → "reads as unset (no value)"; "once per session id, at its first update" → "at a session's first update that reads the session's own entry"; "Both limits" → "All three limits". §2 S2's "at most about 4 s" is wrong the same way | The first update also saves the session's claims, bounded by its own 2 s: with every store call at 1.9 s the first Bash call was held 5 700 ms. Only an unset (undefined) read is skipped; null, "", [] and {} are deleted as malformed. A failed own-entry read moves the clean-up to a later update |
+| W3-2 | 2026-11-22 | the owner | §4 | guards += K9: after the first Bash call and a 10 s advance, no 2 s timer resolves | Without it, removing the deadline cancel in `prune`'s `finally` turned no test red; K9 reads `Received: 1` on that change, passes on the fix |
+| W3-3 | 2026-11-22 | the owner | §7 | none: m7 (the key listing given its own 2 s bound) stays without a test | It changes only how many timers are asked; nothing the mod shows, stores or holds differs |
+| W3-4 | 2026-11-22 | the owner | §8 | out of scope += a session clock more than 30 days off deletes every live entry it examines (ticket skills-rph2); a saved entry with Windows paths is read as malformed and deleted (ticket skills-4y27) | Both read the same on the base and the fix; §8 keeps the 30-day rule and the entry check as they are |
 
 unruled: none
