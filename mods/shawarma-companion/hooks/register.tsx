@@ -607,7 +607,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = 
 }
 
 /**
- * Never throws: a failed discovery draws nothing, and a row whose files fail to read is drawn as
+ * Never throws: a failed discovery or pass draws nothing, and a row whose files fail to read is drawn as
  * `could not be read`, never with a value read earlier.
  */
 async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<void> {
