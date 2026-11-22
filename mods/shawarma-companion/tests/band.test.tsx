@@ -3649,6 +3649,31 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     expect(await paneText()).not.toContain('outside its tree')
   })
 
+  // W3-R4 (round-3 fix review G1): a turn end whose cwd read is lost keeps the turn's folders, so a worktree written
+  // more than 64 writes back in that turn is claimed once git lists it.
+  test('V18 a worktree written 70 writes before a turn end whose cwd read rejects: the band labels it other tree: k', { options: ON }, async ($, on) => {
+    let bad = false
+    const X = `${ROOT}/.worktrees/x`
+    const trees = [ROOT]
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { trees, claimed: [ROOT], root: ROOT,
+      hold: { 'session.cwd': () => (bad ? Promise.reject(new Error('x')) : undefined) } })
+    const step = async (ms: number) => { for (let t = 0; t < ms; t += 500) { await clock.advance(500); await settle(3) } }
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    await write($, `${X}/.shawarma/active-k`, 'k\ntrivial\n')
+    for (let i = 0; i < 70; i++) { await clock.advance(3_000); await settle(2); await write($, `${ROOT}/d${i}/f.txt`, 'x') }
+    trees.push(X)
+    bad = true
+    const end = $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+    await step(4_000); await end
+    bad = false
+    await bash($, 'true')
+    const afterBash = await band($)
+    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+    await bash($, 'true')
+    const rows = ['m · trivial · since 14:00', 'other tree: k · trivial · since 14:01']
+    expect({ afterBash, later: await band($) }).toEqual({ afterBash: rows, later: rows })
+  })
+
   test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
     const fired: number[] = []
     const tapped = ((name: string, ...args: any[]) => {
