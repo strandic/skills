@@ -27,7 +27,8 @@ export type Snapshot = {
   decisionsAt: number | null
   /**
    * What is wrong with the row, when something is: `malformed marker`, `plan dir outside its tree`,
-   * `plan dir not found: <dir>` or `plan dir not readable: <dir>`.
+   * `plan dir not found: <dir>`, `plan dir not readable: <dir>` or `could not be read` (a file of the row
+   * failed to read; every other field but the labels is empty).
    */
   problem?: string
 }
