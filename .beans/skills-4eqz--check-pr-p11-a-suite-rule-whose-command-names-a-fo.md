@@ -39,3 +39,4 @@ Trivial go; D1 stood as a DEFAULT. Branch `fix/4eqz-p11-gate-folder`, tests comm
 - PR 12's case: base `FAIL (6)` (six P11 lines), head `PASS`.
 - `check_pr.py <this ticket> <body> --repo .worktrees/4eqz --tests-commit f0a68ee` (strandic 0.11.0): `PASS`.
 - DEFAULT rows: D1. Findings filed: `skills-ehhw` (P11 misses a one-segment gate folder), `skills-rm6v` (a rename under a gate folder reads as an unnamed changed file).
+- Rebased 2026-11-22 onto `origin/main` `c3c525d` (the first head was cut from a local main holding other sessions' unpushed commits; GitHub showed a conflict in another stream's bean). PR 15 now carries plan note `88c55bb`, tests `3a27431`, fix `6973c97`; `git range-diff` shows both code commits `=`. Re-read at `6973c97`: base `Ran 150 tests` / `OK`, head `Ran 151 tests` / `OK`, red on the tests commit as predicted, PR 12 case `FAIL (6)` → `PASS`, check_pr `PASS`. GitHub: `MERGEABLE CLEAN`.
