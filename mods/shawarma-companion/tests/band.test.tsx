@@ -3613,6 +3613,42 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     expect({ lost, afterCheck: await band($) }).toEqual({ lost: [], afterCheck: ['m · trivial · since 14:00'] })
   })
 
+  // W3-R3 (fix review F1): the check's own read lost empties the band at that tick, not at the next one.
+  test('V16 rows drawn, then the 15 s check\'s own cwd read rejected: nothing drawn after that tick', { options: ON }, async ($, on) => {
+    let bad = false
+    const clock = world(on, new Map([at(ROOT, 'm'), at(WT, 'w')]), ROOT, [], new Set(), { claimed: [ROOT, WT], root: ROOT,
+      hold: { 'session.cwd': () => (bad ? Promise.reject(new Error('x')) : undefined) } })
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    await bash($, 'true')
+    const before = await band($)
+    bad = true
+    for (let t = 0; t < 20_000; t += 500) { await clock.advance(500); await settle(3) }
+    expect({ before, tick1: await band($) }).toEqual({ before: ['m · trivial · since 14:00', 'other tree: w · trivial · since 14:00'], tick1: [] })
+  })
+
+  // W3-R3 (fix review F2): between a lost read and the refresh that empties the rows, the pane does not call an inside plan dir outside.
+  test('V17 a tree git spells through a link, a cwd read never answering: the pane never says the plan dir is outside its tree', { options: ON }, async ($, on) => {
+    let bad = false
+    const T = '/lnk/r'
+    const files: Files = new Map([[`${T}/.shawarma/active-p`, { text: 'docs/p\nplan 1\n', mtimeMs: STARTED + 5 }]])
+    const clock = world(on, files, '/real/r', [], new Set(), { trees: [T], links: { '/lnk': '/real' }, claimed: [T], root: '/real/r',
+      hold: { 'session.cwd': () => (bad ? never() : undefined) } })
+    const paneText = async () => {
+      const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'Pane', requestId: 'shawarma-companion', props: {} } as any)
+      const text = (await ui.find({ type: 'Markdown' }))?.props.text ?? (await ui.find({ type: 'Text' }))?.text
+      await ui.unmount()
+      return String(text)
+    }
+    await bash($, 'true')
+    expect(await band($)).toHaveLength(1)
+    await $.ui.press({ plugin: 'shawarma-companion', key: 'row:p' })
+    files.set(`${T}/docs/p/plan.md`, { text: '# p — inside\n', mtimeMs: 1 })
+    bad = true
+    void bash($, 'true')
+    await settle(5); await clock.advance(2_000); await settle(5); await clock.advance(2_000); await settle(5); await clock.advance(500); await settle(5)
+    expect(await paneText()).not.toContain('outside its tree')
+  })
+
   test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
     const fired: number[] = []
     const tapped = ((name: string, ...args: any[]) => {
