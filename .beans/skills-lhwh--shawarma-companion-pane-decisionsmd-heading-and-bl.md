@@ -1,12 +1,12 @@
 ---
 # skills-lhwh
 title: 'shawarma-companion pane: decisions.md heading and blank lines drawn as bullets'
-status: in-progress
+status: completed
 type: bug
 tags:
     - shawarma
 created_at: 2026-11-01T11:51:34Z
-updated_at: 2026-11-22T12:00:00Z
+updated_at: 2026-11-22T14:00:00Z
 ---
 
 The pane in mods/shawarma-companion lists every line of decisions.md as a bullet, so the '# <ticket> decisions' heading and blank lines show as '- <heading>' and an empty '-'. Seen in the skills-pi0y stand-in dry run on CLI 2.1.316. Cosmetic: could list only the dated rows that the row counts.
@@ -26,3 +26,5 @@ unruled: none
 ## Run (2026-11-22)
 
 Go given. Branch `fix/lhwh-pane-dated-rows` in `.worktrees/lhwh-run`, from `origin/main` `c20eb39` (mod 0.3.2, skills-cm2l merged since triage).
+
+PR 14 opened at head `cb64c7f` (mod 0.3.3). Merged 2026-11-22 as `fb253f1` (rebase merge). Closed.
