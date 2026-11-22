@@ -1,0 +1,217 @@
+diff --git a/mods/shawarma-companion/README.md b/mods/shawarma-companion/README.md
+index 2494e48..d501172 100644
+--- a/mods/shawarma-companion/README.md
++++ b/mods/shawarma-companion/README.md
+@@ -76,7 +76,7 @@ If the marker, `plan.md` or `decisions.md` fails to read, or the plan folder doe
+ 
+ The plan folder must be inside the marker's own tree: the tree root or a folder under it. The mod checks this in two steps. First it checks the path as written, after `.` and `..` are resolved. A path outside the tree as written counts as outside, and the mod makes no file call at it. Then it asks where the folder really is, with links followed, and checks that real path against the tree's real path. So a folder in the tree that links to a folder outside it counts as outside. To ask, the mod follows a link inside the tree to where it points. So that call can reach outside the tree, for example a slow network mount. The same holds for the pane's own real-path check and the 15-second check's question whether a folder exists. The mod finds each tree's real path once per turn. It asks for the folder's real path once each time the marker changes, and keeps the answer. It drops that answer when the folder is later found missing or unreadable, and asks again. If no real path comes back, the folder counts as outside, and the mod asks again at the next update. If no answer comes within 2 seconds, the folder counts as outside until the turn ends. So a call that never answers costs 2 seconds once per turn for each such folder or tree root, and once more after the marker is rewritten. If the mod cannot ask, for example because the folder does not exist, it lists and reads nothing in that folder for that update, and asks again at the next one. The row then says `plan dir not readable` when the folder exists, and `plan dir not found` when it does not. While the row says `plan dir not found`, the 15-second check lists and reads nothing in that folder. While it says `plan dir not readable`, each 15-second check runs a full update of the row: it asks where the folder really is first, as above, and lists it only when that is inside. The pane first asks where the folder really is. Outside the tree, it shows the `plan dir outside its tree` line. With no answer, it shows the plan as missing, and reads nothing there. Only when it finds the folder inside does the pane list and read it. For a `plan dir not found` row, the 15-second check only asks whether the folder exists, and an update runs when that changes or when the ask fails. Some limits follow. A marker path that names the tree through a different spelling counts as outside: an absolute path through a link, such as `/tmp/…` on macOS where the tree is under `/private/tmp/…`, or a path in a different letter case on a disk that ignores case. A real path in the marker can count as outside too, when git names the tree through a link. The markers the shawarma skill writes today are relative, so these cases do not come up with them. A link changed later, while the marker stays the same, is seen only when the marker is rewritten. If the plan folder is not inside, the row reads only `shawarma: <ticket>: plan dir outside its tree`, and the mod reads nothing in that folder. The pane adds the marker's path.
+ 
+-No row runs wider than the window. The ticket follows the labels. In a window narrower than about 40 columns the labels can push the ticket out of view. The title is cut first, then the problem text, then the end of the line. Characters that could reorder the text on screen are drawn as spaces.
++No row runs wider than the window. The mod counts a row's width in screen cells, as the terminal draws it: a Chinese, Japanese or Korean character or an emoji takes two cells, an accent joined to a letter none. It cuts between whole characters, so an emoji is never split. Where it cannot tell how wide the terminal draws a character, it counts more cells, not fewer, so the title may be cut a little early. If a row still turns out too wide, Claude Code's terminal cuts its end with `…` instead of wrapping it. The ticket follows the labels. In a window narrower than about 40 columns the labels can push the ticket out of view. The title is cut first, then the problem text, then the end of the line. Control characters and characters that could reorder the text on screen are drawn as spaces. Characters that draw nothing, such as a zero-width space or a byte-order mark, are left out, except inside an emoji.
+ 
+ The rows update after each Write, Edit, NotebookEdit or Bash call, at the end of each turn, and at session start. While a row or the more-row is shown, the mod also lists each tree's `.shawarma` folder and each shown plan folder every 15 seconds. So a marker, `plan.md` or `decisions.md` another session changes shows within 15 seconds, in the trees found at the last update. Two changes wait for this session's next tool call or turn end: a worktree added since the last update, and a marker rewritten with the same file time. The band keeps what it read from `plan.md` and `decisions.md` with each file's time. So in the band, a rewrite of either file that keeps the same file time is not seen until that time changes. The pane reads both files again each time it draws. When no row is shown, no check runs: a marker written outside the session shows at this session's next tool call or turn end. One exception: when an update fails as a whole while the check runs, the band shows nothing, and the check keeps running. The rows come back at the first check after the error clears.
+ 
+diff --git a/mods/shawarma-companion/hooks/model.ts b/mods/shawarma-companion/hooks/model.ts
+index 2441f7f..16251e4 100644
+--- a/mods/shawarma-companion/hooks/model.ts
++++ b/mods/shawarma-companion/hooks/model.ts
+@@ -194,12 +194,124 @@ export function order<R extends { tree: string; since: number; ticket: string }>
+  * Control characters (C0, DEL, C1), which a surface refuses to draw, and bidi
+  * controls (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069), which can
+  * reorder a row (lane 3a F5), and the line and paragraph separators U+2028,
+- * U+2029 (round 2 N6), as spaces; `\n` kept only when asked.
++ * U+2029 (round 2 N6), as spaces; `\n` kept only when asked. skills-1tr4: then
++ * the characters that draw nothing (HIDDEN) are dropped, except inside an RGI
++ * emoji, and a variation selector after the start of its cluster.
+  */
+ export function clean(text: string, keepNewlines = false): string {
+-  return text
++  const spaced = text
+     .replace(keepNewlines ? /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g : /[\u0000-\u001F\u007F-\u009F]/g, ' ')
+     .replace(/[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069\u2028\u2029]/g, ' ')
++  if (!HIDDEN_ANY.test(spaced)) return spaced
++  let out = ''
++  let last = ''
++  let dropped = false
++  for (const { segment } of GRAPHEMES.segment(spaced)) {
++    const kept = keepVisible(segment)
++    if (kept === '') {
++      dropped = true
++      continue
++    }
++    // A dropped character must not join two clusters into one (an emoji and a
++    // mark, two regional indicators into another flag): a space keeps them apart.
++    const glue = (dropped || kept !== segment) && last !== '' && firstCluster(`${last}${kept}`) !== last ? ' ' : ''
++    out += `${glue}${kept}`
++    last = lastCluster(kept)
++    dropped = false
++  }
++  return out
++}
++
++/**
++ * One cluster less the characters that draw nothing: the RGI emoji it starts
++ * with is kept whole, and a variation selector after a visible first character.
++ */
++function keepVisible(cluster: string): string {
++  const emoji = EMOJI_PREFIX.exec(cluster)?.[0] ?? ''
++  const rest = cluster.slice(emoji.length)
++  const based = emoji !== '' || !HIDDEN_ANY.test(String.fromCodePoint(cluster.codePointAt(0) as number))
++  return `${emoji}${rest.replace(HIDDEN, (ch: string, at: number) => (based && (emoji !== '' || at > 0) && SELECTOR.test(ch) ? ch : ''))}`
++}
++
++function firstCluster(text: string): string {
++  for (const { segment } of GRAPHEMES.segment(text)) return segment
++  return ''
++}
++
++function lastCluster(text: string): string {
++  let last = ''
++  for (const { segment } of GRAPHEMES.segment(text)) last = segment
++  return last
++}
++
++/**
++ * skills-1tr4: characters that draw nothing: Default_Ignorable_Code_Point and
++ * the host's hidden list (U+FFF9-U+FFFB, U+1107F, U+13430-U+1343F, U+16FE4).
++ */
++const HIDDEN_SRC = '[\\u00AD\\u034F\\u115F\\u1160\\u17B4\\u17B5\\u180B-\\u180F\\u200B-\\u200D\\u2060-\\u206F\\u3164\\uFE00-\\uFE0F\\uFEFF\\uFFA0\\uFFF0-\\uFFFB\\u{1107F}\\u{13430}-\\u{1343F}\\u{16FE4}\\u{1BCA0}-\\u{1BCA3}\\u{1D173}-\\u{1D17A}\\u{E0000}-\\u{E0FFF}]'
++const HIDDEN = new RegExp(HIDDEN_SRC, 'gu')
++const HIDDEN_ANY = new RegExp(HIDDEN_SRC, 'u')
++const SELECTOR = /^[\u180B-\u180D\u180F\uFE00-\uFE0F\u{E0100}-\u{E01EF}]$/u
++const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
++const EMOJI_PREFIX = /^\p{RGI_Emoji}/v
++/** A keycap base with VS16, or a regional indicator (alone or paired): 2 cells. */
++const EMOJI_START = /^(?:[0-9#*]\uFE0F|[0-9#*]?\u20E3|\p{Regional_Indicator})/u
++/** The host adds a cell to these when its table says 1 (research report §1, `e0r`). */
++const HOST_PLUS_ONE = /[\u17A4\u17D8\u261D\u26F9\u270C\u270D\u2E3A\u2E3B\u3248-\u324F\u{1F3CB}\u{1F3CC}\u{1F574}\u{1F575}\u{1F590}\u{1F93B}\u{1F946}]/u
++const ZERO = /^[\p{Mn}\p{Me}\p{Cf}\p{Default_Ignorable_Code_Point}]$/u
++const SPACING_MARK = /^\p{Mc}$/u
++/** East_Asian_Width W and F at Unicode 17.0.0, unassigned CJK defaults included: [first, last] pairs. */
++const WIDE: readonly number[] = [0x1100,0x115F,0x231A,0x231B,0x2329,0x232A,0x23E9,0x23EC,0x23F0,0x23F0,0x23F3,0x23F3,0x25FD,0x25FE,0x2614,0x2615,0x2630,0x2637,0x2648,0x2653,0x267F,0x267F,0x268A,0x268F,0x2693,0x2693,0x26A1,0x26A1,0x26AA,0x26AB,0x26BD,0x26BE,0x26C4,0x26C5,0x26CE,0x26CE,0x26D4,0x26D4,0x26EA,0x26EA,0x26F2,0x26F3,0x26F5,0x26F5,0x26FA,0x26FA,0x26FD,0x26FD,0x2705,0x2705,0x270A,0x270B,0x2728,0x2728,0x274C,0x274C,0x274E,0x274E,0x2753,0x2755,0x2757,0x2757,0x2795,0x2797,0x27B0,0x27B0,0x27BF,0x27BF,0x2B1B,0x2B1C,0x2B50,0x2B50,0x2B55,0x2B55,0x2E80,0x2E99,0x2E9B,0x2EF3,0x2F00,0x2FD5,0x2FF0,0x303E,0x3041,0x3096,0x3099,0x30FF,0x3105,0x312F,0x3131,0x318E,0x3190,0x31E5,0x31EF,0x321E,0x3220,0x3247,0x3250,0xA48C,0xA490,0xA4C6,0xA960,0xA97C,0xAC00,0xD7A3,0xF900,0xFAFF,0xFE10,0xFE19,0xFE30,0xFE52,0xFE54,0xFE66,0xFE68,0xFE6B,0xFF01,0xFF60,0xFFE0,0xFFE6,0x16FE0,0x16FE4,0x16FF0,0x16FF6,0x17000,0x18CD5,0x18CFF,0x18D1E,0x18D80,0x18DF2,0x1AFF0,0x1AFF3,0x1AFF5,0x1AFFB,0x1AFFD,0x1AFFE,0x1B000,0x1B122,0x1B132,0x1B132,0x1B150,0x1B152,0x1B155,0x1B155,0x1B164,0x1B167,0x1B170,0x1B2FB,0x1D300,0x1D356,0x1D360,0x1D376,0x1F004,0x1F004,0x1F0CF,0x1F0CF,0x1F18E,0x1F18E,0x1F191,0x1F19A,0x1F200,0x1F202,0x1F210,0x1F23B,0x1F240,0x1F248,0x1F250,0x1F251,0x1F260,0x1F265,0x1F300,0x1F320,0x1F32D,0x1F335,0x1F337,0x1F37C,0x1F37E,0x1F393,0x1F3A0,0x1F3CA,0x1F3CF,0x1F3D3,0x1F3E0,0x1F3F0,0x1F3F4,0x1F3F4,0x1F3F8,0x1F43E,0x1F440,0x1F440,0x1F442,0x1F4FC,0x1F4FF,0x1F53D,0x1F54B,0x1F54E,0x1F550,0x1F567,0x1F57A,0x1F57A,0x1F595,0x1F596,0x1F5A4,0x1F5A4,0x1F5FB,0x1F64F,0x1F680,0x1F6C5,0x1F6CC,0x1F6CC,0x1F6D0,0x1F6D2,0x1F6D5,0x1F6D8,0x1F6DC,0x1F6DF,0x1F6EB,0x1F6EC,0x1F6F4,0x1F6FC,0x1F7E0,0x1F7EB,0x1F7F0,0x1F7F0,0x1F90C,0x1F93A,0x1F93C,0x1F945,0x1F947,0x1F9FF,0x1FA70,0x1FA7C,0x1FA80,0x1FA8A,0x1FA8E,0x1FAC6,0x1FAC8,0x1FAC8,0x1FACD,0x1FADC,0x1FADF,0x1FAEA,0x1FAEF,0x1FAF8,0x20000,0x2FFFD,0x30000,0x3FFFD]
++
++function isWide(cp: number): boolean {
++  let lo = 0
++  let hi = WIDE.length / 2 - 1
++  while (lo <= hi) {
++    const mid = (lo + hi) >> 1
++    if (cp < (WIDE[mid * 2] as number)) hi = mid - 1
++    else if (cp > (WIDE[mid * 2 + 1] as number)) lo = mid + 1
++    else return true
++  }
++  return false
++}
++
++/**
++ * skills-1tr4: the cells one grapheme cluster takes, never fewer than the host
++ * counts where the research could see its rule. An RGI emoji, a keycap or a
++ * regional indicator the cluster starts with is 2; each other code point is 2
++ * when wide, 0 when a non-spacing mark, format or ignorable character, 1 for a
++ * spacing mark or any other. A cluster is at least 1 cell, at least 2 with
++ * U+FE0F after its start, and 2 for a host-plus-one character the sum puts at 1.
++ */
++function clusterWidth(cluster: string): number {
++  const head = EMOJI_PREFIX.exec(cluster)?.[0] ?? EMOJI_START.exec(cluster)?.[0] ?? ''
++  let cells = head === '' ? 0 : 2
++  for (const ch of cluster.slice(head.length)) {
++    const cp = ch.codePointAt(0) as number
++    cells += isWide(cp) ? 2 : SPACING_MARK.test(ch) ? 1 : ZERO.test(ch) ? 0 : 1
++  }
++  if (cells < 2 && cluster.indexOf('\uFE0F') > 0) return 2
++  return cells <= 1 ? (HOST_PLUS_ONE.test(cluster) ? 2 : 1) : cells
++}
++
++/** skills-1tr4: the cells `text` takes on one terminal row. */
++export function cellWidth(text: string): number {
++  let cells = 0
++  for (const { segment } of GRAPHEMES.segment(text)) cells += clusterWidth(segment)
++  return cells
++}
++
++/** skills-1tr4: the longest run of whole clusters from the start of `text` that fits `room` cells. */
++function headCells(text: string, room: number): string {
++  let out = ''
++  let cells = 0
++  for (const { segment } of GRAPHEMES.segment(text)) {
++    const w = clusterWidth(segment)
++    if (cells + w > room) break
++    out += segment
++    cells += w
++  }
++  return out
+ }
+ 
+ /** Lines ending in `\r\n`, `\r` or `\n`. */
+@@ -273,41 +385,43 @@ export function namesTicket(title: string, ticket: string): boolean {
+   return title === ticket || title.startsWith(`${ticket} `)
+ }
+ 
+-/** `text` in at most `room` characters, `…` last when cut; empty below 2. */
++/** `text` in at most `room` cells, `…` last when cut; empty below 2. */
+ function cut(text: string, room: number): string {
+-  return room >= text.length ? text : room >= 2 ? `${text.slice(0, room - 1)}…` : ''
++  return room >= cellWidth(text) ? text : room >= 2 ? `${headCells(text, room - 1)}…` : ''
+ }
+ 
+ /**
+- * One line, at most `columns` wide. The ticket leads and is kept (Q1, lane 3a
++ * One line, at most `columns` cells wide by `cellWidth`, cut between grapheme
++ * clusters (skills-1tr4); every part cleaned before it is measured. The ticket leads and is kept (Q1, lane 3a
+  * F10): the title is cut first, then the problem text, then the line's end.
+  * Every part is true when drawn: the time is when the marker was written,
+  * never an age that goes stale on screen.
+  */
+ export function rowText(row: RowInput, columns: number, now: number = row.since): string {
+   if (columns < 1) return ''
+-  const fit = (line: string) => (line.length <= columns ? line : `${line.slice(0, Math.max(0, columns - 1))}…`)
++  const fit = (line: string) => (cellWidth(line) <= columns ? line : `${headCells(line, columns - 1)}…`)
+   if (row.problem !== undefined && row.step === '') {
+     // round 3 R3-4: the label, as the pane draws it.
+     return fit(clean(`${labelOf(row)}shawarma: ${row.ticket !== undefined ? `${row.ticket}: ` : ''}${row.problem}`))
+   }
+   const isTrivial = row.step === 'trivial'
+-  const ticket = row.ticket
++  const ticket = row.ticket === undefined ? undefined : clean(row.ticket)
++  const title = clean(row.title)
+   // Q5: `stale:` wins over `earlier session:` when both apply (an old marker that is also stale says the stronger thing).
+   const head = `${labelOf(row)}${ticket ?? ''}`
+-  const rest = ticket === undefined ? row.title
+-    : isTrivial ? '' : namesTicket(row.title, ticket) ? row.title.slice(ticket.length) : ` · ${row.title}`
++  const rest = ticket === undefined ? title
++    : isTrivial ? '' : namesTicket(title, ticket) ? title.slice(ticket.length) : ` · ${title}`
+   const body = [
+-    row.step,
++    clean(row.step),
+     `since ${clockTime(row.since, now)}`,
+     ...(isTrivial ? [] : [`${row.decisions} ${row.decisions === 1 ? 'decision' : 'decisions'}`]),
+   ].join(' · ')
+-  const problem = row.problem !== undefined ? ` · ${row.problem}` : ''
++  const problem = row.problem !== undefined ? ` · ${clean(row.problem)}` : ''
+   const ctx = row.context !== undefined ? ` · ctx ${row.context}%` : ''
+-  const avail = columns - head.length - 3 - body.length - ctx.length
+-  const title = cut(rest, avail - problem.length)
+-  const shown = cut(problem, avail - title.length)
+-  const name = `${head}${title}`
+-  const sep = ticket === undefined && title === '' ? '' : ' · '
+-  return fit(clean(`${name}${sep}${body}${shown}${ctx}`))
++  const avail = columns - cellWidth(head) - 3 - cellWidth(body) - ctx.length
++  const shownTitle = cut(rest, avail - cellWidth(problem))
++  const shown = cut(problem, avail - cellWidth(shownTitle))
++  const name = `${head}${shownTitle}`
++  const sep = ticket === undefined && shownTitle === '' ? '' : ' · '
++  return fit(`${name}${sep}${body}${shown}${ctx}`)
+ }
+diff --git a/mods/shawarma-companion/hooks/register.tsx b/mods/shawarma-companion/hooks/register.tsx
+index 42903ec..84d90c3 100644
+--- a/mods/shawarma-companion/hooks/register.tsx
++++ b/mods/shawarma-companion/hooks/register.tsx
+@@ -804,7 +804,8 @@ export const register: Register = (on, options) => {
+         {rows.map((row, i) => {
+           const key = keys[i] ?? `row:${i}`
+           const text = (
+-            <Text key={key} dimColor={row.isEarlier || row.isStale}>
++            // skills-1tr4 Q1: a row the mod measured short is cut at its end by the host, never wrapped.
++            <Text key={key} dimColor={row.isEarlier || row.isStale} wrap="truncate-end">
+               {rowText({ ...row, context: i === 0 ? context : undefined }, e.props.bodyColumns, now)}
+             </Text>
+           )
