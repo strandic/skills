@@ -640,15 +640,17 @@ test('--json: one document with the same figures', () => {
   const { lanes, ...s1 } = r.sessions[0];
   assert.deepEqual(s1, { id: 'aaaaaaaa', day: '2026-09-20', label: null, minutes: 90, models: ['claude-opus-5-5'], modelClasses: ['opus'], effort: ['high', 'max'], ownerTurns: 3, messages: 3,
     tokens: { input: 60, output: 600, cacheWrite: 6000, cacheRead: 60000 }, laneTokens: { input: 110, output: 1506, cacheWrite: 10079, cacheRead: 100712 },
+    parts: [{ part: 1, day: '2026-09-20', label: null, minutes: 89, ownerTurns: 3, messages: 3, tokens: { input: 60, output: 600, cacheWrite: 6000, cacheRead: 60000 },
+      lanes: 4, laneTokens: { input: 110, output: 1506, cacheWrite: 10079, cacheRead: 100712 } }],
     laneFilesSkipped: 0, recordsNotRead: 0 });
   assert.deepEqual(lanes[0], { agent: 'a1a1a1a1', kind: 'plan/run', agentType: 'general-purpose', launchModel: 'sonnet', requested: [], resolved: ['claude-sonnet-5'],
     modelClass: 'sonnet', effort: ['high'], day: '2026-09-20', minutes: 12.5, messages: 2, tokens: { input: 8, output: 502, cacheWrite: 73, cacheRead: 704 },
-    launchedWithDefaults: true, recordsNotRead: 0 });
+    launchedWithDefaults: true, recordsNotRead: 0, part: 1, crossesCommand: false });
   assert.deepEqual(lanes.map((l) => [l.kind, l.modelClass]), [['plan/run', 'sonnet'], ['retro', 'opus'], ['replay', 'haiku'], ['plan/run', 'unknown']]);
   assert.deepEqual(r.sessions[1].modelClasses, ['other']);
   assert.deepEqual(r.totals, { projectFolders: 2, projectFoldersSkipped: 0, sessionFiles: 3, sessionFilesSkipped: 0, sessions: 2, lanes: 7, lanesByKind: { 'plan/run': 4, retro: 1, replay: 1, other: 1 },
     ownerTurns: 5, sessionMinutes: 1535, laneMinutes: 23.5, tokens: { input: 63, output: 630, cacheWrite: 6300, cacheRead: 63000 },
-    laneTokens: { input: 114, output: 1514, cacheWrite: 10091, cacheRead: 100728 }, laneFilesSkipped: 0, recordsNotRead: 0 });
+    laneTokens: { input: 114, output: 1514, cacheWrite: 10091, cacheRead: 100728 }, lanesCrossingCommand: 0, laneFilesSkipped: 0, recordsNotRead: 0 });
   assert.deepEqual(totals([], { projectFolders: 1, sessionFiles: 0, sessionFilesSkipped: 0 }).lanesByKind, { 'plan/run': 0, retro: 0, replay: 0, other: 0 });
   rmSync(f.root, { recursive: true });
 });
@@ -1229,8 +1231,8 @@ test('doc: the reference measures sessions, and says where a session is not a ru
   assert.ok(!DOC.includes('A run is one Claude Code session'));
   const intro = DOC.slice(0, DOC.indexOf('\n## What each figure is for\n'));
   for (const said of ['A session that started at least one lane is printed', 'may hold more than one run']) assert.ok(intro.includes(said), said);
-  assert.ok(DOC.includes('- **A session is a file, not a run.** A session that holds several commands, or is resumed over several days, is one line.'));
-  assert.ok(DOC.includes('Splitting a session at each command is ticket `skills-cb5t`.'));
+  assert.ok(DOC.includes('The tool cuts such a session into parts, one per skill command'));
+  assert.ok(!DOC.includes('The tool does not split them.'));
   // The key is a substring: the reference says to check the count of folders it matched.
   const key = DOC.split('\n').find((line) => line.startsWith('| `<project key>` |'));
   assert.ok(key.includes('sibling') && key.includes('`project folders`'), key);
@@ -1275,4 +1277,162 @@ test('doc: scripts/runmeter.md names every --json key', () => {
   for (const k of ['lanesByHalfMonth', 'promptFilesWritten', 'notRun', 'limitReached', 'launchModel', 'cacheRead', 'laneFilesSkipped', 'projectFoldersSkipped', 'plan/run']) assert.ok(keys.has(k), `the fixture shows ${k}`);
   assert.ok(keys.size >= 55, `found ${keys.size} keys`);
   assert.deepEqual([...keys].filter((k) => !DOC.includes(`\`${k}\``)), []);
+});
+
+// --- parts: a session cut at each skill command (skills-cb5t) --------------------------------------
+
+/** One session in three parts: a lane and a turn before any command, then `plan t-0001`, then `run t-0001`. */
+const runs = () => {
+  const f = fixture();
+  const D = '2026-11-01';
+  f.write(`projects/${MAIN}/${S1}.jsonl`, [
+    human(at(D, 0)),
+    asst(at(D, 1), { id: 'o0', usage: tokens(1, 1, 1, 1) }),
+    skill(at(D, 10), 'plan t-0001'),
+    user(at(D, 10.01), `${SECRET} skill body`, { isMeta: true }),
+    asst(at(D, 11), { id: 'o1', usage: tokens(10, 10, 10, 10) }),
+    human(at(D, 20)),
+    asst(at(D, 21), { id: 'o2', usage: tokens(20, 20, 20, 20) }),
+    skill(at(D, 40), 'run t-0001'),
+    asst(at(D, 41), { id: 'o3', usage: tokens(30, 30, 30, 30) }),
+    human(at(D, 50)),
+    asst(at(D, 70), { id: 'o4', usage: tokens(40, 40, 40, 40) }),
+  ]);
+  const sub = `projects/${MAIN}/${S1}/subagents`;
+  f.write(`${sub}/${agent('a1')}.jsonl`, [prompt(at(D, 2), P1), asst(at(D, 3), { usage: tokens(1, 0, 0, 0) })]);
+  f.write(`${sub}/${agent('b2')}.jsonl`, [prompt(at(D, 12), P1), asst(at(D, 15), { usage: tokens(2, 0, 0, 0) })]);
+  f.write(`${sub}/workflows/wf_1/${agent('c3')}.jsonl`, [prompt(at(D, 42), P1), asst(at(D, 45), { usage: tokens(4, 0, 0, 0) })]);
+  return f;
+};
+const shape = (s) => s.parts.map((p) => [p.part, p.label, p.day, p.minutes, p.ownerTurns, p.messages, p.lanes, p.tokens.input, p.laneTokens.input]);
+
+test('parts: a session is cut at each skill command the owner typed; the parts add up to the session', () => {
+  const f = runs();
+  const [s] = json(f, '--labels').sessions;
+  assert.deepEqual(shape(s), [
+    [0, null, '2026-11-01', 1, 1, 1, 1, 1, 1],
+    [1, 'plan t-0001', '2026-11-01', 11, 2, 2, 1, 30, 2],
+    [2, 'run t-0001', '2026-11-01', 30, 2, 2, 1, 70, 4],
+  ]);
+  assert.deepEqual(s.lanes.map((l) => [l.agent, l.part, l.crossesCommand]), [['a1a1a1a1', 0, false], ['b2b2b2b2', 1, false], ['c3c3c3c3', 2, false]]);
+  const sum = (k) => s.parts.reduce((n, p) => n + (typeof p[k] === 'number' ? p[k] : p[k].input), 0);
+  assert.deepEqual([sum('ownerTurns'), sum('messages'), sum('lanes'), sum('tokens'), sum('laneTokens')], [s.ownerTurns, s.messages, s.lanes.length, s.tokens.input, s.laneTokens.input]);
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts: a lane counts whole where its first record falls; one that ends under a later command is counted and printed', () => {
+  const f = runs();
+  const D = '2026-11-01';
+  // Starts under plan (min 30), ends under run (min 45); another starts at the very instant of the run command.
+  f.write(`projects/${MAIN}/${S1}/subagents/${agent('d4')}.jsonl`, [prompt(at(D, 30), P1), asst(at(D, 45), { usage: tokens(8, 0, 0, 0) })]);
+  f.write(`projects/${MAIN}/${S1}/subagents/${agent('e5')}.jsonl`, [prompt(at(D, 40), P1), asst(at(D, 41), { usage: tokens(16, 0, 0, 0) })]);
+  const r = json(f);
+  assert.deepEqual(r.sessions[0].lanes.map((l) => [l.agent, l.part, l.crossesCommand]),
+    [['a1a1a1a1', 0, false], ['b2b2b2b2', 1, false], ['d4d4d4d4', 1, true], ['e5e5e5e5', 2, false], ['c3c3c3c3', 2, false]]);
+  assert.deepEqual(r.sessions[0].parts.map((p) => [p.lanes, p.laneTokens.input]), [[1, 1], [2, 10], [2, 20]]);
+  assert.equal(r.totals.lanesCrossingCommand, 1);
+  assert.ok(text(f).includes('  lanes that end under a later command: 1'));
+  assert.ok(!text(project()).some((l) => l.includes('later command')), 'printed only when not zero');
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts: only a skill command the owner typed cuts; a built-in, a model-invoked skill and typed text do not', () => {
+  const f = fixture();
+  const D = '2026-11-01';
+  f.write(`projects/${MAIN}/${S1}.jsonl`, [
+    skill(at(D, 0), 'plan t-0001'),
+    asst(at(D, 1)),
+    builtin(at(D, 2), 'compact'),
+    asst(at(D, 3)),
+    user(at(D, 4), '<command-message>shawarma</command-message>\n<command-name>shawarma</command-name>\n<skill-format>true</skill-format>', { isMeta: true }),
+    human(at(D, 5), `/shawarma run t-0002 ${SECRET}`),
+    asst(at(D, 6), { content: [{ type: 'tool_use', id: 'tu1', name: 'Skill', input: { skill: 'shawarma', args: 'run t-0003' } }] }),
+    user(at(D, 7), [{ type: 'tool_result', tool_use_id: 'tu1', content: 'ok' }]),
+    asst(at(D, 8)),
+  ]);
+  f.write(`projects/${MAIN}/${S1}/subagents/${agent('a1')}.jsonl`, [prompt(at(D, 9), P1), asst(at(D, 10))]);
+  assert.deepEqual(json(f, '--labels').sessions[0].parts.map((p) => [p.part, p.label, p.ownerTurns]), [[1, 'plan t-0001', 3]]);
+  // A skill command with no label still cuts: its part has no label.
+  f.write(`projects/${MAIN}/${S1}.jsonl`, [skill(at(D, 0), 'plan t-0001'), asst(at(D, 1)), skill(at(D, 2), `"${SECRET}"`), asst(at(D, 3))]);
+  assert.deepEqual(json(f, '--labels').sessions[0].parts.map((p) => [p.part, p.label]), [[1, 'plan t-0001'], [2, null]]);
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts: a turn that runs into a command counts in the command\'s part; a message seen before a command stays in its first part', () => {
+  const f = fixture();
+  const D = '2026-11-01';
+  f.write(`projects/${MAIN}/${S1}.jsonl`, [
+    human(at(D, 0)), asst(at(D, 1), { id: 'm1', usage: tokens(1, 1, 1, 1) }),
+    asst(at(D, 1.5), { id: 'm2', usage: tokens(1, 5, 1, 1) }), // records of one message on both sides of the command
+    human(at(D, 2)), skill(at(D, 2.5), 'run t-0001'), // one turn: typed text, then the command
+    asst(at(D, 3), { id: 'm2', usage: tokens(1, 50, 1, 1) }),
+    asst(at(D, 4), { id: 'm3', usage: tokens(1, 1, 1, 1) }),
+  ]);
+  f.write(`projects/${MAIN}/${S1}/subagents/${agent('a1')}.jsonl`, [prompt(at(D, 3.5), P1), asst(at(D, 4))]);
+  const [s] = json(f).sessions;
+  assert.equal(s.ownerTurns, 2);
+  assert.deepEqual(s.parts.map((p) => [p.part, p.ownerTurns, p.messages, p.tokens.output, p.minutes]), [[0, 1, 2, 51, 2], [1, 1, 1, 1, 1.5]], 'minutes run over the part\'s own records');
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts in text: a line per part, its lanes under it, only for a session of two parts or more; --labels adds the labels and nothing else', () => {
+  const f = runs();
+  const lines = text(f);
+  assert.equal(lines[6], '   a1a1a1a1 2026-11-01 plan/run ? · launch ? · requested ? · resolved claude-opus-5-5 · effort ? · 1m · messages 1 · tokens in 1 out 0 cache-write 0 cache-read 0');
+  assert.deepEqual(lines.slice(4, 10).map((l) => l.slice(0, 22)), ['## aaaaaaaa 2026-11-01', '  # part 0 2026-11-01 ', '   a1a1a1a1 2026-11-01', '  # part 1 2026-11-01 ', '   b2b2b2b2 2026-11-01', '  # part 2 2026-11-01 ']);
+  assert.equal(lines[7], '  # part 1 2026-11-01 · 11m · messages 2 · owner turns 2 · lanes 1 · orchestrator tokens in 30 out 30 cache-write 30 cache-read 30 · lane tokens in 2 out 0 cache-write 0 cache-read 0');
+  const labelled = text(f, '--labels');
+  assert.equal(labelled[7].slice(0, 34), '  # part 1 [plan t-0001] 2026-11-0');
+  assert.deepEqual(labelled.map((l) => l.replace(/ \[[^\]]*\]/, '')), lines);
+  // The fixture of one part per session prints as before: no part line.
+  assert.ok(!text(project()).some((l) => l.startsWith('  # part')));
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts with --since and --until: the cuts are read over the whole file; a part whose command is before the window keeps its label', () => {
+  const f = runs();
+  const D = '2026-11-01', E = '2026-11-02';
+  f.write(`projects/${MAIN}/${S1}.jsonl`, [
+    skill(at(D, 0), 'plan t-0001'), asst(at(D, 1), { id: 'o1' }),
+    human(at(E, 0)), asst(at(E, 1), { id: 'o2' }),
+    skill(at(E, 10), 'run t-0001'), asst(at(E, 11), { id: 'o3' }),
+  ]);
+  f.write(`projects/${MAIN}/${S1}/subagents/${agent('a1')}.jsonl`, [prompt(at(E, 2), P1), asst(at(E, 3))]);
+  f.write(`projects/${MAIN}/${S1}/subagents/${agent('b2')}.jsonl`, [prompt(at(E, 12), P1), asst(at(E, 13))]);
+  rmSync(join(f.projects, MAIN, S1, 'subagents', 'workflows'), { recursive: true });
+  const [s] = json(f, '--labels', '--since', E).sessions;
+  assert.equal(s.label, 'run t-0001', 'the session label: the first command inside the window, as before');
+  assert.deepEqual(shape(s).map((p) => p.slice(0, 7)), [[1, 'plan t-0001', E, 1, 1, 1, 1], [2, 'run t-0001', E, 1, 1, 1, 1]]);
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts: two commands in one turn, and commands at one instant, each keep their part; a lane ending at a command\'s instant does not cross it', () => {
+  const f = fixture();
+  const D = '2026-11-01';
+  const T = (m) => at(D, m);
+  f.write(`projects/${MAIN}/${S1}.jsonl`, [
+    human(T(0)), asst(T(1), { id: 'o0' }),
+    skill(T(10), 'plan t-1'), asst(T(11), { id: 'o1' }),
+    skill(T(40), 'run t-1'), skill(T(40), 'run t-2'), // one turn, one instant
+    asst(T(41), { id: 'o2' }),
+  ]);
+  const sub = `projects/${MAIN}/${S1}/subagents`;
+  f.write(`${sub}/${agent('a1')}.jsonl`, [prompt(T(10), P1), asst(T(12))]); // starts at a command's instant
+  f.write(`${sub}/${agent('b2')}.jsonl`, [prompt(T(20), P1), asst(T(40))]); // ends at the next command's instant
+  f.write(`${sub}/${agent('c3')}.jsonl`, [prompt(T(20), P1), asst(new Date(Date.parse(T(40)) + 1).toISOString())]); // 1 ms past it
+  const r = json(f, '--labels');
+  const [s] = r.sessions;
+  assert.deepEqual(s.parts.map((p) => [p.part, p.label, p.ownerTurns, p.messages, p.lanes]),
+    [[0, null, 1, 1, 0], [1, 'plan t-1', 1, 1, 3], [2, 'run t-1', 0, 0, 0], [3, 'run t-2', 1, 1, 0]]);
+  assert.deepEqual(s.lanes.map((l) => [l.agent, l.part, l.crossesCommand]), [['a1a1a1a1', 1, false], ['b2b2b2b2', 1, false], ['c3c3c3c3', 1, true]]);
+  assert.equal(r.totals.lanesCrossingCommand, 1);
+  rmSync(f.root, { recursive: true });
+});
+
+test('parts: the session line stays the total, with the base figures, when its session is cut', () => {
+  const f = runs();
+  const lines = text(f);
+  assert.equal(lines[4], '## aaaaaaaa 2026-11-01 · 70m · orchestrator claude-opus-5-5 · effort ? · messages 5 · owner turns 5 · lanes 3 · '
+    + 'orchestrator tokens in 101 out 101 cache-write 101 cache-read 101 · lane tokens in 7 out 0 cache-write 0 cache-read 0');
+  rmSync(f.root, { recursive: true });
 });
