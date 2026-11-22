@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.3.4] - unreleased
 
 ### Fixed
-- A call to the session that never answered held the update with no end: a `/cd` folder, project root or context figure that never came held the Write, Edit, NotebookEdit or Bash call before it ran, the turn end, or a band drawing with `context` on. Each such call now gives up after 2 seconds, as the README said, and counts as failed. When the working directory cannot be read after a tool call, at a turn end or in the 15-second check, the mod forgets it and draws nothing until it reads it again, at the next tool call, turn end or 15-second check; it then finds the worktrees from the folder it reads (skills-oz54).
+- A call to the session that never answered held the update with no end: a `/cd` folder, project root or context figure that never came held the Write, Edit, NotebookEdit or Bash call, the turn end, or a band drawing with `context` on. Each such call now gives up after 2 seconds, as the README said, and counts as failed. When the working directory cannot be read after a tool call, at a turn end or in the 15-second check, the mod forgets it and draws nothing until it reads it again, at the main session's next tool call or turn end, at the next 15-second check, or at a session start; it then finds the worktrees from the folder it reads (skills-oz54).
 
 ## [0.3.3] - unreleased
 

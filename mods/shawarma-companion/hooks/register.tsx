@@ -74,9 +74,9 @@ let mainCwd: string | null = null
  * skills-oz54 Q1: set when a read of the main working directory gave up or failed
  * (after a tool call, at a turn end, in the 15 s check); cleared when a main read
  * answers or a session starts. While set, every refresh draws nothing, a
- * subagent's or the check's included, and the trees found before are dropped, so
- * the next refresh finds them again from the directory it reads (attack B1, B4 d;
- * W3-R1: the 15 s check reads it and redraws).
+ * subagent's or the check's included (attack B1, B4 d). While set, the 15 s check
+ * reads the directory again and refreshes from a new discovery, not from the trees
+ * found before (W3-R1, W3-R3).
  */
 let isCwdLost = false
 /**
@@ -622,7 +622,6 @@ async function readMainCwd($: EngineInterface): Promise<void> {
   const read = await bounded($, $.session.cwd()).catch(() => null)
   mainCwd = read
   isCwdLost = read === null
-  if (isCwdLost) lastTrees = null
 }
 
 /**
@@ -684,8 +683,8 @@ async function stale($: EngineInterface): Promise<void> {
   if (rows.length === 0 && moreText(hidden.markers, hidden.trees, hidden.others ?? 0) === null && lastScan.status !== 'failed') {
     return watch($, false)
   }
-  if (lastTrees === null) {
-    // W3-R1: after a lost read, the check reads the directory again and finds the trees from it.
+  if (lastTrees === null || isCwdLost) {
+    // W3-R1, W3-R3: after a lost read, the check reads the directory again and finds the trees from it.
     if (isCwdLost) await readMainCwd($)
     return refresh($)
   }
@@ -694,6 +693,8 @@ async function stale($: EngineInterface): Promise<void> {
   const scan = scanned(trees)
   // A9i: the timer reads the session's own directory; a `/cd` with no tool call is claimed here.
   await readMainCwd($)
+  // W3-R3: the check's own read lost empties the band now, not at the next tick.
+  if (isCwdLost) return refresh($)
   const found = await markersOf(list, scan.roots)
   const claims = await claim($, trees, found)
   let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
