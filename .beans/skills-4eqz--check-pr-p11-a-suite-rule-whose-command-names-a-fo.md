@@ -1,7 +1,7 @@
 ---
 # skills-4eqz
 title: 'check_pr P11: a suite rule whose command names a folder flags the contract''s own files as changed gate tools'
-status: todo
+status: in-progress
 type: bug
 priority: normal
 tags:
