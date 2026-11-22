@@ -5,6 +5,11 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.4] - unreleased
+
+### Fixed
+- A call to the session that never answered held the update with no end: a `/cd` folder, project root or context figure that never came held the Write, Edit, NotebookEdit or Bash call before it ran, the turn end, or a band drawing with `context` on. Each such call now gives up after 2 seconds, as the README said, and counts as failed. When the working directory cannot be read, the mod forgets it and draws nothing until the main session reads it again, so it does not label the trees by the folder it last read (skills-oz54).
+
 ## [0.3.3] - unreleased
 
 ### Fixed
