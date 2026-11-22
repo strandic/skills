@@ -3428,3 +3428,174 @@ describe('skills-lhwh: the pane lists only the dated rows the band counts', () =
     expect(await open($, on, '# skills-x decisions\n\n')).toBe('_None recorded._')
   })
 })
+
+describe('skills-oz54: every session call gives up after 2 s', () => {
+  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
+  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
+  const never = () => new Promise<never>(() => undefined)
+  /** Engine seconds until `work` settles, advancing 1 s at a time (at most 60). */
+  const held = async (clock: any, work: Promise<unknown>): Promise<number> => {
+    let done = false
+    void work.then(() => { done = true }, () => { done = true })
+    let seconds = 0
+    await settle(5)
+    while (!done && seconds < 60) { await clock.advance(1_000); seconds += 1; await settle(5) }
+    return seconds
+  }
+  const band = async ($: any) => (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND })).findAll({ type: 'Text' })).map((one: any) => one.text)
+
+  // Hand count: the cwd before the call (2 s), the cwd after it (2 s), discover's cwd with no main cwd known (2 s).
+  test('V1 session.cwd never answers: the first Bash call runs at 2 s and answers by 6 s; nothing is drawn', { options: ON }, async ($, on) => {
+    let ran = 0
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => never(), 'tool.call': () => { ran += 1; return undefined } } })
+    let out: any = 'pending'
+    const call = bash($, 'true').then((r: unknown) => { out = r })
+    await settle(5)
+    await clock.advance(1_999)
+    await settle(5)
+    const before = ran
+    await clock.advance(1)
+    await settle(5)
+    expect({ before, after: ran }).toEqual({ before: 0, after: 1 })
+    expect(await held(clock, call) <= 4).toBe(true)
+    expect(out?.result?.text).toBe('ok')
+    expect(await band($)).toEqual([])
+  })
+
+  // Hand count: discover's root with the cwd in no tree (2 s), claim's root (2 s).
+  test('V2 session.root never answers, the cwd in no listed tree: the Bash call answers by 4 s', { options: ON }, async ($, on) => {
+    const clock = world(on, new Map([at(ROOT, 'm')]), '/elsewhere', [], new Set(), { trees: [ROOT], hold: { 'session.root': () => never() } })
+    let out: any = 'pending'
+    const seconds = await held(clock, bash($, 'true').then((r: unknown) => { out = r }))
+    expect({ atMost4: seconds <= 4, text: out?.result?.text }).toEqual({ atMost4: true, text: 'ok' })
+  })
+
+  test('V3 session.usage never answers, a row to draw: the Bash call answers by 2 s and nothing is drawn, as when usage fails', { options: ON }, async ($, on) => {
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.usage': () => never() } })
+    let out: any = 'pending'
+    const seconds = await held(clock, bash($, 'true').then((r: unknown) => { out = r }))
+    expect({ atMost2: seconds <= 2, text: out?.result?.text }).toEqual({ atMost2: true, text: 'ok' })
+    expect(await band($)).toEqual([])
+  })
+
+  test('V4 context on, session.usage never answers at drawing time: the band draw answers by 2 s with nothing drawn', { options: { ...ON, context: true } }, async ($, on) => {
+    let hang = false
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.usage': () => (hang ? never() : undefined) } })
+    await bash($, 'true')
+    expect((await band($)).length).toBe(1)
+    hang = true
+    let drawn: any = 'pending'
+    const seconds = await held(clock, band($).then((t: unknown) => { drawn = t }))
+    expect({ atMost2: seconds <= 2, drawn }).toEqual({ atMost2: true, drawn: [] })
+  })
+
+  // Hand count (Q1): the check's cwd gives up (2 s, the directory is lost), then claim's cwd (2 s); the refresh then draws nothing.
+  test('V5 session.cwd stops answering after the first call: the 15 s check draws nothing by 19 s, not rows labelled by a directory it could not read', { options: ON }, async ($, on) => {
+    let hang = false
+    const files = new Map([at(ROOT, 'm')])
+    const clock = world(on, files, ROOT, [], new Set(), { hold: { 'session.cwd': () => (hang ? never() : undefined) } })
+    await bash($, 'true')
+    expect(await band($)).toEqual(['m · trivial · since 14:00'])
+    hang = true
+    files.set(`${ROOT}/.shawarma/active-m`, { text: 'm\ntrivial\n', mtimeMs: STARTED + 7 })
+    await clock.advance(15_000)
+    await settle(10)
+    await clock.advance(3_999)
+    await settle(30)
+    const before = await band($)
+    await clock.advance(1)
+    await settle(30)
+    expect({ before, after: await band($) }).toEqual({ before: ['m · trivial · since 14:00'], after: [] })
+  })
+
+  // Hand count: the cwd before the call (2 s); discover's root then its cwd with no main cwd known (2 s + 2 s).
+  test('V6 a subagent Bash call, session.root and session.cwd never answer: it answers by 6 s', { options: ON }, async ($, on) => {
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => never(), 'session.root': () => never() } })
+    let out: any = 'pending'
+    const seconds = await held(clock, $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any).then((r: unknown) => { out = r }))
+    expect({ atMost6: seconds <= 6, text: out?.result?.text }).toEqual({ atMost6: true, text: 'ok' })
+  })
+
+  test('V8 after a session start, session.cwd never answers: a turn end answers by 4 s and draws nothing (Q1)', { options: ON }, async ($, on) => {
+    let hang = false
+    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => (hang ? never() : undefined) } })
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    hang = true
+    // Hand count (Q1): the turn end's cwd (2 s), then discover's, the known one forgotten (2 s).
+    const seconds = await held(clock, $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any))
+    expect({ atMost4: seconds <= 4, band: await band($) }).toEqual({ atMost4: true, band: [] })
+  })
+
+  // Attack B4 d: a forget, then a subagent's call; with the main directory unknown, its discover reads the project root.
+  test('V9 the main working directory lost after a call, then a subagent Bash call: nothing drawn, no row labelled by the project root', { options: ON }, async ($, on) => {
+    let dir = ROOT
+    let fail = false
+    const clock = world(on, new Map([at(ROOT, 'm'), at(WT, 'w')]), ROOT, [], new Set(), { cwdNow: () => dir, claimed: [ROOT, WT], root: ROOT,
+      hold: { 'session.cwd': () => (fail ? Promise.reject(new Error('cwd failed')) : undefined) } })
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    dir = WT
+    await bash($, 'true')
+    expect(await band($)).toEqual(['w · trivial · since 14:00', 'other tree: m · trivial · since 14:00'])
+    fail = true
+    await bash($, 'true')
+    fail = false
+    await $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any)
+    const afterSub = await band($)
+    await bash($, 'true')
+    expect({ afterSub, afterMain: await band($) }).toEqual({ afterSub: [], afterMain: ['w · trivial · since 14:00', 'other tree: m · trivial · since 14:00'] })
+  })
+
+  test('V13 the main working directory lost, then a session start (a /clear): its rows are drawn again', { options: ON }, async ($, on) => {
+    let fail = false
+    world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => (fail ? Promise.reject(new Error('cwd failed')) : undefined) } })
+    await bash($, 'true')
+    fail = true
+    await bash($, 'true')
+    const lost = await band($)
+    fail = false
+    await $.session.start({ source: 'clear', cwd: ROOT } as any)
+    expect({ lost, after: await band($) }).toEqual({ lost: [], after: ['m · trivial · since 14:00'] })
+  })
+
+  // Attack A4: the session moves to WT; its cwd then answers 3 s late, past the 2 s give-up.
+  test('V10 after a move to another worktree, a late session.cwd: no drawn row calls the own tree another tree (Q1)', { options: ON }, async ($, on) => {
+    let late = false
+    let dir = ROOT
+    let clock: any
+    const hold = { 'session.cwd': () => (late ? clock.sleep(3_000).then(() => undefined) : undefined) }
+    clock = world(on, new Map([at(ROOT, 'm'), at(WT, 'w')]), ROOT, [], new Set(), { cwdNow: () => dir, claimed: [ROOT, WT], root: ROOT, hold })
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    await bash($, 'true')
+    expect(await band($)).toEqual(['m · trivial · since 14:00', 'other tree: w · trivial · since 14:00'])
+    dir = WT
+    late = true
+    const seen: string[][] = []
+    await held(clock, bash($, 'true'))
+    seen.push(await band($))
+    await clock.advance(3_000); await settle(10)
+    seen.push(await band($))
+    await clock.advance(15_000); await settle(10); await clock.advance(4_000); await settle(10)
+    seen.push(await band($))
+    late = false
+    await bash($, 'true')
+    expect({ seen, after: await band($) }).toEqual({ seen: [[], [], []], after: ['w · trivial · since 14:00', 'other tree: m · trivial · since 14:00'] })
+  })
+
+  test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
+    const fired: number[] = []
+    const tapped = ((name: string, ...args: any[]) => {
+      if (name === 'clock.after') {
+        const h = args[args.length - 1]
+        args[args.length - 1] = async (...a: any[]) => { if (a[1]?.ms === 2_000) asked += 1; const r = await h(...a); if (a[1]?.ms === 2_000) fired.push(a[1].ms); return r }
+      }
+      return (on as any)(name, ...args)
+    }) as any
+    let asked = 0
+    const clock = world(tapped, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { claimed: [] })
+    await bash($, 'true')
+    expect((await band($)).length).toBe(1)
+    await clock.advance(10_000)
+    // Attack A9: 11 timers asked by the first Bash call and 1 by the draw, none fired.
+    expect({ asked: asked > 0, fired: fired.length }).toEqual({ asked: true, fired: 0 })
+  })
+})
