@@ -36,3 +36,7 @@ freeze_check.py plan.md --repo .worktrees/5w5c-spike --listing <`grep -n '^- Les
 unruled: D1 the README's two claim-rule sentences (2d) — default accept as written
 unruled: D2 release the span when `next.signal` aborts (2b ii) — default apply
 unruled: D3 an ended call's span kept open in `windows`/`turnWindows` (S1) — default a new ticket, not folded
+
+## Run (2026-11-22)
+
+Go given (`run skills-5w5c`); D1, D2, D3 ruled A (the recommendations). unruled: none.
