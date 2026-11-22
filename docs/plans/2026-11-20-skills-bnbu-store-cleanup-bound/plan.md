@@ -169,5 +169,7 @@ Mutants for 3b (each patched into the sketch, `claude plugin test` on the final 
 | W3-2 | 2026-11-22 | the owner | §4 | guards += K9: after the first Bash call and a 10 s advance, no 2 s timer resolves | Without it, removing the deadline cancel in `prune`'s `finally` turned no test red; K9 reads `Received: 1` on that change, passes on the fix |
 | W3-3 | 2026-11-22 | the owner | §7 | none: m7 (the key listing given its own 2 s bound) stays without a test | It changes only how many timers are asked; nothing the mod shows, stores or holds differs |
 | W3-4 | 2026-11-22 | the owner | §8 | out of scope += a session clock more than 30 days off deletes every live entry it examines (ticket skills-rph2); a saved entry with Windows paths is read as malformed and deleted (ticket skills-4y27) | Both read the same on the base and the fix; §8 keeps the 30-day rule and the entry check as they are |
+| W4-1 | 2026-11-22 | the owner | §8 | out of scope += a `session.cwd` call that never answers holds the tool call; it has no time limit, though the README says session calls give up after 2 seconds (ticket skills-oz54) | It reads the same on the base and the fix and is not on a changed line; with it never answering, the first Bash call was still waiting after 10 s of engine clock |
+| W4-2 | 2026-11-22 | the owner | §2 2f (README) | none: "at a session's first update that reads the session's own entry" kept | A session id that changes and comes back gets another pass (passes for ids a, b, a), and that pass keeps its 2 s limit, so the sentence is true |
 
 unruled: none
