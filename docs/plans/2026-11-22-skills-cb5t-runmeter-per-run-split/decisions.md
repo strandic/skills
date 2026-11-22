@@ -9,3 +9,13 @@
 2026-11-22 | D8 DEFAULT | part minutes run over the part's own records; parts' minutes can sum below the session's | same definition as session and lane minutes; documented
 2026-11-22 | D9 DEFAULT | crossing count in text only when not zero; always in JSON | as the other "skipped" counts
 2026-11-22 | D10 DEFAULT | a lane ending at the next command's exact instant does not cross it | it did not run under that command
+2026-11-22 | D1 RULING | - a message counts in the part of its first record; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D2 RULING | - an owner turn counts in the part of its last owner record; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D3 RULING | - a part a command opened is always kept; part 0 dropped when it has no message, turn or lane; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D4 RULING | - cuts read over the whole file; figures over the window; a part keeps its command's label before the window; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D5 RULING | - part lines only for a session of two parts or more; no model or effort per part; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D6 RULING | - part 0 before the first command; part N the Nth owner skill command in the file; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D7 RULING | - every owner-typed skill command cuts, any skill, labelled or not; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D8 RULING | - part minutes run over the part's own records; parts' minutes can sum below the session's; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D9 RULING | - crossing count in text only when not zero; always in JSON; reco - | owner: "go with reco on all defaults"; the default as written
+2026-11-22 | D10 RULING | - a lane ending at the next command's exact instant does not cross it; reco - | owner: "go with reco on all defaults"; the default as written

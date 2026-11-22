@@ -1,6 +1,6 @@
 # skills-cb5t — runmeter cuts a session at each skill command, so its figures are per run
 
-Ticket `skills-cb5t` (no siblings) · authority: the ticket's design, the owner's ruling Q1 (design interview) and the DEFAULTs D1–D10 in [decisions.md](decisions.md), 2026-11-22 · planned 2026-11-22 (claude-opus-5-5; skill 0.11.0) at base `5eaa942 plan(skills-5w5c): research lane, design interview paused on Q1` (local main; `scripts/runmeter.mjs`, `scripts/runmeter.md`, `scripts/plantime.mjs` and `scripts/test/runmeter.test.mjs` are unchanged since `bb89183`: `git diff --stat bb89183 main -- <those four>` prints nothing) · proposed branch `cb5t-runmeter-parts` in `.worktrees/cb5t-run`, cut from `origin/main` after a fetch, with the plan commits cherry-picked; PR + squash merge.
+Ticket `skills-cb5t` (no siblings) · authority: the ticket's design, the owner's rulings Q1 (design interview) and D1–D10 (plan ending, "go with reco on all defaults") in [decisions.md](decisions.md), 2026-11-22 · planned 2026-11-22 (claude-opus-5-5; skill 0.11.0) at base `5eaa942 plan(skills-5w5c): research lane, design interview paused on Q1` (local main; `scripts/runmeter.mjs`, `scripts/runmeter.md`, `scripts/plantime.mjs` and `scripts/test/runmeter.test.mjs` are unchanged since `bb89183`: `git diff --stat bb89183 main -- <those four>` prints nothing) · proposed branch `cb5t-runmeter-parts` in `.worktrees/cb5t-run`, cut from `origin/main` after a fetch, with the plan commits cherry-picked; PR + squash merge.
 
 Lessons read (`grep '^## ' docs/plans/lessons.md`, no retro marker yet; the house lessons file has no `- Lesson (<tag>):` lines, so `freeze_check.py --listing` reads it as unusable and F9 is checked by hand here):
 
@@ -177,15 +177,17 @@ Mutants for 3b (each run on the final test file, `node --test --test-reporter=sp
 
 ## Plan ending: defaults
 
-> **What this is about:** how the parts are cut and printed, in the cases the ticket and the one ruling leave open. Each line below is a default: silence accepts it, an answer changes it. Readings: §2 Partition and Attack readings; tests T1–T8. Where the residue goes: an answer that changes one becomes a §9 row before `run`.
+> **What this is about:** how the parts are cut and printed, in the cases the ticket and the one ruling leave open. Each line below was a default; the owner ruled all ten as recommended on 2026-11-22. Readings: §2 Partition and Attack readings; tests T1–T8. Where the residue goes: an answer that changes one becomes a §9 row before `run`.
 
-unruled: D1 a message counts in the part of its first record — default as §2 2c
-unruled: D2 an owner turn counts in the part of its last owner record — default as §2 2a
-unruled: D3 a part a command opened is always kept; part 0 is dropped when it has no message, turn or lane — default as §2 2c
-unruled: D4 cuts read over the whole file; figures over the window; a part keeps its command's label before the window — default as §2 2b, 2c
-unruled: D5 part lines only for a session of two parts or more, no model or effort per part — default as §2 2f
-unruled: D6 part 0 before the first command, part N the Nth owner skill command in the file — default as §2 2b
-unruled: D7 every owner-typed skill command cuts, any skill, labelled or not — default as §2 2b
-unruled: D8 part minutes run over the part's own records; parts' minutes can sum below the session's — default as §2 2c
-unruled: D9 the crossing count prints in text only when not zero, always in JSON — default as §2 2e
-unruled: D10 a lane ending at the next command's exact instant does not cross it (strict `>`) — default as §2 2d
+ruled: D1 a message counts in the part of its first record — as §2 2c (owner: "go with reco on all defaults")
+ruled: D2 an owner turn counts in the part of its last owner record — as §2 2a (owner: "go with reco on all defaults")
+ruled: D3 a part a command opened is always kept; part 0 is dropped when it has no message, turn or lane — as §2 2c (owner: "go with reco on all defaults")
+ruled: D4 cuts read over the whole file; figures over the window; a part keeps its command's label before the window — as §2 2b, 2c (owner: "go with reco on all defaults")
+ruled: D5 part lines only for a session of two parts or more, no model or effort per part — as §2 2f (owner: "go with reco on all defaults")
+ruled: D6 part 0 before the first command, part N the Nth owner skill command in the file — as §2 2b (owner: "go with reco on all defaults")
+ruled: D7 every owner-typed skill command cuts, any skill, labelled or not — as §2 2b (owner: "go with reco on all defaults")
+ruled: D8 part minutes run over the part's own records; parts' minutes can sum below the session's — as §2 2c (owner: "go with reco on all defaults")
+ruled: D9 the crossing count prints in text only when not zero, always in JSON — as §2 2e (owner: "go with reco on all defaults")
+ruled: D10 a lane ending at the next command's exact instant does not cross it (strict `>`) — as §2 2d (owner: "go with reco on all defaults")
+
+unruled: none
