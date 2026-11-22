@@ -74,3 +74,11 @@ unruled: D6 band empty until the main directory is read again — default keep
 unruled: D7 rebase on skills-lhwh before picking the version — default keep
 
 **D7 update (relayed by skills-orch)**: skills-lhwh opened PR 14 as companion 0.3.3, adding tests at the end of band.test.tsx. At run time, rebase on main after PR 14 merges and take the next version then (0.3.4 or later). The new describe block here also sits at the end of that file: expect a rebase conflict and keep both blocks.
+
+## Plan ready (2026-11-22)
+
+**Q2, D6, D7 ruled (owner: "Go with reco")**: Q2 A, the version and the changelog entry are set at run time after rebasing on main once PR 14 merges (reverses D1). D6 A, the band stays empty until the main working directory is read again. D7 A, rebase after PR 14 and keep both test blocks.
+
+Brief frozen: `docs/plans/2026-11-22-skills-oz54-session-calls-bound/plan.md`. Waiting for `run`.
+
+unruled: none
