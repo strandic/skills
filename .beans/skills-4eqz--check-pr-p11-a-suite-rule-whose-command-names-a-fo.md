@@ -30,3 +30,12 @@ What the planner saw (not folded in; each a proposed ticket):
 - **S2 (pre-existing, false FAIL).** With git's default rename detection, a renamed file under a gate folder lists as `tools/kitchen/{pot.py => lid.py}`. That matches no §3 path, so P11 fails even when §3 names both names. Probe output: `FAIL P11 tools/kitchen/{pot.py => lid.py}: …`. Inconvenience only. Proposed ticket (or `--no-renames` on the numstat call).
 
 unruled: D1 exact §3 path (with cell shorthand) for files found under a gate folder — default A (as sketched)
+
+## Run (2026-11-22): PR 15
+
+Trivial go; D1 stood as a DEFAULT. Branch `fix/4eqz-p11-gate-folder`, tests commit `f0a68ee`, fix `d96d4ab`, base `a4a6af1`. PR: https://github.com/strandic/skills/pull/15 — Verification and Decisions tables there.
+
+- Suite: base `Ran 150 tests` / `OK`; head `Ran 151 tests` / `OK` (`cd skills/shawarma && python3 -m unittest test_checks`). Lint NOT RUN (no Python linter installed, fetching one refused); `py_compile` exit 0.
+- PR 12's case: base `FAIL (6)` (six P11 lines), head `PASS`.
+- `check_pr.py <this ticket> <body> --repo .worktrees/4eqz --tests-commit f0a68ee` (strandic 0.11.0): `PASS`.
+- DEFAULT rows: D1. Findings filed: `skills-ehhw` (P11 misses a one-segment gate folder), `skills-rm6v` (a rename under a gate folder reads as an unnamed changed file).
