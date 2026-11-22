@@ -1,0 +1,290 @@
+diff --git a/.claude-plugin/plugin.json b/.claude-plugin/plugin.json
+index 9d1becb..91d1adb 100644
+--- a/.claude-plugin/plugin.json
++++ b/.claude-plugin/plugin.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "shawarma-companion",
+-  "version": "0.3.1",
++  "version": "0.3.2",
+   "description": "Shows the active shawarma plans and runs above the prompt, one row each: ticket, step, decisions so far.",
+   "author": { "name": "Strandic" },
+   "types": "./types/index.d.ts",
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 8705f5d..d116712 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -5,6 +5,11 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
+ 
+ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+ 
++## [0.3.2] - unreleased
++
++### Fixed
++- A call to the session that never answered (its working directory, project root or context use) held the update for good, and a Write, Edit, NotebookEdit or Bash call never ran; the README said each session call gives up after 2 seconds. Each one now does: a writing call starts at most 2 seconds late, and an update asks the session at most eight things, each for at most 2 seconds (skills-oz54).
++
+ ## [0.3.1] - unreleased
+ 
+ ### Fixed
+diff --git a/README.md b/README.md
+index 7fc0891..cdee065 100644
+--- a/README.md
++++ b/README.md
+@@ -37,7 +37,7 @@ A session claims a worktree when:
+ 
+ The mod checks the working directory and the project root at each update and every 15 seconds while a row is shown. It checks the folders of the last 64 files the session wrote at each update, so a worktree made and written in the same turn is claimed once git lists it. Subagents' calls count, but a subagent's own working directory does not.
+ 
+-Claims only grow: a worktree stays claimed for the rest of the session, even after the session moves away. A session that claims no worktree saves nothing. Each call to the session or the store gives up after 2 seconds; a call that gives up claims nothing that update. They survive `/clear`. The mod saves them in its store, keyed by the session id, so `--resume` brings them back. A saved entry not updated for 30 days is deleted. The mod looks for such entries at a session's first update that reads the session's own entry, and stops looking 2 seconds after it starts. So the first update waits at most about 6 seconds for the store: 2 for the session's own entry, 2 for the clean-up, 2 to save its claims. All three limits rely on the engine's timer; if the engine never fires it, a store call that never answers holds the update. The mod skips an entry it cannot read, or that reads as unset (no value). Sessions usually start at different entries, so one entry that never answers does not stop every session's clean-up.
++Claims only grow: a worktree stays claimed for the rest of the session, even after the session moves away. A session that claims no worktree saves nothing. Each call to the session or the store gives up after 2 seconds; a call that gives up claims nothing that update. They survive `/clear`. The mod saves them in its store, keyed by the session id, so `--resume` brings them back. A saved entry not updated for 30 days is deleted. The mod looks for such entries at a session's first update that reads the session's own entry, and stops looking 2 seconds after it starts. So the first update waits at most about 6 seconds for the store: 2 for the session's own entry, 2 for the clean-up, 2 to save its claims. Every 2-second limit relies on the engine's timer; if the engine never fires it, a session or store call that never answers holds the update. A session call that gives up counts as one that failed: the mod keeps the last working directory it knew, and draws nothing that update when it knows no working directory at all, or cannot learn when the session started or, with `context` on, how full the context is. So a session that never answers holds each Write, Edit, NotebookEdit or Bash call 2 seconds before it runs. One update asks the session at most eight things, so it waits at most 16 seconds for the session, on top of its waits for git, files and the store. The mod skips an entry it cannot read, or that reads as unset (no value). Sessions usually start at different entries, so one entry that never answers does not stop every session's clean-up.
+ 
+ The *current* worktree is the one that holds the working directory, or else the one that holds the project root. Its rows come first. Rows from the other claimed worktrees start with `other tree: `.
+ 
+diff --git a/hooks/register.tsx b/hooks/register.tsx
+index e82dfb5..a05bd7a 100644
+--- a/hooks/register.tsx
++++ b/hooks/register.tsx
+@@ -153,7 +153,7 @@ const realDirs = new Map<string, { at: number; dir: string; real: string }>()
+ const lateDirs = new Map<string, { at: number; dir: string }>()
+ 
+ const WRITERS = new Set(['Write', 'Edit', 'NotebookEdit', 'Bash'])
+-/** Every `$.process.run` gives up after this; a timeout is a failed list (lane 3a F9). */
++/** Every `$.process.run`, store call and session call gives up after this; a timeout is a failed list (lane 3a F9) or a failed call (skills-oz54). */
+ export const RUN_MS = 2_000
+ 
+ /** How a call raced against RUN_MS ended: its value, a rejection, or no answer in time. */
+@@ -216,7 +216,7 @@ async function claim($: EngineInterface, trees: Trees, found: readonly Found[],
+   const held = new Set([...lastClaims, ...(await read($, claimsAtom))])
+   const before = held.size
+   // B7f: a subagent's hook reads its own cwd: with no main cwd known yet, the root alone.
+-  const cwd = mainCwd ?? (isSub ? null : await $.session.cwd().catch(() => null))
++  const cwd = mainCwd ?? (isSub ? null : await bounded($, $.session.cwd()).catch(() => null))
+   const root = await bounded($, $.session.root()).catch(() => null)
+   // S1: the engine gives the cwd and the root as real paths (probed): placed as written, else against each root's real path (B7a).
+   for (const path of [cwd, root]) {
+@@ -393,7 +393,9 @@ async function planFiles($: EngineInterface, dir: string): Promise<[string | nul
+  */
+ async function discover($: EngineInterface, isSub = false): Promise<Trees> {
+   // B7f: in a subagent's hook with no main cwd known, discover from the project root.
+-  const cwd = mainCwd ?? (isSub ? await $.session.root().catch(() => $.session.cwd()) : await $.session.cwd())
++  const cwd = mainCwd ?? (isSub
++    ? await bounded($, $.session.root()).catch(() => bounded($, $.session.cwd()))
++    : await bounded($, $.session.cwd()))
+   const hit = worktrees.get(cwd)
+   if (hit !== undefined) return hit
+   const git = await run($, ['git', 'worktree', 'list', '--porcelain', '-z'], cwd)
+@@ -414,7 +416,7 @@ async function discover($: EngineInterface, isSub = false): Promise<Trees> {
+   const probe: Trees = { ...found, reals }
+   let own = byReal(probe, cwd) ?? found.own
+   if (own === null) {
+-    const root = await $.session.root().catch(() => null)
++    const root = await bounded($, $.session.root()).catch(() => null)
+     own = root === null ? null : byReal(probe, root) ?? ownTree(root, found.roots)
+   }
+   const trees: Trees = { ...found, own, reals, isFromGit: listed !== null }
+@@ -582,7 +584,7 @@ async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub =
+   for (const marker of realDirs.keys()) if (!facts.paths.has(marker)) realDirs.delete(marker)
+   for (const marker of lateDirs.keys()) if (!facts.paths.has(marker)) lateDirs.delete(marker)
+   if (picked.length === 0) return { rows: [], hidden, listed, scan: facts }
+-  const { startedAt } = await $.session.usage()
++  const { startedAt } = await bounded($, $.session.usage())
+   const now = await $.clock.now()
+   const rows: Snapshot[] = []
+   for (const one of picked) {
+@@ -646,7 +648,7 @@ async function stale($: EngineInterface): Promise<void> {
+   const list = lister($)
+   const scan = scanned(trees)
+   // A9i: the timer reads the session's own directory; a `/cd` with no tool call is claimed here.
+-  mainCwd = await $.session.cwd().catch(() => mainCwd)
++  mainCwd = await bounded($, $.session.cwd()).catch(() => mainCwd)
+   const found = await markersOf(list, scan.roots)
+   const claims = await claim($, trees, found)
+   let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
+@@ -703,7 +705,7 @@ export const register: Register = (on, options) => {
+   on('tool.call', async ($, e, next) => {
+     if (!WRITERS.has(e.tool)) return next(e)
+     // The hook's own cwd: a subagent's in a subagent's call (d.ts `$.session.cwd`), for its relative paths.
+-    const cwd = await $.session.cwd().catch(() => null)
++    const cwd = await bounded($, $.session.cwd()).catch(() => null)
+     // Lane 3a F1, F2: the span is open while the call runs, so a refresh during it (the 15 s check, a parallel
+     // call) already counts a marker the call writes.
+     const span = { from: await $.clock.now(), to: Number.POSITIVE_INFINITY }
+@@ -716,7 +718,7 @@ export const register: Register = (on, options) => {
+       remember(turnWindows, [span], MAX_TURN, (a, b) => a === b)
+     })
+     const isMain = (e as { agentId?: unknown }).agentId === undefined
+-    if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
++    if (isMain) mainCwd = await bounded($, $.session.cwd()).catch(() => mainCwd)
+     // Q3: a file tool's path (relative to the cwd read before the call) or a Bash call's changed files claim their trees.
+     const input = e as { file_path?: unknown; notebook_path?: unknown }
+     const path = e.tool === 'NotebookEdit' ? input.notebook_path : e.tool === 'Bash' ? undefined : input.file_path
+@@ -734,7 +736,7 @@ export const register: Register = (on, options) => {
+     lateDirs.clear()
+     folderReals.clear()
+     const isMain = (e as { agentId?: unknown }).agentId === undefined
+-    if (isMain) mainCwd = await $.session.cwd().catch(() => mainCwd)
++    if (isMain) mainCwd = await bounded($, $.session.cwd()).catch(() => mainCwd)
+     await refresh($, null, lister($), !isMain)
+     // B4a2: the main turn's end placed this turn's folders and spans against a fresh git list; the last 64 carry
+     // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn.
+@@ -762,7 +764,7 @@ export const register: Register = (on, options) => {
+     watch($, true)
+     const context =
+       options.context === true
+-        ? await $.session.usage().then(usage => usage.context.percent, () => null)
++        ? await bounded($, $.session.usage()).then(usage => usage.context.percent, () => null)
+         : undefined
+     if (context === null) return next(e)
+     const { Box, Button, Text } = $.ui.resolve(e)
+diff --git a/tests/band.test.tsx b/tests/band.test.tsx
+index abbcc44..588bdb7 100644
+--- a/tests/band.test.tsx
++++ b/tests/band.test.tsx
+@@ -3204,3 +3204,148 @@ describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped,
+     expect(fired.length).toBe(0)
+   })
+ })
++
++describe('skills-oz54: every session call gives up after 2 s', () => {
++  const at = (tree: string, ticket: string, when = STARTED + 5): [string, File] => [`${tree}/.shawarma/active-${ticket}`, { text: `${ticket}\ntrivial\n`, mtimeMs: when }]
++  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
++  const never = () => new Promise<never>(() => undefined)
++  /** Engine seconds until `work` settles, advancing 1 s at a time (at most 60). */
++  const held = async (clock: any, work: Promise<unknown>): Promise<number> => {
++    let done = false
++    void work.then(() => { done = true }, () => { done = true })
++    let seconds = 0
++    await settle(5)
++    while (!done && seconds < 60) { await clock.advance(1_000); seconds += 1; await settle(5) }
++    return seconds
++  }
++  const band = async ($: any) => (await (await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND })).findAll({ type: 'Text' })).map((one: any) => one.text)
++
++  // Hand count: the cwd before the call (2 s), the cwd after it (2 s), discover's cwd with no main cwd known (2 s).
++  test('V1 session.cwd never answers: the first Bash call runs at 2 s and answers by 6 s; nothing is drawn', { options: ON }, async ($, on) => {
++    let ran = 0
++    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => never(), 'tool.call': () => { ran += 1; return undefined } } })
++    let out: any = 'pending'
++    const call = bash($, 'true').then((r: unknown) => { out = r })
++    await settle(5)
++    await clock.advance(1_999)
++    await settle(5)
++    const before = ran
++    await clock.advance(1)
++    await settle(5)
++    expect({ before, after: ran }).toEqual({ before: 0, after: 1 })
++    expect(await held(clock, call) <= 4).toBe(true)
++    expect(out?.result?.text).toBe('ok')
++    expect(await band($)).toEqual([])
++  })
++
++  // Hand count: discover's root with the cwd in no tree (2 s), claim's root (2 s).
++  test('V2 session.root never answers, the cwd in no listed tree: the Bash call answers by 4 s', { options: ON }, async ($, on) => {
++    const clock = world(on, new Map([at(ROOT, 'm')]), '/elsewhere', [], new Set(), { trees: [ROOT], hold: { 'session.root': () => never() } })
++    let out: any = 'pending'
++    const seconds = await held(clock, bash($, 'true').then((r: unknown) => { out = r }))
++    expect({ atMost4: seconds <= 4, text: out?.result?.text }).toEqual({ atMost4: true, text: 'ok' })
++  })
++
++  test('V3 session.usage never answers, a row to draw: the Bash call answers by 2 s and nothing is drawn, as when usage fails', { options: ON }, async ($, on) => {
++    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.usage': () => never() } })
++    let out: any = 'pending'
++    const seconds = await held(clock, bash($, 'true').then((r: unknown) => { out = r }))
++    expect({ atMost2: seconds <= 2, text: out?.result?.text }).toEqual({ atMost2: true, text: 'ok' })
++    expect(await band($)).toEqual([])
++  })
++
++  test('V4 context on, session.usage never answers at drawing time: the band draw answers by 2 s with nothing drawn', { options: { ...ON, context: true } }, async ($, on) => {
++    let hang = false
++    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.usage': () => (hang ? never() : undefined) } })
++    await bash($, 'true')
++    expect((await band($)).length).toBe(1)
++    hang = true
++    let drawn: any = 'pending'
++    const seconds = await held(clock, band($).then((t: unknown) => { drawn = t }))
++    expect({ atMost2: seconds <= 2, drawn }).toEqual({ atMost2: true, drawn: [] })
++  })
++
++  test('V5 session.cwd stops answering after the first call: the 15 s check still redraws a changed marker by 17 s', { options: ON }, async ($, on) => {
++    let hang = false
++    const files = new Map([at(ROOT, 'm')])
++    const clock = world(on, files, ROOT, [], new Set(), { hold: { 'session.cwd': () => (hang ? never() : undefined) } })
++    await bash($, 'true')
++    expect(await band($)).toEqual(['m · trivial · since 14:00'])
++    hang = true
++    files.set(`${ROOT}/.shawarma/active-m`, { text: 'm\nrun W2\n', mtimeMs: STARTED + 7 })
++    await clock.advance(15_000)
++    await settle(10)
++    await clock.advance(2_000)
++    await settle(30)
++    expect((await band($)).map((t: string) => t.split(' · ').slice(0, 2).join(' · '))).toEqual(['m · run W2'])
++  })
++
++  // Hand count: the cwd before the call (2 s); discover's root then its cwd with no main cwd known (2 s + 2 s).
++  test('V6 a subagent Bash call, session.root and session.cwd never answer: it answers by 6 s', { options: ON }, async ($, on) => {
++    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => never(), 'session.root': () => never() } })
++    let out: any = 'pending'
++    const seconds = await held(clock, $.tool.call({ tool: 'Bash', command: 'true', agentId: 'a1' } as any).then((r: unknown) => { out = r }))
++    expect({ atMost6: seconds <= 6, text: out?.result?.text }).toEqual({ atMost6: true, text: 'ok' })
++  })
++
++  test('V8 after a session start, session.cwd never answers: a turn end answers by 2 s', { options: ON }, async ($, on) => {
++    let hang = false
++    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: { 'session.cwd': () => (hang ? never() : undefined) } })
++    await $.session.start({ source: 'startup', cwd: ROOT } as any)
++    hang = true
++    const seconds = await held(clock, $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any))
++    expect(seconds <= 2).toBe(true)
++  })
++
++  // The cwd calls in order: before the call (answers), after it (rejects: no main cwd), discover's (answers), claim's (never).
++  test('V9 no main cwd known, the cwd call inside claim never answers: the Bash call answers by 2 s', { options: ON }, async ($, on) => {
++    let n = 0
++    let ran = false
++    const clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { hold: {
++      'session.cwd': () => { n += 1; return n === 2 ? Promise.reject(new Error('cwd failed')) : n === 4 ? never() : undefined },
++      'tool.call': () => { ran = true; return undefined } } })
++    let out: any = 'pending'
++    const seconds = await held(clock, bash($, 'true').then((r: unknown) => { out = r }))
++    expect({ ran, cwdCalls: n, atMost2: seconds <= 2, text: out?.result?.text }).toEqual({ ran: true, cwdCalls: 4, atMost2: true, text: 'ok' })
++  })
++
++  // Attack A4: the session moves to WT; its cwd then answers 3 s late, past the 2 s give-up.
++  test('V10 after a move to another worktree, a late session.cwd: no drawn row calls the own tree another tree', { options: ON }, async ($, on) => {
++    let late = false
++    let dir = ROOT
++    let clock: any
++    const hold = { 'session.cwd': () => (late ? clock.sleep(3_000).then(() => undefined) : undefined) }
++    clock = world(on, new Map([at(ROOT, 'm'), at(WT, 'w')]), ROOT, [], new Set(), { cwdNow: () => dir, claimed: [ROOT, WT], root: ROOT, hold })
++    await $.session.start({ source: 'startup', cwd: ROOT } as any)
++    await bash($, 'true')
++    expect(await band($)).toEqual(['m · trivial · since 14:00', 'other tree: w · trivial · since 14:00'])
++    dir = WT
++    late = true
++    const seen: string[][] = []
++    await held(clock, bash($, 'true'))
++    seen.push(await band($))
++    await clock.advance(3_000); await settle(10)
++    seen.push(await band($))
++    await clock.advance(15_000); await settle(10); await clock.advance(4_000); await settle(10)
++    seen.push(await band($))
++    expect(seen.flat().filter(t => t.startsWith('other tree: w'))).toEqual([])
++  })
++
++  test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
++    const fired: number[] = []
++    const tapped = ((name: string, ...args: any[]) => {
++      if (name === 'clock.after') {
++        const h = args[args.length - 1]
++        args[args.length - 1] = async (...a: any[]) => { if (a[1]?.ms === 2_000) asked += 1; const r = await h(...a); if (a[1]?.ms === 2_000) fired.push(a[1].ms); return r }
++      }
++      return (on as any)(name, ...args)
++    }) as any
++    let asked = 0
++    const clock = world(tapped, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { claimed: [] })
++    await bash($, 'true')
++    expect((await band($)).length).toBe(1)
++    await clock.advance(10_000)
++    // Attack A9: 11 timers asked by the first Bash call and 1 by the draw, none fired.
++    expect({ asked: asked > 0, fired: fired.length }).toEqual({ asked: true, fired: 0 })
++  })
++})
