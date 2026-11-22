@@ -7,3 +7,9 @@
 2026-11-20 | D1 RULING | A: version 0.3.1 with its own changelog section; reco A | 0.3.0 is merged; marketplace users update only when the version goes up
 2026-11-20 | D2 RULING | A: new ticket for a refused clock.every period (check stops for good, band keeps old content; lane A11a); reco A | pre-existing, not reached through this change
 2026-11-20 | D3 RULING | A: note on skills-y1gt: a hanging read keeps the old count while pending and adds one hung read per pass (lane A8); reco A | pre-existing; same on base and sketch
+2026-11-22 | W3-R1 RULING | A: a failed listing of a tree's `.shawarma` folder in the 15 s check (empties the band, stops the check, pane says no marker) goes to new ticket skills-3hy6, not folded; reco A | pre-existing, outside lines 2a–2g; its fix needs its own design (failed pass, or that tree's rows only)
+2026-11-22 | W3-R2 RULING | A: one new ticket, skills-lm8d, for the race where a late refresh draws an older step for one pass (the check's re-read of an unreadable row is a new way into it); the PR states the one-pass limit; reco A | the race is pre-existing on the base; a guard touches every refresh path and is unexecuted
+2026-11-22 | W3-P1 RULING | A: round 1's prose hunks committed: the 2f comment and two README sentences corrected to what the code does; reco A | the old text was false or incomplete by the review's runs
+2026-11-22 | W3-Da RULING | A: new test C11, a stale unreadable row keeps its `stale:` label; reco A | the mutant dropping the label survived the suite; C11 is red on it
+2026-11-22 | W3-Db RULING | A: the doc comments of `refresh` and `stale` and the `problem` field's doc in types/index.d.ts corrected; reco A | each was false after the change
+2026-11-22 | W3-Dc RULING | A: §6's cost bound corrected in §9 to 50 tree listings + 5 calls × 20 rows (150) per pass, 130 measured at 50 trees and 20 rows; reco A | the lane measured above the stated 121
