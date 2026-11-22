@@ -1,7 +1,7 @@
 ---
 # skills-cb5t
 title: 'runmeter: split a session at each skill command, so its figures are per run'
-status: todo
+status: in-progress
 type: task
 tags:
     - shawarma
