@@ -75,7 +75,9 @@ no version named the record is read as current.
      module after `-m` as `<module>.py`) that exists at the freeze commit (the commit the body's
      first line names), that §3's table does not name (the contract's own change), and that
      differs at --head needs a §9 RULING row naming that rule id; a test file whose diff only
-     adds lines raises ran above the suite rule's N, not a change.
+     adds lines raises ran above the suite rule's N, not a change. A folder stands for each file
+     under it; a file found that way is the contract's own change only when §3 names its path
+     (a later name in a §3 cell is also read under the first name's folder).
   P12 each §5 rule id is named in the reading cell of a Verification table row; a row whose
      result cell is not exactly `PASS`, nor the rule's own PASS token (the backticked value after
      its "PASS", "dry run" or "dry-run reading"), nor a reading that meets every comparison the
@@ -135,6 +137,7 @@ digits):
               In the header's `authority:` clause only, `X1 to Xn` with the same one or two
               letters is a range too (`Q1 to Q5`, `DF1 to DF6`); elsewhere `to` is a word.
 """
+import posixpath
 import re
 import shlex
 import subprocess
@@ -409,6 +412,7 @@ class Records:
         self.s9_cells = []  # [(lineno, cells, kind)] of §9's table
         self.s5_rules = {}  # {rule id: the rule's text, its indented lines included}
         self.s3_files = set()  # the files §3's table names
+        self.s3_paths = set()  # as paths: a later name in a cell also under the first's folder
         self.version, self.ticket = None, None  # the header's skill version; `Ticket `<id>``
 
     def known(self, label):
@@ -487,6 +491,11 @@ def brief_records(plan_text):
         for _k, c in rows:
             got = re.findall(r"`([^`\s]+)`", c[0]) or ([c[0]] if c[0] and " " not in c[0] else [])
             r.s3_files |= set(got)
+            base = posixpath.dirname(got[0]) if got else ""
+            for j, n in enumerate(got):
+                r.s3_paths.add(posixpath.normpath(n))
+                if base and j:
+                    r.s3_paths.add(posixpath.normpath(posixpath.join(base, n)))
     header = "\n".join(lines[1:first])
     r.version = header_version(header)
     m = re.search(r"\bTicket\s+`([^`]+)`", header)
@@ -804,6 +813,8 @@ def gate_change_fails(repo, rec, head, freeze):
             _add, dele, path = (line.split("\t", 2) + ["", ""])[:3]
             if TEST_FILE.search(path) and dele == "0":
                 continue  # tests added: the suite's floor rising is no change
+            if path in rec.s3_paths:
+                continue  # a file §3 names, under a folder a rule runs: the contract's own change
             if not ruled(rec, rid):
                 fails.append(f"FAIL P11 {path}: changed since the freeze {at[:8]} and §5 {rid} "
                              f"runs it; no §9 RULING row names {rid}")
