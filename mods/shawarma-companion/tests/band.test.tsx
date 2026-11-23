@@ -3709,6 +3709,32 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     expect({ asked: n >= 3, afterBash, later: await band($) }).toEqual({ asked: true, afterBash: rows, later: rows })
   })
 
+  // W3-R6 (round-5 fix review F1): a turn end whose claim placed the folders counts as placed even when its later
+  // session.usage call fails, so it clears the turn's spans and a marker another session wrote then is not claimed.
+  test('V20 a turn end whose usage call rejects after the claim: another session\'s worktree is not claimed later', { options: ON }, async ($, on) => {
+    let bad = false
+    const Y = `${ROOT}/.worktrees/y`
+    const trees = [ROOT]
+    const files: Files = new Map([at(ROOT, 'm')])
+    let clock: any
+    clock = world(on, files, ROOT, [], new Set(), { trees, claimed: [ROOT], root: ROOT, hold: {
+      'session.usage': () => (bad ? Promise.reject(new Error('x')) : undefined),
+      // Another session writes y during this session's Bash call `other`.
+      'tool.call': (e: any) => { if (e.command === 'other') files.set(`${Y}/.shawarma/active-y`, { text: 'y\ntrivial\n', mtimeMs: clock.now() }); return undefined } } })
+    const step = async (ms: number) => { for (let t = 0; t < ms; t += 500) { await clock.advance(500); await settle(3) } }
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    await bash($, 'other')
+    for (let i = 0; i < 70; i++) { await clock.advance(3_000); await settle(2); await write($, `${ROOT}/d${i}/f.txt`, 'x') }
+    bad = true
+    const end = $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+    await step(4_500); await end
+    bad = false
+    trees.push(Y)
+    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+    await bash($, 'true')
+    expect(await band($)).toEqual(['m · trivial · since 14:00', '1 run in another worktree'])
+  })
+
   test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
     const fired: number[] = []
     const tapped = ((name: string, ...args: any[]) => {
