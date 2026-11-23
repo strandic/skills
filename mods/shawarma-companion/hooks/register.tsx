@@ -67,7 +67,9 @@ export const MAX_WINDOWS = 64
  * call's end removes it, before anything it awaits, and so does `next.signal`
  * aborting (an interrupt, a hook above answering first, this hook out of
  * budget). So a turn end or newer calls cannot drop the span of a call still
- * running. `windows` and `turnWindows` keep their own copy as before.
+ * running. `windows` and `turnWindows` hold the same span object, as before, so
+ * the call's end closes it there too; an abandoned call's span stays open there
+ * until evicted (skills-blde).
  */
 const openWindows = new Set<{ from: number; to: number }>()
 /**
