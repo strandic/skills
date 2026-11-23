@@ -152,6 +152,7 @@ Mutants for 3b (each patched into the sketch; outputs in the planner's scratch `
 
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
 |---|---|---|---|---|---|
+| W3-R1 | 2026-11-23 | the owner ("Go with reco") | §1, §3 (`scripts/test/mod-tests.test.mjs`, CHANGELOG) | §1 "let go by the test kit about 10 s of real time after it starts" → about 5 s, measured by the review lane: a dropped call's rejection handler logged 5057 ms and 5479 ms in the full file and 5008 ms in a one-test file, against `Date.now()` checked with the kit's own timer. The scan header says "about 5 s"; the 0.3.6 changelog says "about five seconds" and "the test file, if still running" (was "any test file still running": two files run in parallel read `3 pass` / `0 fail` with the idle wait in the other file). The scan finds the repository with `fileURLToPath` (was `URL.pathname`, which reads `ENOENT … sp%20ace/mods` in a checkout path holding a space); new regression test `scripts/test/mod-tests-root.test.mjs`, `fail 1` on the pre-fix scan, `pass 1` after. R1–R3 unchanged. | The review lane found the timing and the "any file" wording false by execution, and the path read broken in a folder whose name holds a space. |
 
 
 ## Defaults at this stop
