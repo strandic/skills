@@ -13,3 +13,5 @@
 2026-11-23 | G1 DEFAULT | No change: "64 newer writing calls" also counts an older call that ends later (it is re-remembered as newest); the span leaves sooner, never later | pre-existing; review fix2 N1 against Q-reject-T63
 2026-11-23 | G2 DEFAULT | No change: 4096 writing calls in one main turn also evict the span (MAX_TURN cap); an edge the README need not name | pre-existing; review fix2 N2-4095 / N2-4097
 2026-11-23 | G3 DEFAULT | No change: a call whose end-time clock read never answers never settles, yet is governed by the abandoned/failed-read sentence, not "never ends" | pre-existing; review fix2 Q-hang cases; base same
+2026-11-23 | H1 DEFAULT | No change: "a call that never ends keeps claiming them" (changelog, README) holds until Claude Code gives up on the call; the kit rejected one after 3-6 h of fake time and the span was released, as "or Claude Code abandons it" says | review-gate probe D; the abandon clause already covers it
+2026-11-23 | W4-V DEFAULT | Version 0.3.5 and its changelog entry, set at run time after PR 17 (0.3.4) merged; rebased onto 4897414, both test blocks kept | orchestrator version claim; the next free patch
