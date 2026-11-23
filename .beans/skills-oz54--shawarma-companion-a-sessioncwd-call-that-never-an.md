@@ -98,3 +98,5 @@ Go given. Branch `fix/oz54-session-bound` in `.worktrees/oz54`, from `origin/mai
 **W3 round 6**: the round-5 fix review found F1 (low): a `session.usage` give-up after the claim kept the turn's spans, so the next turn could claim another session's worktree. Owner ruled W3-R6 A. Test `6c84724` (V20 red on 1bfa021), fix `e0afed3`; suite `321 pass` / `0 fail`. Fix-review lane on round 6 reported two low findings (`6327291`).
 
 **W3 close**: owner ruled W3-R7 A: no seventh round. Round-6 F1 filed as skills-emiq, F2 as skills-2mwr. On to W4.
+
+**W4**: rebased onto `48941e1` (PR 16; `git range-diff`: 13 of 13 mod commits unchanged). On head `878895e`: R1 `321 pass` / `0 fail` / `Ran 321 tests across 1 file.` (PASS); validate `✔ Validation passed`; tsc exit 0; base `48941e1` suite `303 pass` / `0 fail`. check_pr: the repo's checker PASS; the installed 0.11.0 checker FAIL P11 only (false; fixed by skills-4eqz, disclosed in the PR). PR: https://github.com/strandic/skills/pull/17 (v0.3.4). Open tickets from this run: skills-9u5j, skills-k6zu, skills-emiq, skills-2mwr.
