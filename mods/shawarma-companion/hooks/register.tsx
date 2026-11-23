@@ -582,12 +582,14 @@ export const UNREAD = 'could not be read'
  * counted (Q6). A row whose files fail to read is drawn as an UNREAD problem
  * row: its ticket, nothing it would have read (cm2l Q1).
  */
-async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = false): Promise<{ rows: Snapshot[];
+async function snapshot($: EngineInterface, trees: Trees, list: Lister, isSub = false, mark: { isPlaced: boolean } = { isPlaced: false }): Promise<{ rows: Snapshot[];
   hidden: { markers: number; trees: number; others: number; otherTickets: string[] }; listed: string; scan: Scan }> {
   const scan = scanned(trees)
   const answered = new Set<string>()
   const found = await markersOf(list, scan.roots, answered)
   const claims = await claim($, trees, found, isSub)
+  // W3-R6: placed once the claim has run against a git list, even if a later step (the context figure) throws.
+  mark.isPlaced = trees.isFromGit === true
   const { picked, others, signature: listed } = pick(found, trees, scan.left, claims)
   const pathOf = (one: Found) => under(one.root, `.shawarma/${MARKER_PREFIX}${one.ticket}`)
   const facts: Scan = { status: 'ok', trees: answered, paths: new Set(found.map(pathOf)) }
@@ -627,17 +629,15 @@ async function readMainCwd($: EngineInterface): Promise<void> {
 /**
  * Never throws: a failed discovery or pass draws nothing, and a row whose files fail to read is drawn as
  * `could not be read`, never with a value read earlier.
- * Returns true only when this refresh placed the session's folders against a git list (W3-R5).
+ * Returns true only when this refresh's claim placed the session's folders against a git list (W3-R5, W3-R6).
  */
 async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<boolean> {
-  let isPlaced = false
+  const mark = { isPlaced: false }
   const next = await (async () => {
     const at = trees ?? (await discover($, isSub))
     if (isCwdLost) throw new Error('working directory not read')
     lastTrees = at
-    const out = await snapshot($, at, list, isSub)
-    isPlaced = at.isFromGit === true
-    return out
+    return snapshot($, at, list, isSub, mark)
   })().catch((err: unknown) => {
     $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
     return { rows: [] as Snapshot[], hidden: { markers: 0, trees: 0, others: 0, otherTickets: [] as string[] }, listed: null,
@@ -650,7 +650,7 @@ async function refresh($: EngineInterface, trees: Trees | null = null, list: Lis
   // cm2l Q3: a failed refresh while the check runs keeps it running, so the rows come back once the error clears.
   watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null
     || (next.scan.status === 'failed' && check !== null))
-  return isPlaced
+  return mark.isPlaced
 }
 
 /** cm2l Q3: a check that throws acts as a failed refresh: no rows, no counts, the scan failed; the check goes on. */
