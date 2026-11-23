@@ -45,3 +45,14 @@ ruled: D9 the crossing count prints in text only when not zero, always in JSON �
 ruled: D10 a lane ending at the next command's exact instant does not cross it (strict `>`) — as §2 2d (owner: "go with reco on all defaults")
 
 unruled: none
+
+## Run (2026-11-23)
+
+PR: https://github.com/strandic/skills/pull/16 (branch `cb5t-runmeter-parts`). Its Verification, Decisions and Findings tables hold the readings and every row.
+
+- Tests first: `f62c976` on the base code, `tests 63 · pass 54 · fail 9`, the predicted red set.
+- R1 PASS (`tests 63 · pass 63 · fail 0`); R2 PASS (`graded 1463/1463 · crashed 0`).
+- Full suite: `tests 678 · pass 675 · fail 1 · skipped 2`, the same failure and skips as the base `1f961fb`.
+- Review: two code-review rounds. Round 1 found four doc fixes, applied under ruling W3a. Round 2 found no problem in the fix.
+- DEFAULT rows: W3b, the `--labels` flag row and the test header go to `skills-jmj3`.
+- check_pr: FAIL (10), all M1 (`D<n> has a second line`), judged false; ticket `skills-q44n`.
