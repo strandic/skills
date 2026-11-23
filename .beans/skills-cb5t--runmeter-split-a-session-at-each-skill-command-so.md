@@ -1,7 +1,7 @@
 ---
 # skills-cb5t
 title: 'runmeter: split a session at each skill command, so its figures are per run'
-status: in-progress
+status: completed
 type: task
 tags:
     - shawarma
@@ -56,3 +56,7 @@ PR: https://github.com/strandic/skills/pull/16 (branch `cb5t-runmeter-parts`). I
 - Review: two code-review rounds. Round 1 found four doc fixes, applied under ruling W3a. Round 2 found no problem in the fix.
 - DEFAULT rows: W3b, the `--labels` flag row and the test header go to `skills-jmj3`.
 - check_pr: FAIL (10), all M1 (`D<n> has a second line`), judged false; ticket `skills-q44n`.
+
+## Closed (2026-11-23)
+
+Fixed in PR 16 (squash merge `e1606d3`). Follow-ups: `skills-jmj3`, `skills-q44n`.
