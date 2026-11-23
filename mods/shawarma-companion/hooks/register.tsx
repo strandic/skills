@@ -627,13 +627,17 @@ async function readMainCwd($: EngineInterface): Promise<void> {
 /**
  * Never throws: a failed discovery or pass draws nothing, and a row whose files fail to read is drawn as
  * `could not be read`, never with a value read earlier.
+ * Returns true only when this refresh placed the session's folders against a git list (W3-R5).
  */
-async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<void> {
+async function refresh($: EngineInterface, trees: Trees | null = null, list: Lister = lister($), isSub = false): Promise<boolean> {
+  let isPlaced = false
   const next = await (async () => {
     const at = trees ?? (await discover($, isSub))
     if (isCwdLost) throw new Error('working directory not read')
     lastTrees = at
-    return snapshot($, at, list, isSub)
+    const out = await snapshot($, at, list, isSub)
+    isPlaced = at.isFromGit === true
+    return out
   })().catch((err: unknown) => {
     $.ui.log(`shawarma-companion: ${String(err)}`, { to: 'debug' })
     return { rows: [] as Snapshot[], hidden: { markers: 0, trees: 0, others: 0, otherTickets: [] as string[] }, listed: null,
@@ -646,6 +650,7 @@ async function refresh($: EngineInterface, trees: Trees | null = null, list: Lis
   // cm2l Q3: a failed refresh while the check runs keeps it running, so the rows come back once the error clears.
   watch($, next.rows.length > 0 || moreText(next.hidden.markers, next.hidden.trees, next.hidden.others) !== null
     || (next.scan.status === 'failed' && check !== null))
+  return isPlaced
 }
 
 /** cm2l Q3: a check that throws acts as a failed refresh: no rows, no counts, the scan failed; the check goes on. */
@@ -686,7 +691,7 @@ async function stale($: EngineInterface): Promise<void> {
   if (lastTrees === null || isCwdLost) {
     // W3-R1, W3-R3: after a lost read, the check reads the directory again and finds the trees from it.
     if (isCwdLost) await readMainCwd($)
-    return refresh($)
+    await refresh($); return
   }
   const trees = lastTrees
   const list = lister($)
@@ -694,7 +699,7 @@ async function stale($: EngineInterface): Promise<void> {
   // A9i: the timer reads the session's own directory; a `/cd` with no tool call is claimed here.
   await readMainCwd($)
   // W3-R3: the check's own read lost empties the band now, not at the next tick.
-  if (isCwdLost) return refresh($)
+  if (isCwdLost) { await refresh($); return }
   const found = await markersOf(list, scan.roots)
   const claims = await claim($, trees, found)
   let isChanged = lastListed === null || pick(found, trees, scan.left, claims).signature !== lastListed
@@ -716,7 +721,7 @@ async function stale($: EngineInterface): Promise<void> {
     const entries = await list(row.planDir)
     isChanged = entries === null || timeIn(entries, 'plan.md') !== row.planAt || timeIn(entries, 'decisions.md') !== row.decisionsAt
   }
-  if (isChanged) return refresh($, trees, list)
+  if (isChanged) { await refresh($, trees, list); return }
   // Q5: a row crosses 12 h (or out of the future window) with no file change: flip it on the clock, no file call.
   const now = await $.clock.now()
   if (rows.some(row => isStaleAt(row.since, now) !== row.isStale)) {
@@ -792,11 +797,11 @@ export const register: Register = (on, options) => {
     folderReals.clear()
     const isMain = (e as { agentId?: unknown }).agentId === undefined
     if (isMain) await readMainCwd($)
-    await refresh($, null, lister($), !isMain)
+    const isPlaced = await refresh($, null, lister($), !isMain)
     // B4a2: the main turn's end placed this turn's folders and spans against a fresh git list; the last 64 carry
-    // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn. W3-R4: so does a turn
-    // end whose cwd read was lost, since its refresh listed nothing.
-    if (isMain && !isCwdLost && lastTrees?.isFromGit === true) {
+    // over. C6b3: a turn end listed by the fallback (git failed) keeps them for the next turn. W3-R4, W3-R5: so does a
+    // turn end whose own refresh placed nothing (its cwd read was lost), even if a 15 s check read the directory meanwhile.
+    if (isMain && isPlaced) {
       turnFolders.splice(0)
       turnWindows.splice(0)
     }
