@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [0.3.6] - unreleased
 
 ### Fixed
-- Tests only; the mod's behaviour does not change. A test that started a call and did not wait for it left the call's failure unhandled: once the test kit let a held call go, about ten seconds later, any test file still running ended on "a rejection nothing handled". Such calls now go through a test helper, `drop`, that handles the failure, and a check in `scripts/test/` fails on a mod test line that starts with `void` (skills-ob78).
+- Tests only; the mod's behaviour does not change. A test that started a call and did not wait for it left the call's failure unhandled: once the test kit let a held call go, about five seconds later, the test file, if still running, ended on "a rejection nothing handled". Such calls now go through a test helper, `drop`, that handles the failure, and a check in `scripts/test/` fails on a mod test line that starts with `void` (skills-ob78).
 
 ## [0.3.5] - unreleased
 
