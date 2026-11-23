@@ -1,6 +1,6 @@
 {
   "name": "shawarma-companion",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Shows the active shawarma plans and runs above the prompt, one row each: ticket, step, decisions so far.",
   "author": { "name": "Strandic" },
   "types": "./types/index.d.ts",

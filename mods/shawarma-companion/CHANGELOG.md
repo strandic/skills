@@ -5,6 +5,13 @@ All notable changes to the `shawarma-companion` mod. The version is the one in
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.5] - unreleased
+
+### Fixed
+- A long writing call could lose its time span before the 15-second check listed a marker it wrote: a background subagent's call outlived a main turn end and 64 newer writing calls, so the session's own run read "1 run in another worktree". A call's span now counts until the call ends or Claude Code abandons it, however long it runs (skills-5w5c).
+  - Limit: while such a long call runs, a new marker another session writes in a scanned worktree is claimed too, and a call that never ends keeps claiming them. A claimed tree stays claimed for the session and comes back on `--resume` (30 days); its rows, being newer, can push the session's own row for another worktree below the band's fold.
+  - Unchanged: a call Claude Code abandons, or one whose end time the mod fails to read, still counts until a main turn end and 64 newer writing calls; a main turn end that did not place against a fresh git list does not count (skills-blde).
+
 ## [0.3.4] - unreleased
 
 ### Fixed
