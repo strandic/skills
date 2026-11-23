@@ -3674,6 +3674,41 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     expect({ afterBash, later: await band($) }).toEqual({ afterBash: rows, later: rows })
   })
 
+  // W3-R5 (round-4 fix review F1): the 15 s check reading the directory while a lost turn end's refresh still waits
+  // does not let that turn end clear folders its own refresh never placed.
+  test('V19 a lost turn end racing a 15 s check that reads the directory: the worktree written 70 writes back is still other tree: k', { options: ON }, async ($, on) => {
+    let phase = false, n = 0
+    const X = `${ROOT}/.worktrees/x`
+    const trees = [ROOT]
+    let clock: any
+    clock = world(on, new Map([at(ROOT, 'm')]), ROOT, [], new Set(), { trees, claimed: [ROOT], root: ROOT, hold: {
+      // The turn end's two reads never answer (give up at +2 s and +4 s); the check's read answers 1 s after it is asked.
+      'session.cwd': () => { if (!phase) return undefined; n += 1; return n <= 2 ? never() : clock.sleep(1_000).then(() => undefined) },
+      // The check's refresh waits 3 s on the project root, past the turn end's give-up.
+      'session.root': () => (phase ? clock.sleep(3_000).then(() => undefined) : undefined) } })
+    const step = async (ms: number) => { for (let t = 0; t < ms; t += 100) { await clock.advance(100); await settle(2) } }
+    await $.session.start({ source: 'startup', cwd: ROOT } as any)
+    const t0 = clock.now()
+    await write($, `${X}/.shawarma/active-k`, 'k\ntrivial\n')
+    for (let i = 0; i < 70; i++) { await clock.advance(3_000); await settle(2); await write($, `${ROOT}/d${i}/f.txt`, 'x') }
+    trees.push(X)
+    // Start the turn end 2.4 s before a check tick.
+    const now = clock.now()
+    let tick = t0 + 15_000 * Math.ceil((now - t0) / 15_000)
+    while (tick - 2_400 < now + 200) tick += 15_000
+    await clock.advance(tick - 2_400 - now); await settle(3)
+    phase = true
+    const end = $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+    await step(9_000); await end
+    phase = false
+    await bash($, 'true')
+    const afterBash = await band($)
+    await $.turn.complete({ answer: '', reason: 'answer', durationMs: 1 } as any)
+    await bash($, 'true')
+    const rows = ['m · trivial · since 14:00', 'other tree: k · trivial · since 14:01']
+    expect({ asked: n >= 3, afterBash, later: await band($) }).toEqual({ asked: true, afterBash: rows, later: rows })
+  })
+
   test('V7 session calls answering at once: after a Bash call, a band draw with context on and a 10 s advance, no 2 s timer resolves', { options: { ...ON, context: true } }, async ($, on) => {
     const fired: number[] = []
     const tapped = ((name: string, ...args: any[]) => {
