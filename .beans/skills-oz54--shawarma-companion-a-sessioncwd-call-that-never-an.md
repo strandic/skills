@@ -1,7 +1,7 @@
 ---
 # skills-oz54
 title: 'shawarma-companion: a session.cwd call that never answers holds the tool call forever; the README says session calls give up after 2 s'
-status: in-progress
+status: completed
 type: bug
 priority: normal
 tags:
@@ -100,3 +100,5 @@ Go given. Branch `fix/oz54-session-bound` in `.worktrees/oz54`, from `origin/mai
 **W3 close**: owner ruled W3-R7 A: no seventh round. Round-6 F1 filed as skills-emiq, F2 as skills-2mwr. On to W4.
 
 **W4**: rebased onto `48941e1` (PR 16; `git range-diff`: 13 of 13 mod commits unchanged). On head `878895e`: R1 `321 pass` / `0 fail` / `Ran 321 tests across 1 file.` (PASS); validate `✔ Validation passed`; tsc exit 0; base `48941e1` suite `303 pass` / `0 fail`. check_pr: the repo's checker PASS; the installed 0.11.0 checker FAIL P11 only (false; fixed by skills-4eqz, disclosed in the PR). PR: https://github.com/strandic/skills/pull/17 (v0.3.4). Open tickets from this run: skills-9u5j, skills-k6zu, skills-emiq, skills-2mwr.
+
+**Closed (2026-11-23)**: fixed in PR 17 (merged as `4897414`), companion mod 0.3.4.
