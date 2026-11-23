@@ -158,6 +158,9 @@ Mutants for 3b (each patched into the sketch, `claude plugin test` on the final 
 
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
 |---|---|---|---|---|---|
+| R1 | 2026-11-23 | the human | §3 (register.tsx doc comment; README :36) | "`windows` and `turnWindows` keep their own copy as before" → "hold the same span object, as before, so the call's end closes it there too; an abandoned call's span stays open there until evicted (skills-blde)"; "A call counts until the engine ends or abandons it, however long it runs" → "A call counts while it runs, however long … A call the engine abandons counts on until a main turn end and 64 newer writing calls." | review 3a: the lists hold the same object as the new set (C1), and an abandoned call still claims other sessions' markers until a turn end and 64 writes (A5, same on base) |
+| D-R1 | 2026-11-23 | the human | §6 | worst impact names a never-ending call → also: a finite long call's wrong claim of another session's marker lasts the session and a resume (30 days), and its rows can push the own other-tree row below the fold; stated in PR and changelog, no code change | review 3a A2, A2r, A3 |
+| D-R2 | 2026-11-23 | the human | §6 | — → an engine without `next.signal` (older than 2.1.325) would leave the span open for good; NOT RUN, noted in the PR | review 3a error surface |
 
 
 ## Defaults at this stop
