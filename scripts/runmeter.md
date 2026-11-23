@@ -247,7 +247,7 @@ A part is the work that follows one skill command: one run. The tool cuts each s
 - A lane counts whole in the part where its first record falls. A lane whose last record comes after the next part's command is counted in the totals as a lane that ends under a later command. A lane that ends at the very instant of that command does not.
 - A part that a command opened is always kept, even when it holds nothing but its command. Part 0 is left out when it holds no message, no owner turn and no lane.
 - A part's figures add up to the session's: owner turns, messages, lanes and each token figure. Minutes do not, see [Minutes](#minutes).
-- With `--labels`, a part opened by a command that gives a label prints that label. Part 0 never has one.
+- With `--labels`, a part opened by a command that gives a label has that label. JSON always shows it. Text shows it on the part line, and only a session of two parts or more prints part lines. Part 0 never has one.
 
 In text, a session with two parts or more prints a line per part under the session line, each part's lanes under it:
 
@@ -271,7 +271,7 @@ With `--since` and `--until`, the cuts are read over the whole session file, and
 
 Minutes run from the first usable record to the last, for a session file or a lane file. They are wall-clock minutes, with one decimal.
 
-A part's minutes run from its first record to its last. The time between a part's last record and the next command belongs to no part, so a session's part minutes can add up to less than its own.
+A part's minutes run from its first record to its last. The time between a part's last record and the next command belongs to no part, so a session's part minutes can add up to less than its own. Each part's minutes are rounded to one decimal on their own, so they can also add up to a little more: at most 0.05 minutes for each part, plus 0.05 for the rounding of the session's own minutes.
 
 They include all waiting: the owner thinking, a session left open overnight, a lane waiting on a command or on the orchestrator. A session that is resumed over several days counts those days. To see where time went inside a plan, use `scripts/plantime.mjs`.
 
@@ -292,7 +292,7 @@ What the label holds:
 - At most two words: the first two words of the arguments. Words are separated by spaces, tabs or line breaks. Anything after the second word is never read.
 - A word is 1 to 24 characters, each one a letter from `A` to `Z` or `a` to `z`, a digit, or one of `. _ -`. A slash is not allowed, so a path is never a word.
 - Reading stops at the first word that is not such a word. `/shawarma plan docs/plans/x.md` gives `plan`. `/shawarma run t-0002, then stop` gives `run`, because `t-0002,` ends with a comma.
-- If the first word already fails, that command gives no label. The next skill command is then tried.
+- If the first word already fails, that command gives no label. For the session, the next skill command is then tried. A part's label comes from its own command only, so such a part has no label.
 - A session with no such command has no label.
 
 ## Lane kind
@@ -437,7 +437,7 @@ How the files are written:
 
 1. The output holds counts, durations, days, model ids, effort values, agent type names, pull request numbers, and the first 8 characters of session and agent ids. It holds no message text, no prompt and no full id. Rule 2 says what happens to a value that looks like a path.
 2. A value read from a record or a meta file is printed only when it is one plain word. A plain word is 60 characters at most. It is made of letters from `A` to `Z` and `a` to `z`, digits, and `_ . : @ [ ] -`. It may also hold one `/`, but not as its first or last character. So a model id such as `vendor/model` prints. A path such as `/home/u/x` or `a/b/c` does not. Anything that is not a plain word prints as `?`. A value of two parts, such as `a/b`, is a plain word and prints.
-3. The labels of sessions and parts are the one exception to rule 1. It is printed only with `--labels`. It is two words at most, filtered as described under [Session label](#session-label).
+3. The labels of sessions and parts are the one exception to rule 1. They are printed only with `--labels`. Each is two words at most, filtered as described under [Session label](#session-label).
 4. An error message never names a path. A file error is reported by its code, such as `ENOENT`.
 5. An unexpected failure prints the error's name only, because its message could quote a record.
 6. `--prompts` is the only output that holds whole prompts. Its folder must be new or empty, and outside any git repository. See [Prompt files](#prompt-files).
