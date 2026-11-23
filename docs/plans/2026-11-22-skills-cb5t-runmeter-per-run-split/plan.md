@@ -175,6 +175,7 @@ Mutants for 3b (each run on the final test file, `node --test --test-reporter=sp
 | id | date | whose ruling (`<the human>` · `default`) | section | was → now | why (reads without the conversation: no id this brief does not define) |
 |---|---|---|---|---|---|
 | W3a | 2026-11-23 | the owner ("Go with reco") | §3 `scripts/runmeter.md` (Parts, Minutes, Session label, Privacy rule 3) | Minutes: "part minutes can add up to less than its own" → adds that per-part rounding can make them add up to a little more (at most 0.05 per part, plus 0.05); Parts: a part's label "prints" → JSON always shows it, text only on a part line, printed for a session of two parts or more; Session label: "The next skill command is then tried" → only for the session, a part's label comes from its own command only; Privacy rule 3: "It is printed… It is two words" → "They are printed… Each is two words" | The code-review lane found the four sentences incomplete or misleading against what the code does, each with a reproduction; prose only, no behaviour change; runmeter tests `tests 63 · pass 63 · fail 0` with the edits in |
+| W3b | 2026-11-23 | default | §5 orchestrator follow-ups | none → the `--labels` flag row of `scripts/runmeter.md` and the header comment of `scripts/test/runmeter.test.mjs`, which still name session labels only, are a follow-up ticket (skills-jmj3) | the second code-review round found both older sentences incomplete since parts have labels too; they contradict no code, and fixing them here would need a third review round |
 
 ## Plan ending: defaults
 
