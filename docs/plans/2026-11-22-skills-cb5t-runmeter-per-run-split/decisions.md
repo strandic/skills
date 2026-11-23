@@ -20,3 +20,4 @@
 2026-11-22 | D9 RULING | - crossing count in text only when not zero; always in JSON; reco - | owner: "go with reco on all defaults"; the default as written
 2026-11-22 | D10 RULING | - a lane ending at the next command's exact instant does not cross it; reco - | owner: "go with reco on all defaults"; the default as written
 2026-11-23 | W3a RULING | A apply the four doc fixes from the code review (minutes rounding, part label in text, part label fallback, privacy rule 3 grammar); reco A | owner: "Go with reco"; the code was right in all four, the doc text was incomplete or misleading
+2026-11-23 | W3b DEFAULT | the `--labels` flag row (scripts/runmeter.md:66) and the test file header, which still name session labels only, go to ticket skills-jmj3, not this PR | older sentences the change did not touch; incomplete, not contradicting the code; a third review round for two prose lines
