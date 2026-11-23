@@ -212,6 +212,12 @@ const decisions: [string, File] = [`${DIR}/decisions.md`, {
 const write = ($: any, path: string, content: string) =>
   $.tool.call({ tool: 'Write', file_path: path, content } as any)
 const bash = ($: any, command: string) => $.tool.call({ tool: 'Bash', command } as any)
+/**
+ * skills-ob78: a promise a test does not await. Its rejection is handled here, so a call
+ * the kit lets go after the test has ended does not fail the file. A rejection during the
+ * test is not reported either: assert on the call's result where it matters.
+ */
+const drop = (work: Promise<unknown>): void => { work.catch(() => undefined) }
 
 async function bandText($: any): Promise<string | undefined> {
   const ui = await $.ui.mount({ plugin: 'shawarma-companion', surface: 'terminal', component: 'AbovePrompt', props: BAND })
@@ -1266,7 +1272,7 @@ describe('lane 3a fixes', () => {
   test('F9 git never answers: the tool call answers by 2 s on the clock, from the fallback', { options: ON }, async ($, on) => {
     const clock = world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, [], new Set(), { worktree: 'hang' })
     let out: any = 'pending'
-    void bash($, 'true').then((r: unknown) => { out = r })
+    drop(bash($, 'true').then((r: unknown) => { out = r }))
     await clock.advance(1_999)
     expect(out).toBe('pending')
     await clock.advance(1)
@@ -2000,7 +2006,7 @@ describe('review round 3 (R3)', () => {
     const clock = world(on, new Map([markerAt(ROOT, 'h-1', 'docs/plans/p\nrun W1\n', STARTED + 5), [`${P2}/plan.md`, { text: '# h-1 — slow\n', mtimeMs: 1 }]]),
       ROOT, [], new Set(), { trees: [ROOT], hangStat: P2 })
     let out: any = 'pending'
-    void bash($, 'true').then((r: unknown) => { out = r })
+    drop(bash($, 'true').then((r: unknown) => { out = r }))
     await clock.advance(1_999)
     expect(out).toBe('pending')
     await clock.advance(1)
@@ -2132,17 +2138,17 @@ describe('review round 4 (R4, mutants)', () => {
       ROOT, log, new Set(), { trees: [ROOT], hangStat: P2 })
     const asks = () => log.filter(line => line === `stat ${P2} resolve`).length
     let out: any = 'pending'
-    void bash($, 'true').then((r: unknown) => { out = r })
+    drop(bash($, 'true').then((r: unknown) => { out = r }))
     await clock.advance(2_000)
     expect(out?.result?.text).toBe('ok')
     expect(asks()).toBe(1)
     let out2: any = 'pending'
-    void bash($, 'true').then((r: unknown) => { out2 = r })
+    drop(bash($, 'true').then((r: unknown) => { out2 = r }))
     await clock.advance(1)
     expect([out2?.result?.text, asks()]).toEqual(['ok', 1])
     await clock.advance(2_000)
     expect(await band($)).toEqual(['shawarma: h-1: plan dir outside its tree'])
-    void turnEnd($)
+    drop(turnEnd($))
     await clock.advance(2_000)
     expect(asks()).toBe(2)
   })
@@ -2159,7 +2165,7 @@ describe('review round 4 (R4, mutants)', () => {
   test('R4 a tree-root stat that never answers: the tool call answers by 2 s, the root used as given (mutant M31)', { options: ON }, async ($, on) => {
     const clock = world(on, new Map([markerAt(ROOT, 'm', 'm\ntrivial\n', STARTED + 9)]), ROOT, [], new Set(), { trees: [ROOT], hangStat: ROOT })
     let out: any = 'pending'
-    void bash($, 'true').then((r: unknown) => { out = r })
+    drop(bash($, 'true').then((r: unknown) => { out = r }))
     await clock.advance(1_999)
     expect(out).toBe('pending')
     await clock.advance(1)
@@ -2945,7 +2951,7 @@ describe('run review (Q6): lane 3a reproductions', () => {
       const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
         hold: { [name]: () => never() } })
       let done = false
-      void bash($, 'true').then(() => { done = true })
+      drop(bash($, 'true').then(() => { done = true }))
       await settle()
       await clock.advance(2_000)
       await settle()
@@ -3070,7 +3076,7 @@ describe('run review round 3 (Q7): lane 3a-fix reproductions', () => {
     const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
       hold: { 'store.get': (e: any) => (e.key === `claims:${SESSION}` ? undefined : never()) } })
     let done = false
-    void bash($, 'true').then(() => { done = true })
+    drop(bash($, 'true').then(() => { done = true }))
     let advances = 0
     while (!done && advances < 400) { await settle(5); await clock.advance(2_000); advances += 1 }
     await settle()
@@ -3089,7 +3095,7 @@ describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped, 
   /** Engine seconds until `work` settles, advancing 1 s at a time (at most 400). */
   const held = async (clock: any, work: Promise<unknown>): Promise<number> => {
     let done = false
-    void work.then(() => { done = true }, () => { done = true })
+    drop(work.then(() => { done = true }, () => { done = true }))
     let seconds = 0
     await settle(5)
     while (!done && seconds < 400) { await clock.advance(1_000); seconds += 1; await settle(5) }
@@ -3109,7 +3115,7 @@ describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped, 
       const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
         hold: { 'store.get': () => new Promise<undefined>(r => { asked++; pending.push({ due: t + ms, go: () => r(undefined) }) }) } })
       let done = false
-      void bash($, 'true').then(() => { done = true }, () => { done = true })
+      drop(bash($, 'true').then(() => { done = true }, () => { done = true }))
       await settle(5)
       while (!done && t < 10_000) {
         await clock.advance(100)
@@ -3175,7 +3181,7 @@ describe('skills-bnbu: one deadline per prune pass (Q1); a failed read skipped, 
     const clock = world(on, new Map([at(ROOT, 'main-1', STARTED + 6)]), ROOT, [], new Set(), { claimed: [], store,
       hold: { 'store.get': () => new Promise<undefined>(r => { asked++; pending.push({ due: t + 1_900, go: () => r(undefined) }) }) } })
     let done = false
-    void $.session.start({ source: 'startup', cwd: ROOT } as any).then(() => { done = true }, () => { done = true })
+    drop($.session.start({ source: 'startup', cwd: ROOT } as any).then(() => { done = true }, () => { done = true }))
     await settle(5)
     while (!done && t < 10_000) {
       await clock.advance(100)
@@ -3436,7 +3442,7 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
   /** Engine seconds until `work` settles, advancing 1 s at a time (at most 60). */
   const held = async (clock: any, work: Promise<unknown>): Promise<number> => {
     let done = false
-    void work.then(() => { done = true }, () => { done = true })
+    drop(work.then(() => { done = true }, () => { done = true }))
     let seconds = 0
     await settle(5)
     while (!done && seconds < 60) { await clock.advance(1_000); seconds += 1; await settle(5) }
@@ -3592,7 +3598,7 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     await bash($, 'true')
     dir = WT
     late = true
-    void bash($, 'true')
+    drop(bash($, 'true'))
     for (let i = 0; i < 10; i++) { await clock.advance(1_000); await settle(3) }
     const lost = await band($)
     late = false
@@ -3644,7 +3650,7 @@ describe('skills-oz54: every session call gives up after 2 s', () => {
     await $.ui.press({ plugin: 'shawarma-companion', key: 'row:p' })
     files.set(`${T}/docs/p/plan.md`, { text: '# p — inside\n', mtimeMs: 1 })
     bad = true
-    void bash($, 'true')
+    drop(bash($, 'true'))
     await settle(5); await clock.advance(2_000); await settle(5); await clock.advance(2_000); await settle(5); await clock.advance(500); await settle(5)
     expect(await paneText()).not.toContain('outside its tree')
   })
@@ -3830,7 +3836,7 @@ describe('skills-5w5c: a running call keeps its span until it ends', () => {
       after: (e: any) => (e.command === 'long' ? never() : undefined) })
     await bash($, 'true')
     let answer: unknown = 'pending'
-    void $.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any).then((v: any) => { answer = v?.result?.text })
+    drop($.tool.call({ tool: 'Bash', command: 'long', agentId: 'a1' } as any).then((v: any) => { answer = v?.result?.text }))
     await settle()
     await clock.advance(6_000)
     await settle()
@@ -3870,7 +3876,7 @@ describe('skills-5w5c: a running call keeps its span until it ends', () => {
     const clock = world(on, files, ROOT, [], new Set(), { claimed: [],
       after: (e: any) => (e.command === 'hang' ? never() : undefined) })
     await bash($, 'true')
-    void $.tool.call({ tool: 'Bash', command: 'hang', agentId: 'a1' } as any)
+    drop($.tool.call({ tool: 'Bash', command: 'hang', agentId: 'a1' } as any))
     await settle()
     await evict($)
     await turnEnd($)
@@ -3879,5 +3885,16 @@ describe('skills-5w5c: a running call keeps its span until it ends', () => {
     await clock.advance(15_000)
     await settle()
     expect(await rows($)).toEqual(['main-1 · trivial', 'other tree: other-1 · trivial'])
+  })
+})
+
+describe('skills-ob78: drop handles the rejection of a promise a test does not await', () => {
+  const settle = async (n = 30) => { for (let i = 0; i < n; i++) await new Promise(r => (globalThis as any).setTimeout(r, 1)) }
+
+  test('O1 drop: a rejected promise is handled, so the file does not end on a rejection nothing handled', async () => {
+    drop(Promise.reject(new Error('skills-ob78 O1: rejected after drop')))
+    drop(Promise.resolve(1).then(() => { throw new Error('skills-ob78 O1: rejected in a chained then') }))
+    // The oracle is the kit's own file-end check: a rejection nothing handled fails the file, not this test.
+    await settle()
   })
 })
