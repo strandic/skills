@@ -95,4 +95,6 @@ Go given. Branch `fix/oz54-session-bound` in `.worktrees/oz54`, from `origin/mai
 
 **W3 round 5**: the round-4 fix review found F1 (a 15 s check reading the directory during a lost turn end let that turn end clear folders it never placed) and F2 (another session's marker claimed across a lost turn end; low). Owner ruled W3-R5 A. Test `dcdb04e` (V19 red on 3132753), fix `1bfa021`; suite `320 pass` / `0 fail`. F2 filed as skills-k6zu. Fix-review lane on round 5 reported F1 (`ebea4a5`).
 
-**W3 round 6**: the round-5 fix review found F1 (low): a `session.usage` give-up after the claim kept the turn's spans, so the next turn could claim another session's worktree. Owner ruled W3-R6 A. Test `6c84724` (V20 red on 1bfa021), fix `e0afed3`; suite `321 pass` / `0 fail`. Fix-review lane on round 6 running.
+**W3 round 6**: the round-5 fix review found F1 (low): a `session.usage` give-up after the claim kept the turn's spans, so the next turn could claim another session's worktree. Owner ruled W3-R6 A. Test `6c84724` (V20 red on 1bfa021), fix `e0afed3`; suite `321 pass` / `0 fail`. Fix-review lane on round 6 reported two low findings (`6327291`).
+
+**W3 close**: owner ruled W3-R7 A: no seventh round. Round-6 F1 filed as skills-emiq, F2 as skills-2mwr. On to W4.
